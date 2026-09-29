@@ -69,7 +69,7 @@ return function(check, H)
 		and not shown(frame.listBox) and not shown(Win.qualityButtons[1]))
 	check("the tab says who it is for", frame.tabNote:GetText():find("Nobody else is affected", 1, true) ~= nil)
 	local tabButtons = Win.tabButtons
-	check("three tabs, the current one selected", #tabButtons == 3 and tabButtons[1].selected == true and tabButtons[2].selected == false)
+	check("four tabs, the current one selected", #tabButtons == 4 and tabButtons[1].selected == true and tabButtons[2].selected == false)
 	tabButtons[2].scripts.OnClick(tabButtons[2])
 	check("the Council tab has the voting window setting", Win:GetTab() == "council" and shown(frame.keepOpen) and not shown(frame.minimap) and not shown(frame.input))
 	tabButtons[3].scripts.OnClick(tabButtons[3])

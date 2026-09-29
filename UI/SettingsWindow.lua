@@ -29,6 +29,7 @@ SettingsWindow.TABS = {
 	{ key = "everyone", label = L["Everyone"], note = L["How the addon looks on your own screen. Nobody else is affected."] },
 	{ key = "council", label = L["Council"], note = L["For council members: how the voting window behaves for you."] },
 	{ key = "lm", label = L["Loot master"], note = L["Only used when you are the loot master. The raid follows your council list and loot threshold."] },
+	{ key = "responses", label = L["Buttons"], note = L["Only used when you are the loot master: the answer buttons every player gets. A session that is running keeps the ones it started with."] },
 }
 
 -- The role the player has right now: "lm", "council" or "everyone" (a plain raider).
@@ -150,7 +151,7 @@ local function build()
 
 	-- Every setting belongs to one of three tabs, by who it matters for: everybody in the raid,
 	-- the council members, or the loot master. `into` puts a widget in its tab's group.
-	local groups = { everyone = {}, council = {}, lm = {} }
+	local groups = { everyone = {}, council = {}, lm = {}, responses = {} }
 	SettingsWindow.groups = groups
 	local function into(key, widget)
 		local group = groups[key]
@@ -191,7 +192,7 @@ local function build()
 	-- The three tabs.
 	local tabY = HEADER_H + 14
 	local gap = 8
-	local tabWidth = math.floor((WIDTH - 2 * PAD - 2 * gap) / 3)
+	local tabWidth = math.floor((WIDTH - 2 * PAD - (#SettingsWindow.TABS - 1) * gap) / #SettingsWindow.TABS)
 	SettingsWindow.tabButtons = {}
 	for i, tab in ipairs(SettingsWindow.TABS) do
 		local button = UI.NewButton(frame, tabWidth, 30, tab.label, function() SettingsWindow:SetTab(tab.key) end)
@@ -349,6 +350,54 @@ local function build()
 	heights.everyone = y + 40
 	SettingsWindow.heights = heights
 
+	-- Buttons: the answers of the loot master's sessions ----------------------------
+	y = contentY
+	section("responses", y, L["Answer buttons"])
+	frame.responseCount = into("responses", UI.NewText(frame, 11, c.muted, "RIGHT"))
+	frame.responseCount:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PAD, -y)
+	y = y + 24
+	SettingsWindow.responseRows = {}
+	local RESPONSE_ROW_H = 36
+	for i = 1, ALC.Constants.MAX_RESPONSES do
+		local row = into("responses", CreateFrame("Frame", nil, frame))
+		row:SetSize(WIDTH - 2 * PAD, RESPONSE_ROW_H - 4)
+		row:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -(y + (i - 1) * RESPONSE_ROW_H))
+		row.index = i
+		row.up = UI.NewButton(row, 24, 30, "^", function() SettingsWindow:MoveResponse(i, -1) end)
+		row.up:SetPoint("LEFT", row, "LEFT", 0, 0)
+		row.down = UI.NewButton(row, 24, 30, "v", function() SettingsWindow:MoveResponse(i, 1) end)
+		row.down:SetPoint("LEFT", row.up, "RIGHT", 2, 0)
+		row.edit = UI.NewEditBox(row, 210, 30, L["Label"], function() SettingsWindow:CommitResponseLabel(i) end)
+		row.edit:SetMaxLetters(ALC.Constants.MAX_RESPONSE_LABEL)
+		row.edit:SetPoint("LEFT", row.down, "RIGHT", 8, 0)
+		row.edit:HookScript("OnEditFocusLost", function() SettingsWindow:CommitResponseLabel(i) end)
+		row.color = UI.NewButton(row, 34, 30, "", function() SettingsWindow:CycleResponseColor(i) end)
+		row.color:SetPoint("LEFT", row.edit, "RIGHT", 8, 0)
+		row.color.swatch = row.color:CreateTexture(nil, "OVERLAY")
+		row.color.swatch:SetPoint("TOPLEFT", 7, -7)
+		row.color.swatch:SetPoint("BOTTOMRIGHT", -7, 7)
+		row.remove = CreateFrame("Button", nil, row)
+		row.remove:SetSize(24, 24)
+		row.remove:SetPoint("LEFT", row.color, "RIGHT", 8, 0)
+		row.remove.text = UI.NewText(row.remove, 18, c.muted, "CENTER")
+		row.remove.text:SetPoint("CENTER", 0, 1)
+		row.remove.text:SetText("\195\151")
+		row.remove:SetScript("OnEnter", function(self) self.text:SetTextColor(c.danger[1], c.danger[2], c.danger[3], 1) end)
+		row.remove:SetScript("OnLeave", function(self) self.text:SetTextColor(c.muted[1], c.muted[2], c.muted[3], 1) end)
+		row.remove:SetScript("OnClick", function() SettingsWindow:RemoveResponse(i) end)
+		SettingsWindow.responseRows[i] = row
+	end
+	y = y + ALC.Constants.MAX_RESPONSES * RESPONSE_ROW_H + 4
+	frame.addResponse = into("responses", UI.NewButton(frame, 130, 30, L["Add button"], function() SettingsWindow:AddResponse() end))
+	frame.addResponse:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
+	frame.resetResponses = into("responses", UI.NewButton(frame, 160, 30, L["Back to the default five"], function() SettingsWindow:ResetResponses() end))
+	frame.resetResponses:SetPoint("LEFT", frame.addResponse, "RIGHT", 8, 0)
+	y = y + 40
+	frame.responseFeedback = into("responses", UI.NewText(frame, 11, c.danger))
+	frame.responseFeedback:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
+	y = y + 24
+	heights.responses = y + 40
+
 	frame.version = UI.NewText(frame, 11, c.muted)
 	frame.version:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", PAD, 16)
 	frame.version:SetText(string.format("Arbiter Loot Council %s \194\183 Allemano Addons", ALC.version or "?"))
@@ -481,6 +530,89 @@ SettingsWindow.fontMenu = function() return fontMenu end
 --------------------------------------------------------------------------------
 -- Rendering
 --------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+-- The answer buttons (tab "Buttons")
+--------------------------------------------------------------------------------
+local responseFeedback
+
+local function setResponseFeedback(text)
+	responseFeedback = text
+	if frame and frame.responseFeedback then frame.responseFeedback:SetText(text or "") end
+end
+
+-- Saves an edited copy of the loot master's buttons; on refusal the reason is shown.
+local function saveResponses(set)
+	local ok, reason = ALC.Responses:SetConfiguredSet(set)
+	if not ok then setResponseFeedback(reason) return false end
+	setResponseFeedback(nil)
+	return true
+end
+
+function SettingsWindow:CommitResponseLabel(index)
+	local row = self.responseRows and self.responseRows[index]
+	local set = ALC.Responses:GetConfiguredSet()
+	if not row or not set[index] then return end
+	local label = ALC.Responses.CleanLabel(row.edit:GetText())
+	if label and label ~= set[index].label then
+		set[index].label = label
+		saveResponses(set)
+	end
+	row.edit:SetText(set[index].label) -- an empty label goes back to what it was
+end
+
+function SettingsWindow:CycleResponseColor(index)
+	local set = ALC.Responses:GetConfiguredSet()
+	if not set[index] then return end
+	local palette = ALC.Responses.PALETTE
+	local current = 0
+	for i, color in ipairs(palette) do
+		if math.abs(color[1] - set[index].color[1]) < 0.01 and math.abs(color[2] - set[index].color[2]) < 0.01
+			and math.abs(color[3] - set[index].color[3]) < 0.01 then current = i end
+	end
+	local nextColor = palette[current % #palette + 1]
+	set[index].color = { nextColor[1], nextColor[2], nextColor[3] }
+	saveResponses(set)
+end
+
+-- Moves a button up or down among the others; PASS stays last.
+function SettingsWindow:MoveResponse(index, step)
+	local set = ALC.Responses:GetConfiguredSet()
+	local target = index + step
+	if not set[index] or not set[target] or set[index].id == "PASS" or set[target].id == "PASS" then return end
+	set[index], set[target] = set[target], set[index]
+	saveResponses(set)
+end
+
+function SettingsWindow:RemoveResponse(index)
+	local set = ALC.Responses:GetConfiguredSet()
+	if not set[index] or set[index].id == "PASS" then return end
+	if #set <= 2 then
+		setResponseFeedback(L["There must be at least one button besides Pass."])
+		return
+	end
+	table.remove(set, index)
+	saveResponses(set)
+end
+
+function SettingsWindow:AddResponse()
+	local set = ALC.Responses:GetConfiguredSet()
+	if #set >= ALC.Constants.MAX_RESPONSES then
+		setResponseFeedback(string.format(L["At most %d buttons."], ALC.Constants.MAX_RESPONSES))
+		return
+	end
+	local used = {}
+	for _, r in ipairs(set) do used[r.id] = true end
+	local n = 1
+	while used["X" .. n] do n = n + 1 end
+	local color = ALC.Responses.PALETTE[(#set - 1) % #ALC.Responses.PALETTE + 1]
+	table.insert(set, #set, { id = "X" .. n, label = L["New button"], color = { color[1], color[2], color[3] } })
+	saveResponses(set)
+end
+
+function SettingsWindow:ResetResponses()
+	saveResponses(nil)
+end
+
 -- Shows the settings of one tab and hides the others.
 function SettingsWindow:SetTab(key)
 	if not self.groups or not self.groups[key] then return end
@@ -488,6 +620,10 @@ function SettingsWindow:SetTab(key)
 	activeTab = key
 	for tabKey, widgets in pairs(self.groups) do
 		for _, widget in ipairs(widgets) do widget:SetShown(tabKey == key) end
+	end
+	local buttons = ALC.Responses:GetConfiguredSet()
+	for i, row in ipairs(self.responseRows) do
+		if i > #buttons then row:Hide() end -- no such button
 	end
 	for _, button in ipairs(self.tabButtons) do
 		button:SetSelected(button.tab == key)
@@ -533,6 +669,23 @@ function SettingsWindow:Refresh()
 	for _, button in ipairs(self.qualityButtons) do
 		button:SetSelected(button.quality == threshold)
 	end
+	local buttons = ALC.Responses:GetConfiguredSet()
+	frame.responseCount:SetText(string.format("%d/%d", #buttons, ALC.Constants.MAX_RESPONSES))
+	for i, row in ipairs(self.responseRows) do
+		local r = buttons[i]
+		if r then
+			row.edit:SetText(r.label)
+			local isPass = r.id == "PASS"
+			row.color.swatch:SetColorTexture(r.color[1], r.color[2], r.color[3], 1)
+			row.remove:SetShown(not isPass)
+			row.up:SetAvailable(i > 1 and buttons[i - 1].id ~= "PASS" and not isPass)
+			row.down:SetAvailable(not isPass and buttons[i + 1] ~= nil and buttons[i + 1].id ~= "PASS")
+			row:SetShown(activeTab == "responses")
+		else
+			row:Hide()
+		end
+	end
+	frame.responseFeedback:SetText(responseFeedback or "")
 	frame.autoOpen:SetChecked(settings:GetAutoOpenLootWindow())
 	frame.minimap:SetChecked(not settings:IsMinimapHidden())
 	frame.keepOpen:SetChecked(settings:GetKeepCouncilOpen())

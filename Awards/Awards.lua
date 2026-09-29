@@ -108,6 +108,8 @@ local function logAward(session, target, entry, votes)
 		winner = entry.name,
 		class = entry.class,
 		response = entry.response,
+		responseLabel = ALC.Responses:GetLabel(entry.response),
+		responseColor = (ALC.Responses:Get(entry.response) or {}).color,
 		votes = votes,
 		sid = session.sid,
 		lm = session.lm,

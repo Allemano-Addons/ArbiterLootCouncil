@@ -86,6 +86,9 @@ return function(check, H)
 	check("the old single-item form is refused", spec.validate({ itemID = 200, itemString = "item:200", council = { ME }, lm = ME }, ME) == false)
 	check("a winner must be a name", spec.validate(startBase({ { itemID = 200, itemString = "item:200", winner = 5 } }), ME) == false)
 
+	-- (There is no session here, so the default five stand in for its answers.)
+	local realKnown = ALC.Protocol.knownResponse
+	ALC.Protocol.knownResponse = function(id) return id == "BIS" or id == "UPGRADE" or id == "MINOR" or id == "OFFSPEC" or id == "PASS" end
 	local resp = ALC.Protocol.specs.RESPONSE
 	check("an answer names its item", resp.validate({ item = 2, response = "BIS", gear = {} }) == true)
 	check("an answer without an item is refused", resp.validate({ response = "BIS", gear = {} }) == false)
@@ -96,6 +99,7 @@ return function(check, H)
 		and ALC.Protocol.specs.VOTE.validate({ candidate = "Veyra Moo" }) == false)
 	check("awards name their item", ALC.Protocol.specs.AWARD.validate({ item = 1, winner = "Veyra Moo", itemID = 200, response = "BIS" }) == true
 		and ALC.Protocol.specs.AWARD.validate({ winner = "Veyra Moo", itemID = 200, response = "BIS" }) == false)
+	ALC.Protocol.knownResponse = realKnown
 
 	----------------------------------------------------------------------------
 	-- Starting a session with three items

@@ -784,8 +784,8 @@ end
 --------------------------------------------------------------------------------
 -- Data
 --------------------------------------------------------------------------------
-local ORDER = {}
-for i, response in ipairs(ALC.Responses.LIST) do ORDER[response.id] = i end
+-- The place of an answer among the session's buttons; the order of the table follows it.
+local function orderOf(id) return ALC.Responses:GetOrder(id) end
 
 -- How the table is sorted. Every mode ends in the name, so the order is always the same.
 CouncilWindow.SORT_MODES = {
@@ -797,20 +797,23 @@ CouncilWindow.SORT_MODES = {
 
 local COMPARE = {
 	response = function(a, b)
-		if ORDER[a.response] ~= ORDER[b.response] then return ORDER[a.response] < ORDER[b.response] end
+		local oa, ob = orderOf(a.response), orderOf(b.response)
+		if oa ~= ob then return oa < ob end
 		if a.votes ~= b.votes then return a.votes > b.votes end
 		return a.name < b.name
 	end,
 	votes = function(a, b)
 		if a.votes ~= b.votes then return a.votes > b.votes end
-		if ORDER[a.response] ~= ORDER[b.response] then return ORDER[a.response] < ORDER[b.response] end
+		local oa, ob = orderOf(a.response), orderOf(b.response)
+		if oa ~= ob then return oa < ob end
 		return a.name < b.name
 	end,
 	-- Highest guild rank first (rank 0 is the guild master); players without a rank last.
 	rank = function(a, b)
 		local ra, rb = a.rankIndex or 99, b.rankIndex or 99
 		if ra ~= rb then return ra < rb end
-		if ORDER[a.response] ~= ORDER[b.response] then return ORDER[a.response] < ORDER[b.response] end
+		local oa, ob = orderOf(a.response), orderOf(b.response)
+		if oa ~= ob then return oa < ob end
 		if a.votes ~= b.votes then return a.votes > b.votes end
 		return a.name < b.name
 	end,
@@ -1162,11 +1165,12 @@ local function renderHistoryRow(row, entry)
 	row.winner:SetText(entry.winner)
 	row.class:SetText(localizedClass(entry.class))
 
+	-- The award log keeps the label and colour the answer had at the time.
 	local response = ALC.Responses:Get(entry.response)
-	local rc = response and response.color or c.muted
+	local rc = entry.responseColor or (response and response.color) or c.muted
 	UI.SetTextureColor(row.chip.bg, rc, 0.22)
 	row.chip.label:SetTextColor(rc[1], rc[2], rc[3], 1)
-	row.chip.label:SetText(response and response.label or tostring(entry.response))
+	row.chip.label:SetText(entry.responseLabel or (response and response.label) or tostring(entry.response))
 
 	local votes = entry.votes or 0
 	row.votes:SetTextColor(votes > 0 and c.text[1] or c.muted[1], votes > 0 and c.text[2] or c.muted[2], votes > 0 and c.text[3] or c.muted[3], 1)
@@ -1356,7 +1360,7 @@ function CouncilWindow:GetRowMenu(name)
 	local items = {}
 	local function changeResponse()
 		items[#items + 1] = { label = L["Change response"], header = true }
-		for _, response in ipairs(ALC.Responses.LIST) do
+		for _, response in ipairs(ALC.Responses:GetSet()) do
 			items[#items + 1] = {
 				label = response.label, color = response.color,
 				enabled = response.id ~= candidate.response,

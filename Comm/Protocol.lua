@@ -61,7 +61,37 @@ local function itemStringID(s)
 	return tonumber(strmatch(s, "^item:(%-?%d+)"))
 end
 
-local function isResponse(v) return type(v) == "string" and RESPONSE_SET[v] == true end
+-- Whether an id is one of the running session's answers. Replaceable in tests. With no
+-- session (the Comm tests) the five default ids count.
+function Protocol.knownResponse(id)
+	local sessions = ALC.Sessions
+	if sessions and sessions.HasResponse then return sessions:HasResponse(id) end
+	return RESPONSE_SET[id] == true
+end
+
+-- `set` is a table of ids to check against (a snapshot brings its own); else the running session's.
+local function isResponse(v, set)
+	if type(v) ~= "string" then return false end
+	if set then return set[v] == true end
+	return Protocol.knownResponse(v)
+end
+
+-- The answer buttons a session starts with: 2 to 8, each { id, label, color = "rrggbb" },
+-- PASS last. Returns true and the set of ids, or false and a reason.
+local function checkResponses(list)
+	if not isArray(list, C.MAX_RESPONSES) or #list < 2 then return false, "bad responses list" end
+	local ids = {}
+	for i, r in ipairs(list) do
+		if type(r) ~= "table" then return false, "bad response entry" end
+		if type(r.id) ~= "string" or #r.id > 10 or not strmatch(r.id, "^%u[%u%d]*$") then return false, "bad response id" end
+		if ids[r.id] then return false, "duplicate response id" end
+		ids[r.id] = true
+		if not isText(r.label, 1, C.MAX_RESPONSE_LABEL) then return false, "bad response label" end
+		if type(r.color) ~= "string" or not strmatch(r.color, "^%x%x%x%x%x%x$") then return false, "bad response colour" end
+		if (r.id == "PASS") ~= (i == #list) then return false, "PASS must be the last response" end
+	end
+	return true, ids
+end
 
 local function fail(reason) return false, reason end
 
@@ -122,7 +152,7 @@ local function checkRank(c)
 	return true
 end
 
-local function checkCandidate(c)
+local function checkCandidate(c, set)
 	if type(c) ~= "table" then return fail("bad candidate") end
 	local ok, reason = checkItemIndex(c)
 	if not ok then return fail(reason) end
@@ -130,7 +160,7 @@ local function checkCandidate(c)
 	if not (type(c.class) == "string" and #c.class <= 16 and strmatch(c.class, "^%u+$")) then
 		return fail("bad candidate class")
 	end
-	if not isResponse(c.response) then return fail("bad candidate response") end
+	if not isResponse(c.response, set) then return fail("bad candidate response") end
 	ok, reason = checkNote(c)
 	if not ok then return fail(reason) end
 	ok, reason = checkRank(c)
@@ -153,6 +183,10 @@ specs.SESSION_START = {
 	validate = function(p, sender)
 		local ok, reason = checkItems(p.items)
 		if not ok then return fail(reason) end
+		if p.responses ~= nil then
+			ok, reason = checkResponses(p.responses)
+			if not ok then return fail(reason) end
+		end
 		ok, reason = checkNameList(p.council, C.MAX_COUNCIL, "council")
 		if not ok then return fail(reason) end
 		if not isName(p.lm) or not SameName(p.lm, sender) then return fail("lm does not match sender") end
@@ -182,7 +216,7 @@ specs.RESPONSE = {
 
 specs.CANDIDATE_UPDATE = {
 	allowed = "lm", channel = "WHISPER", sid = "active", seq = true,
-	validate = checkCandidate,
+	validate = function(c) return checkCandidate(c) end,
 }
 
 specs.VOTE = {
@@ -235,10 +269,15 @@ specs.STATE_SNAPSHOT = {
 	validate = function(p, sender)
 		local ok, reason = specs.SESSION_START.validate(p, sender)
 		if not ok then return fail(reason) end
+		-- The snapshot's own buttons say which answers are valid in it.
+		local set = RESPONSE_SET
+		if p.responses ~= nil then
+			ok, set = checkResponses(p.responses)
+		end
 		if p.candidates ~= nil then
 			if not isArray(p.candidates, C.MAX_CANDIDATES * C.MAX_SESSION_ITEMS) then return fail("bad candidates") end
 			for _, c in ipairs(p.candidates) do
-				ok, reason = checkCandidate(c)
+				ok, reason = checkCandidate(c, set)
 				if not ok then return fail(reason) end
 			end
 		end
@@ -257,7 +296,7 @@ specs.STATE_SNAPSHOT = {
 		if p.yourResponses ~= nil then
 			if not isArray(p.yourResponses, C.MAX_SESSION_ITEMS) then return fail("bad yourResponses") end
 			for _, r in ipairs(p.yourResponses) do
-				if type(r) ~= "table" or not checkItemIndex(r) or not isResponse(r.response) then return fail("bad yourResponses entry") end
+				if type(r) ~= "table" or not checkItemIndex(r) or not isResponse(r.response, set) then return fail("bad yourResponses entry") end
 			end
 		end
 		if p.yourVotes ~= nil then

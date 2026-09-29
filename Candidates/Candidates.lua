@@ -196,7 +196,7 @@ function Candidates:SetResponse(name, response, item)
 	local list = lists[item] or {}
 	local index = findIndex(list, name)
 	if not index then return false, L["That player is not a candidate."] end
-	if not ALC.Responses:Get(response) then return false, L["That is not a valid answer."] end
+	if not ALC.Sessions:HasResponse(response) then return false, L["That is not a valid answer."] end
 	if not ALC.Sessions:IsItemOpen(item) then return false, L["That item has already been awarded."] end
 	local entry = copyEntry(list[index], item)
 	entry.response = response

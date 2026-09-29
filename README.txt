@@ -1,4 +1,4 @@
-Arbiter Loot Council (ALC) 0.2.0-alpha1 - test build
+Arbiter Loot Council (ALC) 0.2.0-alpha2 - test build
 NOTE: this version cannot talk to 0.1.x. Everybody in the raid needs the same version;
 a player with the old one is named in chat when the addon notices.
 Part of Allemano Addons. For WoW Forever.

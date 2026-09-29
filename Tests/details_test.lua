@@ -67,6 +67,8 @@ return function(check, H)
 	----------------------------------------------------------------------------
 	-- Notes and ranks in the protocol
 	----------------------------------------------------------------------------
+	local realKnown = ALC.Protocol.knownResponse
+	ALC.Protocol.knownResponse = function(id) return id == "BIS" or id == "UPGRADE" or id == "MINOR" or id == "OFFSPEC" or id == "PASS" end
 	local resp = ALC.Protocol.specs.RESPONSE
 	check("an answer may carry a note", resp.validate({ item = 1, response = "BIS", gear = {}, note = "Main spec, for progress" }) == true)
 	check("a note is optional", resp.validate({ item = 1, response = "BIS", gear = {} }) == true)
@@ -91,6 +93,7 @@ return function(check, H)
 	check("rank numbers are not negative", cand.validate(c5, ME) == false)
 	local c6 = base() c6.note = "|Hitem:1|h[x]|h"
 	check("a candidate's note cannot hold a link", cand.validate(c6, ME) == false)
+	ALC.Protocol.knownResponse = realKnown
 
 	----------------------------------------------------------------------------
 	-- Guild ranks
@@ -183,6 +186,253 @@ return function(check, H)
 
 	Sessions:Cancel("done")
 	check("the note is forgotten with the session", Responses:GetNote() == "")
+
+	----------------------------------------------------------------------------
+	-- Custom answer buttons: the protocol
+	----------------------------------------------------------------------------
+	local start = ALC.Protocol.specs.SESSION_START
+	local function startWith(responses)
+		return { items = { { itemID = 200, itemString = "item:200" } }, council = { ME }, lm = ME, responses = responses }
+	end
+	local function set(...)
+		local list = {}
+		for i, id in ipairs({ ... }) do list[i] = { id = id, label = id:sub(1, 1) .. id:sub(2):lower(), color = "4dbf66" } end
+		return list
+	end
+	check("a session may bring its own buttons", start.validate(startWith(set("MAIN", "SIDE", "PASS")), ME) == true)
+	check("the buttons are optional", start.validate(startWith(nil), ME) == true)
+	check("two buttons are the fewest", start.validate(startWith(set("PASS")), ME) == false and start.validate(startWith(set("MAIN", "PASS")), ME) == true)
+	check("eight are the most", start.validate(startWith(set("A", "B", "C", "D", "E", "F", "G", "PASS")), ME) == true
+		and start.validate(startWith(set("A", "B", "C", "D", "E", "F", "G", "H", "PASS")), ME) == false)
+	check("PASS has to be there and last", start.validate(startWith(set("MAIN", "SIDE")), ME) == false
+		and start.validate(startWith(set("PASS", "MAIN")), ME) == false)
+	check("ids cannot repeat", start.validate(startWith(set("MAIN", "MAIN", "PASS")), ME) == false)
+	check("ids are capital letters and digits", start.validate(startWith(set("main", "PASS")), ME) == false
+		and start.validate(startWith(set("MA IN", "PASS")), ME) == false and start.validate(startWith(set("1MAIN", "PASS")), ME) == false
+		and start.validate(startWith(set("X1", "PASS")), ME) == true)
+	check("ids are at most 10 long", start.validate(startWith(set("ABCDEFGHIJK", "PASS")), ME) == false)
+	local bad = set("MAIN", "PASS")
+	bad[1].label = "Thirteen chars"
+	check("labels are at most 12 letters", start.validate(startWith(bad), ME) == false)
+	bad[1].label = "A|cffff0000B"
+	check("a label cannot hold an escape sequence", start.validate(startWith(bad), ME) == false)
+	bad[1].label = ""
+	check("a label cannot be empty", start.validate(startWith(bad), ME) == false)
+	bad[1].label, bad[1].color = "Main", "zzzzzz"
+	check("a colour is six hex digits", start.validate(startWith(bad), ME) == false)
+	bad[1].color = "4dbf6"
+	check("five is not enough", start.validate(startWith(bad), ME) == false)
+	check("the list must be a list", start.validate(startWith("MAIN"), ME) == false and start.validate(startWith({ "MAIN", "PASS" }), ME) == false)
+
+	local snapshotSpec = ALC.Protocol.specs.STATE_SNAPSHOT
+	local snap = startWith(set("MAIN", "SIDE", "PASS"))
+	snap.candidates = { { item = 1, name = "Veyra Moo", class = "WARRIOR", response = "MAIN", gear = {} } }
+	snap.yourResponses = { { item = 1, response = "SIDE" } }
+	check("a snapshot's answers are checked against its own buttons", snapshotSpec.validate(snap, ME) == true)
+	snap.candidates[1].response = "BIS"
+	check("an answer that is not one of them is refused", snapshotSpec.validate(snap, ME) == false)
+	snap.candidates[1].response = "MAIN"
+	snap.yourResponses[1].response = "BIS"
+	check("also our own", snapshotSpec.validate(snap, ME) == false)
+	local oldSnap = startWith(nil)
+	oldSnap.candidates = { { item = 1, name = "Veyra Moo", class = "WARRIOR", response = "BIS", gear = {} } }
+	check("without buttons the default five apply", snapshotSpec.validate(oldSnap, ME) == true)
+
+	----------------------------------------------------------------------------
+	-- Custom answer buttons: the loot master's set
+	----------------------------------------------------------------------------
+	check("the default set is the five", #Responses:GetConfiguredSet() == 5 and Responses:GetConfiguredSet()[1].id == "BIS" and Responses:GetConfiguredSet()[5].id == "PASS")
+	check("a copy of it can be changed without harm", (function()
+		local copy = Responses:GetDefaultSet()
+		copy[1].label = "Hacked"
+		copy[1].color[1] = 0
+		return Responses:GetDefaultSet()[1].label == "BiS" and Responses:GetDefaultSet()[1].color[1] == 0.30
+	end)())
+	check("cleaning a label", Responses.CleanLabel("  Main|cff spec  ") == "Maincff spec" and Responses.CleanLabel("   ") == nil
+		and Responses.CleanLabel("A very long label indeed") == "A very long " and Responses.CleanLabel(nil) == nil)
+	local wire = Responses.ToWire(Responses:GetDefaultSet())
+	check("the wire form has hex colours", wire[1].color == "4dbf66" and wire[5].id == "PASS" and #wire == 5)
+	local back = Responses.FromWire(wire)
+	check("and comes back the same, within a rounding", #back == 5 and back[1].id == "BIS" and math.abs(back[1].color[1] - 0.30) < 0.005 and math.abs(back[2].color[3] - 0.95) < 0.005)
+	check("no wire form means the default five", #Responses.FromWire(nil) == 5)
+
+	local mine = {
+		{ id = "MAIN", label = "Main spec", color = { 0.30, 0.75, 0.40 } },
+		{ id = "SIDE", label = "Side grade", color = { 0.35, 0.60, 0.95 } },
+		{ id = "PASS", label = "No thanks", color = { 0.50, 0.52, 0.58 } },
+	}
+	check("a valid set is saved", Responses:SetConfiguredSet(mine) == true and #Responses:GetConfiguredSet() == 3 and Responses:GetConfiguredSet()[1].label == "Main spec")
+	local okBadSet, whyBad = Responses:SetConfiguredSet({ { id = "MAIN", label = "Main", color = { 1, 1, 1 } } })
+	check("an invalid set is refused and changes nothing", okBadSet == false and whyBad ~= nil and #Responses:GetConfiguredSet() == 3)
+	check("PASS must be last", Responses:SetConfiguredSet({ mine[3], mine[1] }) == false)
+	check("labels are checked", Responses:SetConfiguredSet({ { id = "MAIN", label = "", color = { 1, 1, 1 } }, mine[3] }) == false)
+	check("colours are checked", Responses:SetConfiguredSet({ { id = "MAIN", label = "Main", color = { 1, 1 } }, mine[3] }) == false)
+	check("the saved copy is separate from the one given", (function()
+		mine[1].label = "Changed after"
+		return Responses:GetConfiguredSet()[1].label == "Main spec"
+	end)())
+	mine[1].label = "Main spec"
+	check("nil goes back to the default", Responses:SetConfiguredSet(nil) == true and #Responses:GetConfiguredSet() == 5)
+	Responses:SetConfiguredSet(mine)
+
+	----------------------------------------------------------------------------
+	-- The settings window: the Buttons tab
+	----------------------------------------------------------------------------
+	local SW = ALC.SettingsWindow
+	SW:Show()
+	SW:SetTab("responses")
+	local frame = SW.responseRows[1].parent
+	local rows = SW.responseRows
+	check("the tab lists the three buttons", rows[1]:IsShown() and rows[3]:IsShown() and not rows[4]:IsShown() and rows[1].edit:GetText() == "Main spec" and rows[3].edit:GetText() == "No thanks")
+	check("the count is shown", frame.responseCount:GetText() == "3/8")
+	check("PASS cannot be removed", not rows[3].remove:IsShown() and rows[1].remove:IsShown())
+	check("the arrows do not move things past PASS", rows[2].down.available == false and rows[1].up.available == false and rows[1].down.available == true)
+	check("the other tabs' settings are hidden", not frame.minimap:IsShown() and not frame.input:IsShown())
+	rows[1].edit:SetText("  Primary  ")
+	rows[1].edit.scripts.OnEnterPressed(rows[1].edit)
+	check("Enter saves a new label", Responses:GetConfiguredSet()[1].label == "Primary" and rows[1].edit:GetText() == "Primary")
+	rows[2].edit:SetText("Alt|cffff0000!")
+	rows[2].edit.scripts.OnEnterPressed(rows[2].edit)
+	check("a label is cleaned and cut to 12 letters", Responses:GetConfiguredSet()[2].label == "Altcffff0000")
+	rows[2].edit:SetText("   ")
+	rows[2].edit.scripts.OnEnterPressed(rows[2].edit)
+	check("an empty label goes back", Responses:GetConfiguredSet()[2].label == "Altcffff0000" and rows[2].edit:GetText() == "Altcffff0000")
+	rows[2].edit:SetText("Side grade")
+	rows[2].edit.scripts.OnEnterPressed(rows[2].edit)
+	local colorBefore = Responses:GetConfiguredSet()[1].color[1] .. "," .. Responses:GetConfiguredSet()[1].color[2]
+	rows[1].color.scripts.OnClick(rows[1].color)
+	check("a click on the colour steps through the palette", Responses:GetConfiguredSet()[1].color[1] .. "," .. Responses:GetConfiguredSet()[1].color[2] ~= colorBefore
+		and Responses:GetConfiguredSet()[1].color[1] == 0.35)
+	check("the swatch follows", rows[1].color.swatch.colorTexture[1] == 0.35)
+	rows[1].down.scripts.OnClick(rows[1].down)
+	check("a button moves down", Responses:GetConfiguredSet()[1].id == "SIDE" and Responses:GetConfiguredSet()[2].id == "MAIN" and rows[1].edit:GetText() == "Side grade")
+	rows[2].down.scripts.OnClick(rows[2].down)
+	check("but not below PASS", Responses:GetConfiguredSet()[3].id == "PASS" and Responses:GetConfiguredSet()[2].id == "MAIN")
+	rows[2].up.scripts.OnClick(rows[2].up)
+	check("and back up", Responses:GetConfiguredSet()[1].id == "MAIN")
+	frame.addResponse.scripts.OnClick(frame.addResponse)
+	check("Add button puts a new one before PASS", #Responses:GetConfiguredSet() == 4 and Responses:GetConfiguredSet()[3].id == "X1" and Responses:GetConfiguredSet()[4].id == "PASS"
+		and Responses:GetConfiguredSet()[3].label == "New button" and rows[4]:IsShown())
+	frame.addResponse.scripts.OnClick(frame.addResponse)
+	check("a second new one gets its own id", Responses:GetConfiguredSet()[4].id == "X2" and #Responses:GetConfiguredSet() == 5)
+	rows[3].remove.scripts.OnClick(rows[3].remove)
+	rows[3].remove.scripts.OnClick(rows[3].remove)
+	check("removing works", #Responses:GetConfiguredSet() == 3 and Responses:GetConfiguredSet()[3].id == "PASS")
+	rows[2].remove.scripts.OnClick(rows[2].remove)
+	check("the last button besides PASS stays", #Responses:GetConfiguredSet() == 2 and rows[1].remove:IsShown())
+	rows[1].remove.scripts.OnClick(rows[1].remove)
+	check("and cannot be removed", #Responses:GetConfiguredSet() == 2 and frame.responseFeedback:GetText():find("at least one button", 1, true) ~= nil)
+	for _ = 1, 7 do frame.addResponse.scripts.OnClick(frame.addResponse) end
+	check("eight buttons at most", #Responses:GetConfiguredSet() == 8 and frame.responseCount:GetText() == "8/8")
+	frame.addResponse.scripts.OnClick(frame.addResponse)
+	check("a ninth is refused with a reason", #Responses:GetConfiguredSet() == 8 and frame.responseFeedback:GetText():find("At most 8", 1, true) ~= nil)
+	frame.resetResponses.scripts.OnClick(frame.resetResponses)
+	check("Back to the default gives the five again", #Responses:GetConfiguredSet() == 5 and Responses:GetConfiguredSet()[1].id == "BIS" and rows[5]:IsShown() and not rows[6]:IsShown())
+	SW:Hide()
+	Responses:SetConfiguredSet(mine)
+
+	----------------------------------------------------------------------------
+	-- A session with custom buttons
+	----------------------------------------------------------------------------
+	H.sent = {}
+	check("start a session with the custom buttons", Sessions:StartItems({ 200 }) == true)
+	sid = Sessions:GetActiveSid()
+	check("the session start carries them", #sent("SESSION_START")[1].p.responses == 3 and sent("SESSION_START")[1].p.responses[1].id == "MAIN")
+	check("the session has them", #Sessions:GetResponses() == 3 and Sessions:HasResponse("MAIN") and Sessions:HasResponse("PASS") and not Sessions:HasResponse("BIS"))
+	check("a copy of them cannot change the session", (function()
+		Sessions:GetResponses()[1].label = "Hacked"
+		Sessions:GetSession().responses[1].id = "HACKED"
+		return Sessions:GetResponses()[1].label == "Main spec" and Sessions:HasResponse("MAIN")
+	end)())
+	check("changing the loot master's set does not change the running session", (function()
+		Responses:SetConfiguredSet(Responses:GetDefaultSet())
+		local same = #Sessions:GetResponses() == 3
+		Responses:SetConfiguredSet(mine)
+		return same
+	end)())
+
+	local rr = Resp.rows[1]
+	check("the response window has three buttons, named and coloured as set", rr.buttons[1]:IsShown() and rr.buttons[3]:IsShown() and not rr.buttons[4]:IsShown() and not rr.buttons[5]:IsShown()
+		and rr.buttons[1].label:GetText() == "Main spec" and rr.buttons[2].label:GetText() == "Side grade" and rr.buttons[3].label:GetText() == "No thanks"
+		and rr.buttons[1].responseId == "MAIN" and rr.buttons[3].responseId == "PASS" and math.abs(rr.buttons[2].label.textColor[3] - 0.95) < 0.01)
+	check("its buttons are as wide as the longest label needs", rr.buttons[1].w >= 60 and rr.buttons[1].w == rr.buttons[3].w)
+	rr.buttons[1].scripts.OnClick(rr.buttons[1])
+	check("a click answers with that button", Responses:GetMyResponse(1) == "MAIN" and Candidates:Get(ME, 1).response == "MAIN" and rr.buttons[1].selected == true)
+	check("the status names the answer as labelled", rr.parent.status:GetText():find("Main spec", 1, true) ~= nil)
+	local okOld, msgOld = Responses:Send("BIS", 1)
+	check("an answer that is not a button is refused", okOld == false and msgOld == "Unknown response." and Responses:GetMyResponse(1) == "MAIN")
+	check("the loot master refuses one from somebody else", Comm:Process(env("RESPONSE", sid, nil, { item = 1, response = "BIS", gear = {} }), "WHISPER", "Veyra Moo") == false
+		and Candidates:Get("Veyra Moo", 1) == nil)
+	check("and accepts a real one", Comm:Process(env("RESPONSE", sid, nil, { item = 1, response = "SIDE", gear = {}, note = "custom" }), "WHISPER", "Veyra Moo") == true
+		and Candidates:Get("Veyra Moo", 1).response == "SIDE")
+	Comm:Process(env("RESPONSE", sid, nil, { item = 1, response = "PASS", gear = {} }), "WHISPER", "Kaelis Moo")
+	Comm:Process(env("RESPONSE", sid, nil, { item = 1, response = "MAIN", gear = {} }), "WHISPER", "Jonatan Moo")
+
+	Win:Show()
+	local names = {}
+	for _, e in ipairs(Win:GetVisible()) do names[#names + 1] = e.name end
+	check("the table follows the order of the buttons", table.concat(names, ",") == "Jonatan Moo,Tester Moo,Veyra Moo")
+	local chip
+	for _, row in ipairs(Win.rows) do if row:IsShown() and row.candidate == "Veyra Moo" then chip = row.chip end end
+	check("the chips show the custom label and colour", chip.label:GetText() == "Side grade" and math.abs(chip.label.textColor[3] - 0.95) < 0.01)
+	local labels = {}
+	for _, item in ipairs(Win:GetRowMenu("Veyra Moo")) do labels[#labels + 1] = item.label end
+	check("Change response lists the custom buttons", table.concat(labels, "|") == "Vote|Award|Change response|Main spec|Side grade|No thanks|Remove from consideration")
+	check("Set response refuses an answer that is not a button", Candidates:SetResponse("Veyra Moo", "BIS", 1) == false and Candidates:SetResponse("Veyra Moo", "MAIN", 1) == true)
+	check("and Remove from consideration still means PASS", Candidates:SetResponse("Veyra Moo", "PASS", 1) == true and Candidates:Get("Veyra Moo", 1).response == "PASS")
+	Candidates:SetResponse("Veyra Moo", "SIDE", 1)
+
+	-- A snapshot carries the buttons.
+	H.clock = H.clock + 100
+	H.sent = {}
+	Comm:Process(env("STATE_REQUEST", nil, nil, {}), "WHISPER", "Veyra Moo")
+	local snapMsg = sent("STATE_SNAPSHOT")[1]
+	check("a snapshot has the session's buttons", snapMsg ~= nil and #snapMsg.p.responses == 3 and snapMsg.p.responses[2].label == "Side grade")
+
+	-- The award keeps the label.
+	H.sent = {}
+	check("award the item", ALC.Awards:Award("Veyra Moo", 1) == true)
+	check("the announcement uses the label", ALC.Awards:GetLastAnnouncement():find("Side grade", 1, true) ~= nil)
+	local log = ALC.Awards:GetLog()
+	check("the log keeps the answer's label and colour", log[#log].response == "SIDE" and log[#log].responseLabel == "Side grade" and math.abs(log[#log].responseColor[3] - 0.95) < 0.01)
+	Responses:SetConfiguredSet(nil)
+	Win:ShowHistory()
+	local historyRow = Win.historyRows[1]
+	check("the history still shows it after the buttons were changed", historyRow.chip.label:GetText() == "Side grade" and math.abs(historyRow.chip.label.textColor[3] - 0.95) < 0.01)
+	Win:Hide()
+	check("the loot master's own buttons are the default again, the ended session's are gone", not Sessions:IsActive() and #Responses:GetSet() == 5)
+	Responses:SetConfiguredSet(mine)
+
+	-- A restored session keeps its buttons.
+	check("start another session", Sessions:StartItems({ 200 }) == true)
+	local sid4 = Sessions:GetActiveSid()
+	Responses:SetConfiguredSet(nil) -- the loot master changes the buttons meanwhile
+	local savedDb = H.snapshotDB()
+	H.reload(savedDb)
+	leader = ME
+	world()
+	ALC.Council:Refresh()
+	ALC.Sessions:OnEnteringWorld(false, true)
+	check("after a reload the session has the buttons it started with", ALC.Sessions:GetActiveSid() == sid4 and #ALC.Sessions:GetResponses() == 3
+		and ALC.Sessions:HasResponse("MAIN") and not ALC.Sessions:HasResponse("BIS"))
+	ALC.Sessions:Cancel("done")
+
+	-- Somebody else's session: the client gets the buttons in SESSION_START.
+	leader = "Veyra Moo"
+	world()
+	ALC.Council:Refresh()
+	local startMsg2 = { items = { { itemID = 200, itemString = "item:200" } }, council = { "Veyra Moo", ME }, lm = "Veyra Moo",
+		responses = { { id = "GO", label = "Go for it", color = "ff8800" }, { id = "PASS", label = "Pass", color = "808080" } } }
+	check("the session is accepted", ALC.Comm:Process(env("SESSION_START", "sidZ", 1, startMsg2), "PARTY", "Veyra Moo") == true)
+	local rz = ALC.ResponseWindow.rows[1]
+	check("our response window shows the loot master's buttons", ALC.ResponseWindow:IsShown() and rz.buttons[1].label:GetText() == "Go for it" and rz.buttons[2].label:GetText() == "Pass"
+		and not rz.buttons[3]:IsShown() and rz.buttons[1].label.textColor[1] == 1)
+	H.sent = {}
+	rz.buttons[1].scripts.OnClick(rz.buttons[1])
+	local ours = sent("RESPONSE")[1]
+	check("our answer uses its id", ours ~= nil and ours.p.response == "GO" and ours.target == "Veyra Moo")
+	check("a window that sizes itself to the buttons is not narrower than before", ALC.ResponseWindow.rows[1].parent.w >= 600)
+	ALC.Comm:Process(env("SESSION_CANCEL", "sidZ", 2, { reason = "done" }), "PARTY", "Veyra Moo")
 
 	-- Put the environment back.
 	UnitIsConnected = nil

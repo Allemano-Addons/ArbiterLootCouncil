@@ -83,6 +83,7 @@ local function makeSession(sid, p, restored)
 	local s = {
 		sid = sid,
 		items = copyItems(itemsOf(p)),
+		responses = ALC.Responses.FromWire(p.responses),
 		council = copyList(p.council),
 		lm = ALC:NormalizeName(p.lm),
 		startedAt = time(),
@@ -112,6 +113,7 @@ local function saveSession()
 	store.session = {
 		sid = session.sid,
 		items = copyItems(session.items),
+		responses = ALC.Responses.ToWire(session.responses),
 		council = copyList(session.council),
 		lm = session.lm,
 	}
@@ -143,7 +145,23 @@ function Sessions:GetSession()
 	for k, v in pairs(session) do copy[k] = v end
 	copy.council = copyList(session.council)
 	copy.items = copyItems(session.items)
+	copy.responses = ALC.Responses.FromWire(ALC.Responses.ToWire(session.responses))
 	return copy
+end
+
+-- The answer buttons of the running session (a copy), or nil without a session.
+function Sessions:GetResponses()
+	if not session then return nil end
+	return ALC.Responses.FromWire(ALC.Responses.ToWire(session.responses))
+end
+
+-- Whether the id is one of the running session's answers.
+function Sessions:HasResponse(id)
+	if not session then return false end
+	for _, r in ipairs(session.responses) do
+		if r.id == id then return true end
+	end
+	return false
 end
 
 function Sessions:GetItemCount()
@@ -201,6 +219,7 @@ function Sessions:StartItems(list)
 	starting = true
 	local ok = ALC.Comm:SendRaid("SESSION_START", sid, {
 		items = items,
+		responses = ALC.Responses.ToWire(ALC.Responses:GetConfiguredSet()),
 		council = ALC.Council:BuildSessionList(name),
 		lm = name,
 	})
@@ -283,6 +302,7 @@ local function onStateRequest(_, sender)
 	local isCouncil = ALC.Council:IsCouncil(sender)
 	local payload = {
 		items = copyItems(session.items),
+		responses = ALC.Responses.ToWire(session.responses),
 		council = copyList(session.council),
 		lm = session.lm,
 	}

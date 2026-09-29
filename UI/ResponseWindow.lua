@@ -44,7 +44,61 @@ local function restorePosition()
 	end
 end
 
--- One item: its icon and name, and the five answer buttons (or who won it).
+local buttonWidth = BUTTON_W -- the width of every answer button of this session
+local currentSet = {}     -- the answers the buttons stand for
+local setKey = ""
+
+-- The buttons of a row follow the session's answers: as many as it has, as wide as its
+-- longest label needs.
+local function ensureButtons(row, count)
+	while #row.buttons < count do
+		local button
+		button = UI.NewButton(row, BUTTON_W, BUTTON_H, "", function()
+			ALC.Responses:SetDraftNote(frame.note:GetText()) -- what is written goes with the answer
+			local ok, message = ALC.Responses:Send(button.responseId, row.item)
+			feedback = not ok and message or nil
+			ResponseWindow:Refresh()
+		end)
+		row.buttons[#row.buttons + 1] = button
+	end
+end
+
+local function applySet(set)
+	local key = ""
+	for _, r in ipairs(set) do key = key .. r.id .. ":" .. r.label .. ":" .. r.color[1] .. ":" .. r.color[2] .. ":" .. r.color[3] .. ";" end
+	if key == setKey then return end
+	setKey, currentSet = key, set
+	local count = #set
+	local first = ResponseWindow.rows[1]
+	ensureButtons(first, count)
+	local widest = 0
+	for i, r in ipairs(set) do
+		first.buttons[i]:SetLabel(r.label)
+		widest = math.max(widest, first.buttons[i].label:GetStringWidth())
+	end
+	buttonWidth = math.max(BUTTON_W, math.floor(widest + 22))
+	local left = 8 + ICON + 8 + NAME_W + 8
+	for _, row in ipairs(ResponseWindow.rows) do
+		ensureButtons(row, count)
+		for i, button in ipairs(row.buttons) do
+			local r = set[i]
+			if r then
+				button:SetSize(buttonWidth, BUTTON_H)
+				button:ClearAllPoints()
+				button:SetPoint("LEFT", row, "LEFT", left + (i - 1) * (buttonWidth + GAP), 0)
+				button:SetLabel(r.label)
+				button.label:SetTextColor(r.color[1], r.color[2], r.color[3], 1)
+				button.responseId = r.id
+			else
+				button.responseId = nil
+			end
+		end
+		row.result:SetWidth(count * (buttonWidth + GAP) - GAP)
+	end
+	frame:SetWidth(math.max(WIDTH, left + count * (buttonWidth + GAP) - GAP + 12 + 2 * PAD + 14))
+end
+
+-- One item: its icon and name, and the answer buttons (or who won it).
 local function newRow(index)
 	local row = CreateFrame("Frame", nil, frame)
 	row:SetHeight(ROW_H)
@@ -77,20 +131,7 @@ local function newRow(index)
 	row.sub:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -2)
 	row.sub:SetWidth(NAME_W)
 
-	local left = 8 + ICON + 8 + NAME_W + 8
-	row.buttons = {}
-	for i, response in ipairs(ALC.Responses.LIST) do
-		local button = UI.NewButton(row, BUTTON_W, BUTTON_H, response.label, function()
-			ALC.Responses:SetDraftNote(frame.note:GetText()) -- what is written goes with the answer
-			local ok, message = ALC.Responses:Send(response.id, row.item)
-			feedback = not ok and message or nil
-			ResponseWindow:Refresh()
-		end)
-		button:SetPoint("LEFT", row, "LEFT", left + (i - 1) * (BUTTON_W + GAP), 0)
-		button.label:SetTextColor(response.color[1], response.color[2], response.color[3], 1)
-		button.responseId = response.id
-		row.buttons[i] = button
-	end
+	row.buttons = {} -- made as the session needs them (see applySet)
 
 	-- Instead of the buttons once the item is awarded.
 	row.result = UI.NewText(row, 13, c.gold, "RIGHT")
@@ -213,9 +254,9 @@ local function renderRow(row, index, item)
 
 	local mine = ALC.Responses:GetMyResponse(index)
 	local awarded = item.winner ~= nil
-	for _, button in ipairs(row.buttons) do
-		button:SetShown(not awarded)
-		button:SetSelected(button.responseId == mine)
+	for i, button in ipairs(row.buttons) do
+		button:SetShown(not awarded and currentSet[i] ~= nil)
+		button:SetSelected(button.responseId ~= nil and button.responseId == mine)
 	end
 	row.result:SetShown(awarded)
 	if awarded then
@@ -235,6 +276,7 @@ function ResponseWindow:Refresh()
 		return
 	end
 
+	applySet(session.responses)
 	local count = #session.items
 	local visible = min(count, MAX_VISIBLE)
 	offset = max(0, min(offset, max(0, count - visible)))

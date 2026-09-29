@@ -20,6 +20,7 @@ local defaults = {
 		debug = false,
 		autoOpenLootWindow = true,
 		keepCouncilOpen = false, -- keep the voting window open after an award
+		responses = nil,      -- the loot master's answer buttons (Responses); nil = the default five
 		minimap = { hidden = false }, -- the launcher button; its position is saved once it has been moved
 		windows = {},         -- window key -> { point, relPoint, x, y }
 	},
@@ -85,6 +86,21 @@ function Settings:SetFont(path)
 end
 
 -- Whether the voting window stays open after an award.
+-- The loot master's answer buttons: a list of { id, label, color }, or nil for the default
+-- five. The caller (Responses) checks the list; these only keep it.
+function Settings:GetResponseSet()
+	local saved = db.profile.responses
+	if not saved then return nil end
+	local copy = {}
+	for i, r in ipairs(saved) do copy[i] = { id = r.id, label = r.label, color = { r.color[1], r.color[2], r.color[3] } } end
+	return copy
+end
+
+function Settings:SetResponseSet(set)
+	db.profile.responses = set
+	changed("responses")
+end
+
 function Settings:GetKeepCouncilOpen()
 	return db.profile.keepCouncilOpen == true
 end
