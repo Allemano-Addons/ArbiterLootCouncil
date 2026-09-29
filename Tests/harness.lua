@@ -21,7 +21,7 @@ function H.setup()
 	end
 	GetAddOnMetadata = function() return "test" end
 	geterrorhandler = function() return print end
-	UnitName = function() return "Tester" end
+	UnitName = function(unit) if unit == "player" then return "Tester", "Moo" end end
 	UnitClass = function() return "Rogue", "ROGUE" end
 	UnitRace = function() return "Human", "Human" end
 	time, date = os.time, os.date
@@ -30,7 +30,7 @@ function H.setup()
 	C_Timer = { After = function(_, fn) fn() end }
 	H.inRaid, H.inGroup = false, false
 	IsInRaid = function() return H.inRaid end
-	IsInGroup = function() return H.inGroup or H.inRaid end
+	IsInGroup = function(category) if category == 2 then return false end return H.inGroup or H.inRaid end
 	GetNumGroupMembers = function() return 1 end
 	securecallfunction = function(f, ...) return f(...) end
 	GetCurrentRegion =function() return 3 end

@@ -36,6 +36,14 @@ check("info printed when debug on", #H.chat == before + 1)
 H.slash("debug off")
 check("debug off", ALC.Settings:IsDebug() == false)
 
+-- Names on Forever are "First Last": UnitName returns the surname as its second value.
+check("player full name has the surname", ALC:PlayerName() == "Tester Moo")
+check("missing unit has no name", ALC:UnitFullName("raid7") == nil)
+check("realm suffix stripped, surname kept", ALC:NormalizeName("Allemano Moo-ClassicBetaPvP2") == "Allemano Moo")
+check("same first name, different surname are different players", ALC:SameName("Allemano Moo", "Allemano Mu") == false)
+check("names compare case-insensitively", ALC:SameName("allemano moo", "Allemano Moo-Realm") == true)
+check("empty name rejected", ALC:NormalizeName("") == nil and ALC:NormalizeName(nil) == nil)
+
 -- Council list: normalization, dedupe (case-insensitive), removal.
 check("add member", ALC.Settings:AddCouncilMember("Ashvane-Realm") == true)
 check("duplicate rejected", ALC.Settings:AddCouncilMember("ashvane") == false)

@@ -8,7 +8,6 @@ local AceAddon = LibStub("AceAddon-3.0")
 local strlower = string.lower
 local strmatch = string.match
 local format = string.format
-local Ambiguate = Ambiguate
 
 local ALC = AceAddon:NewAddon("ALC", "AceEvent-3.0")
 _G.ALC = ALC
@@ -40,13 +39,31 @@ end
 -- Helpers
 --------------------------------------------------------------------------------
 
--- Strips the realm part and returns the bare character name.
+-- On WoW Forever every character is "First Last": UnitName returns the first name and
+-- the SURNAME as two values, and first names are not unique. The full name is the key.
+local function surnameSeparator()
+	local consts = Constants and Constants.CharacterNameSeparatorConsts
+	return consts and consts.CHARACTERNAME_SURNAME_SEPARATOR or " "
+end
+
+-- "First Last" of a unit, nil if the unit does not exist.
+function ALC:UnitFullName(unit)
+	local first, surname = UnitName(unit)
+	if not first or first == "" then return nil end
+	if type(surname) == "string" and surname ~= "" then
+		return first .. surnameSeparator() .. surname
+	end
+	return first
+end
+
+function ALC:PlayerName()
+	return self:UnitFullName("player")
+end
+
+-- Strips a "-Realm" suffix and returns the character name ("First Last").
 function ALC:NormalizeName(name)
 	if type(name) ~= "string" or name == "" then return nil end
-	if Ambiguate then
-		return Ambiguate(name, "none")
-	end
-	return strmatch(name, "^[^-]+")
+	return strmatch(name, "^([^-]+)")
 end
 
 -- Case-insensitive name comparison after normalization.

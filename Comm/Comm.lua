@@ -62,26 +62,30 @@ local versions = {}            -- lowercase name -> { name, addon, proto, seen }
 --------------------------------------------------------------------------------
 -- Resolved on every call: UnitName("player") is not reliable while addons load.
 local function me()
-	return ALC:NormalizeName(UnitName("player"))
+	return ALC:NormalizeName(ALC:PlayerName())
 end
 
+local HOME = LE_PARTY_CATEGORY_HOME or 1
+local INSTANCE = LE_PARTY_CATEGORY_INSTANCE or 2
+
 function Comm:GetGroupChannel()
-	if IsInRaid and IsInRaid() then return "RAID" end
-	if IsInGroup and IsInGroup() then return "PARTY" end
+	if IsInGroup(INSTANCE) and not IsInGroup(HOME) then return "INSTANCE_CHAT" end
+	if IsInRaid() then return "RAID" end
+	if IsInGroup() then return "PARTY" end
 	return nil
 end
 
--- Names of everyone in the group, including ourselves. Replaceable in tests.
+-- Full names of everyone in the group, including ourselves. Replaceable in tests.
 function Comm.GetGroupNames()
 	local names = { me() }
-	if IsInRaid and IsInRaid() then
+	if IsInRaid() then
 		for i = 1, GetNumGroupMembers() do
-			local name = UnitName("raid" .. i)
+			local name = ALC:UnitFullName("raid" .. i)
 			if name then names[#names + 1] = name end
 		end
-	elseif IsInGroup and IsInGroup() then
+	elseif IsInGroup() then
 		for i = 1, 4 do
-			local name = UnitName("party" .. i)
+			local name = ALC:UnitFullName("party" .. i)
 			if name then names[#names + 1] = name end
 		end
 	end

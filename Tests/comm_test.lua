@@ -13,7 +13,7 @@ return function(check, H)
 	}
 	ALC.Sessions = { GetActiveSid = function() return activeSid end }
 
-	local group = { "Tester", "Ashvane", "Veyra", "Jonatan", "Allemano Moo" }
+	local group = { "Tester Moo", "Ashvane", "Veyra", "Jonatan", "Allemano Moo" }
 	Comm.GetGroupNames = function() return group end
 	Comm:InvalidateRoster()
 
@@ -176,14 +176,14 @@ return function(check, H)
 	check("missing target refused", Comm:SendWhisper("", "STATE_REQUEST", nil, {}) == false)
 
 	-- As LM.
-	lmName = "Tester"
+	lmName = "Tester Moo"
 	activeSid = "sidLM"
 	local mine = start()
-	mine.lm = "Tester"
+	mine.lm = "Tester Moo"
 	H.inRaid = true
 	check("LM sends SESSION_START", Comm:SendRaid("SESSION_START", "sidLM", mine) == true)
 	check("sent on the raid channel", #H.sent == 1 and H.sent[1].dist == "RAID" and H.sent[1].prefix == "ALC")
-	check("loopback delivered it to ourselves", last.SESSION_START.sid == "sidLM" and last.SESSION_START.sender == "Tester" and last.SESSION_START.seq == 1)
+	check("loopback delivered it to ourselves", last.SESSION_START.sid == "sidLM" and last.SESSION_START.sender == "Tester Moo" and last.SESSION_START.seq == 1)
 	check("loopback is an independent copy", last.SESSION_START.p ~= mine)
 	check("LM sends AWARD with the next seq", Comm:SendRaid("AWARD", "sidLM", { winner = "Jonatan", itemID = 19019, response = "BIS" }) == true)
 	check("seq increments per session", last.AWARD.seq == 2)
@@ -202,13 +202,13 @@ return function(check, H)
 	check("sent as WHISPER to the target", #H.sent == 1 and H.sent[1].dist == "WHISPER" and H.sent[1].target == "Veyra")
 	H.sent = {}
 	local acceptedBefore = accepted.CANDIDATE_UPDATE
-	check("whisper to ourselves", Comm:SendWhisper("Tester", "CANDIDATE_UPDATE", "sidLM", candidate()) == true)
+	check("whisper to ourselves", Comm:SendWhisper("Tester Moo", "CANDIDATE_UPDATE", "sidLM", candidate()) == true)
 	check("self whisper is loopback only", #H.sent == 0 and accepted.CANDIDATE_UPDATE == acceptedBefore + 1)
 
 	-- Council fan-out: one seq for everyone, duplicates removed, self by loopback.
 	H.sent = {}
 	acceptedBefore = accepted.VOTE_UPDATE or 0
-	check("council fan-out", Comm:SendCouncil({ "Veyra", "veyra", "Tester", "Allemano Moo" }, "VOTE_UPDATE", "sidLM",
+	check("council fan-out", Comm:SendCouncil({ "Veyra", "veyra", "Tester Moo", "Allemano Moo" }, "VOTE_UPDATE", "sidLM",
 		{ candidate = "Jonatan", votes = 1, voters = { "Veyra" } }) == true)
 	check("one whisper per distinct remote target", #H.sent == 2 and H.sent[1].target == "Veyra" and H.sent[2].target == "Allemano Moo")
 	check("self got it by loopback", accepted.VOTE_UPDATE == acceptedBefore + 1)
@@ -218,7 +218,7 @@ return function(check, H)
 
 	-- Own network echo is dropped.
 	before = total()
-	Comm:OnCommReceived("ALC", AceSerializer:Serialize(env("VERSION_REQUEST", nil, nil, {})), "RAID", "Tester")
+	Comm:OnCommReceived("ALC", AceSerializer:Serialize(env("VERSION_REQUEST", nil, nil, {})), "RAID", "Tester Moo")
 	check("network echo of our own message ignored", total() == before)
 
 	----------------------------------------------------------------------------
