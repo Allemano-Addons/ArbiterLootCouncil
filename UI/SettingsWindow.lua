@@ -308,10 +308,11 @@ local function refreshFontMenu()
 		local choice = fontChoices[fontOffset + i]
 		if choice then
 			row.choice = choice
-			row.name:SetText(choice.name)
 			-- Each font is shown as itself; a font the game cannot load falls back to the default.
+			-- The font must be set before the text: a text without a font is an error.
 			local ok = row.name:SetFont(choice.path or STANDARD_TEXT_FONT, 13, "")
 			if ok == false then row.name:SetFont(STANDARD_TEXT_FONT, 13, "") end
+			row.name:SetText(choice.name)
 			local selected = (choice.path == nil and current == nil)
 				or (choice.path ~= nil and current ~= nil and string.lower(choice.path) == string.lower(current))
 			row.selected = selected
@@ -355,6 +356,7 @@ local function buildFontMenu()
 		UI.SetTextureColor(row.bg, c.panel, 0)
 		-- Not made with UI.NewText: the font of a row is its own, whatever the setting is.
 		row.name = row:CreateFontString(nil, "OVERLAY")
+		row.name:SetFont(STANDARD_TEXT_FONT, 13, "") -- every text needs a font before it gets its text
 		row.name:SetPoint("LEFT", row, "LEFT", 12, 0)
 		row.name:SetJustifyH("LEFT")
 		row:SetScript("OnEnter", function(self) UI.SetTextureColor(self.bg, c.panelHover, 1) end)

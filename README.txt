@@ -1,0 +1,30 @@
+Arbiter Loot Council (ALC) 0.1.0 - test build
+Part of Allemano Addons. For WoW Forever.
+
+INSTALL
+  Unzip so that the folder "ArbiterLootCouncil" ends up in
+  ...\World of Warcraft\_classic_beta_\Interface\AddOns\
+  Restart the game (a /reload does not find a new addon). Everybody in the
+  raid who should answer needs the addon.
+
+QUICK START
+  Loot master:
+    /alc council add <First Last>   who is on the council (once, before raid)
+    /alc add [item link]            put an item in the loot list (loot from bosses is added by itself)
+    Click Start on an item in the loot window.
+  Everybody: answer in the "Loot response" window (BiS, Upgrade, Minor, Offspec, Pass).
+  Council: vote in the council window (/alc vote). Loot master: Award.
+  Solo test: /alc test
+
+USEFUL
+  /alc            list all commands
+  /alc menu       window menu (also the square button by the minimap)
+  /alc settings   council list, loot quality, font, and more
+  /alc history    awards so far        /alc trades   items still to be traded
+  /alc debug versions   see who has the addon and which version
+
+SOMETHING WRONG?
+  Tell us what you did and send:
+    1. /alc debug log   (and copy the lines)
+    2. any error text from BugSack
+    3. a screenshot if something looks wrong

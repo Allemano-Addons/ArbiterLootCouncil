@@ -19,7 +19,11 @@ local function newFrame(kind, parent)
 		SetShown = function(self, shown) self.shown = shown and true or false end,
 		IsShown = function(self) return self.shown end,
 		IsVisible = function(self) return self.shown end,
-		SetText = function(self, text) self.text = text end,
+		-- Like the game: a text needs a font before it can be given its text.
+		SetText = function(self, text)
+			if self.kind == "FontString" and not self.font then error("FontString:SetText(): Font not set", 2) end
+			self.text = text
+		end,
 		GetText = function(self) return self.text end,
 		SetAlpha = function(self, a) self.alpha = a end,
 		GetAlpha = function(self) return self.alpha end,
