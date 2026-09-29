@@ -186,6 +186,7 @@ end
 --------------------------------------------------------------------------------
 -- Public
 --------------------------------------------------------------------------------
+-- Whether the window is open is remembered, so it is as you left it after a /reload.
 function ResponseWindow:Show()
 	if not ALC.Sessions:IsActive() then
 		ALC:Print(L["There is no active session."])
@@ -194,11 +195,23 @@ function ResponseWindow:Show()
 	if not frame then build() end
 	feedback = nil
 	frame:Show()
+	ALC.Settings:SetWindowShown("response", true)
 	self:Refresh()
 end
 
 function ResponseWindow:Hide()
 	if frame then frame:Hide() end
+	ALC.Settings:SetWindowShown("response", false)
+end
+
+-- After a reload the session is back: the window returns if it was open, and also if
+-- there is still something to answer.
+local function reopen(answered)
+	if ALC.Settings:GetWindowShown("response") or not answered then
+		ResponseWindow:Show()
+	else
+		ResponseWindow:Refresh()
+	end
 end
 
 function ResponseWindow:IsShown()
@@ -213,13 +226,12 @@ function ResponseWindow:Init()
 	register(self, "ALC_SESSION_STARTED", function(_, _, restored)
 		if not restored then ResponseWindow:Show() end
 	end)
-	-- After a reload the window only comes back if there is still something to answer.
 	register(self, "ALC_SESSION_SNAPSHOT", function(_, p)
-		if p.yourResponse == nil then ResponseWindow:Show() else refresh() end
+		reopen(p.yourResponse ~= nil)
 	end)
-	-- The loot master's own session came back: ask again only if we had not answered.
+	-- The loot master's own session came back; our answer is in the restored list.
 	register(self, "ALC_SESSION_RESTORED", function()
-		if ALC.Candidates:Get(ALC:PlayerName()) then refresh() else ResponseWindow:Show() end
+		reopen(ALC.Candidates:Get(ALC:PlayerName()) ~= nil)
 	end)
 	register(self, "ALC_SESSION_ENDED", function() ResponseWindow:Hide() end)
 end

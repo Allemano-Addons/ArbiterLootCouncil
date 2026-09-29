@@ -51,6 +51,9 @@ return function(check, H)
 	local store = ALC.Settings:GetSessionStore()
 	check("the session and the candidates are saved", store.session ~= nil and store.session.sid == sid and #store.candidates == 2)
 	local before = H.snapshotDB()
+	check("the response window is open before the reload", ALC.ResponseWindow:IsShown())
+	ALC.ResponseWindow:Hide() -- the player closes it
+	local beforeClosed = H.snapshotDB()
 
 	----------------------------------------------------------------------------
 	-- The reload
@@ -74,7 +77,7 @@ return function(check, H)
 	check("the loot list entry is in session again", LD:GetEntry(entryId).status == LD.STATUS.SESSION and LD:GetEntry(entryId).sid == sid)
 	check("and the other row with the same item is still waiting", LD:GetEntry(firstId).status == LD.STATUS.PENDING and LD:GetEntry(firstId).sid == nil)
 	check("nothing was broadcast to bring it back", #H.sent == 0)
-	check("the response window stays closed: we had answered", not ALC.ResponseWindow:IsShown())
+	check("the response window is open again: it was open before the reload", ALC.ResponseWindow:IsShown())
 
 	-- Messages keep their numbering, so the others still accept them.
 	H.sent = {}
@@ -91,6 +94,23 @@ return function(check, H)
 	check("which ends it and clears what was saved", not Sessions:IsActive()
 		and ALC.Settings:GetSessionStore().session == nil and ALC.Settings:GetSessionStore().candidates == nil)
 	check("and the entry is awarded", LD:GetEntry(entryId).status == LD.STATUS.AWARDED and LD:GetEntry(entryId).winner == "Veyra Moo")
+
+	-- A window the player had closed stays closed, as long as the answer is in.
+	H.reload(beforeClosed)
+	leader = ME
+	world()
+	ALC.Sessions:OnEnteringWorld(false, true)
+	check("the session is restored", ALC.Sessions:IsActive() and ALC.Candidates:Get(ME).response == "UPGRADE")
+	check("a response window the player had closed stays closed", not ALC.ResponseWindow:IsShown())
+
+	-- ... but an unanswered session always asks.
+	local unanswered = H.snapshotDB()
+	unanswered.global.sessionStore.candidates = {}
+	H.reload(unanswered)
+	leader = ME
+	world()
+	ALC.Sessions:OnEnteringWorld(false, true)
+	check("without an answer the window opens even if it had been closed", ALC.ResponseWindow:IsShown())
 
 	----------------------------------------------------------------------------
 	-- Cases where the session must not come back
