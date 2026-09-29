@@ -79,6 +79,58 @@ function ALC:GetItemInfo(item)
 	return fn(item)
 end
 
+function ALC:GetItemInfoInstant(item)
+	local fn = (C_Item and C_Item.GetItemInfoInstant) or GetItemInfoInstant
+	if not fn then return nil end
+	return fn(item)
+end
+
+-- Asks the client to load an item so GetItemInfo works shortly after.
+function ALC:RequestItemData(itemID)
+	local fn = C_Item and C_Item.RequestLoadItemDataByID
+	if fn then fn(itemID) end
+end
+
+-- Accepts an item link, an itemString, or an item id. Returns itemString, itemID.
+function ALC:ParseItem(input)
+	local id
+	if type(input) == "number" then
+		id = input
+	elseif type(input) == "string" then
+		local itemString = strmatch(input, "item:%-?%d+[%d:%-]*")
+		if itemString then
+			itemString = string.gsub(itemString, ":+$", "")
+			-- Keep it within the protocol limit, cut on a field boundary.
+			while #itemString > 120 do itemString = strmatch(itemString, "^(.*):[^:]*$") or "item:0" end
+			id = tonumber(strmatch(itemString, "^item:(%-?%d+)"))
+			if id and id >= 1 then return itemString, id end
+			return nil
+		end
+		id = tonumber(input)
+	end
+	if id and id >= 1 and id == math.floor(id) then return "item:" .. id, id end
+	return nil
+end
+
+-- Every item in a piece of text: links, itemStrings or plain item ids.
+-- Returns an array of { itemString, itemID, link } (link is kept for its colour code).
+function ALC:ParseItems(text)
+	local out = {}
+	if type(text) ~= "string" then return out end
+	local function add(token, link)
+		local itemString, itemID = self:ParseItem(token)
+		if itemString then out[#out + 1] = { itemString = itemString, itemID = itemID, link = link } end
+	end
+	for link in string.gmatch(text, "|c[^|]*|Hitem:[^|]*|h") do add(link, link) end
+	if #out == 0 then
+		for token in string.gmatch(text, "item:%-?%d+[%d:%-]*") do add(token) end
+	end
+	if #out == 0 then
+		for token in string.gmatch(text, "%d+") do add(tonumber(token)) end
+	end
+	return out
+end
+
 function ALC:Print(msg, ...)
 	if select("#", ...) > 0 then msg = format(msg, ...) end
 	DEFAULT_CHAT_FRAME:AddMessage("|cffE6A93C[ALC]|r " .. tostring(msg))
@@ -92,5 +144,7 @@ function ALC:OnInitialize()
 	self.Comm:Init()
 	self.Council:Init()
 	self.Sessions:Init()
+	self.LootDetection:Init()
+	self.LootWindow:Init()
 	self.Debug:Log("Core", "Arbiter Loot Council %s loaded (protocol v%d)", self.version, self.PROTOCOL_VERSION)
 end

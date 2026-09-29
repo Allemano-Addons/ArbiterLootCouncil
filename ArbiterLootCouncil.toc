@@ -19,3 +19,6 @@ Comm\Comm.lua
 Council\Council.lua
 Sessions\Sessions.lua
 Sessions\TestMode.lua
+LootDetection\LootDetection.lua
+UI\Widgets.lua
+UI\LootWindow.lua

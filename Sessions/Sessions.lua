@@ -46,31 +46,6 @@ local function copyList(list)
 end
 
 --------------------------------------------------------------------------------
--- Items
---------------------------------------------------------------------------------
-
--- Accepts an item link, an itemString, or an item id. Returns itemString, itemID.
-local function parseItem(input)
-	local id
-	if type(input) == "number" then
-		id = input
-	elseif type(input) == "string" then
-		local itemString = strmatch(input, "item:%-?%d+[%d:%-]*")
-		if itemString then
-			itemString = string.gsub(itemString, ":+$", "")
-			-- Keep it within the protocol limit, cut on a field boundary.
-			while #itemString > 120 do itemString = strmatch(itemString, "^(.*):[^:]*$") or "item:0" end
-			id = tonumber(strmatch(itemString, "^item:(%-?%d+)"))
-			if id and id >= 1 then return itemString, id end
-			return nil
-		end
-		id = tonumber(input)
-	end
-	if id and id >= 1 and id == math.floor(id) then return "item:" .. id, id end
-	return nil
-end
-
---------------------------------------------------------------------------------
 -- State
 --------------------------------------------------------------------------------
 local function isMe(name)
@@ -147,7 +122,7 @@ function Sessions:Start(item)
 	if session or starting then
 		return false, L["A session is already active. Cancel it first with /alc cancel."]
 	end
-	local itemString, itemID = parseItem(item)
+	local itemString, itemID = ALC:ParseItem(item)
 	if not itemString then
 		return false, L["That is not a valid item."]
 	end

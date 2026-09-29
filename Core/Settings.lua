@@ -18,10 +18,15 @@ local defaults = {
 		council = {},         -- array of character names, set before raid
 		qualityThreshold = 4, -- epic
 		debug = false,
+		autoOpenLootWindow = true,
+		windows = {},         -- window key -> { point, relPoint, x, y }
 	},
 	global = {
 		awardLog = {},        -- append-only, written by Awards
 		debugLog = {},        -- ring buffer, owned by Debug
+		lootList = {          -- the loot master's item list, owned by LootDetection
+			items = {}, seen = {}, seenCount = 0, nextId = 0, hidden = 0,
+		},
 	},
 }
 
@@ -48,6 +53,29 @@ end
 function Settings:SetDebug(enabled)
 	db.profile.debug = enabled and true or false
 	changed("debug")
+end
+
+-- Loot window -----------------------------------------------------------------
+function Settings:GetAutoOpenLootWindow()
+	return db.profile.autoOpenLootWindow
+end
+
+function Settings:SetAutoOpenLootWindow(enabled)
+	db.profile.autoOpenLootWindow = enabled and true or false
+	changed("autoOpenLootWindow")
+end
+
+-- The saved loot list. LootDetection owns its contents; Settings only hands it over.
+function Settings:GetLootStore()
+	return db.global.lootList
+end
+
+function Settings:GetWindowPosition(key)
+	return db.profile.windows[key]
+end
+
+function Settings:SetWindowPosition(key, point, relPoint, x, y)
+	db.profile.windows[key] = { point = point, relPoint = relPoint, x = x, y = y }
 end
 
 -- Loot quality threshold ------------------------------------------------------

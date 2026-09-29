@@ -6,6 +6,59 @@ local H = {}
 local chat = {}
 H.chat = chat
 
+-- Mock UI frames. Any method (names start upper case) is accepted and does nothing;
+-- the ones the tests look at keep their state. Frames remember `parent` and `scripts`.
+local function newFrame(kind, parent)
+	local f = { kind = kind, parent = parent, scripts = {}, shown = true, alpha = 1, w = 100, h = 20 }
+	local methods = {
+		SetScript = function(self, name, fn) self.scripts[name] = fn end,
+		GetScript = function(self, name) return self.scripts[name] end,
+		HookScript = function() end,
+		Show = function(self) self.shown = true end,
+		Hide = function(self) self.shown = false end,
+		SetShown = function(self, shown) self.shown = shown and true or false end,
+		IsShown = function(self) return self.shown end,
+		IsVisible = function(self) return self.shown end,
+		SetText = function(self, text) self.text = text end,
+		GetText = function(self) return self.text end,
+		SetAlpha = function(self, a) self.alpha = a end,
+		GetAlpha = function(self) return self.alpha end,
+		SetTexture = function(self, tex) self.texture = tex end,
+		SetTextColor = function(self, r, g, b, a) self.textColor = { r, g, b, a } end,
+		SetColorTexture = function(self, r, g, b, a) self.colorTexture = { r, g, b, a } end,
+		SetSize = function(self, w, h) self.w, self.h = w, h end,
+		SetWidth = function(self, w) self.w = w end,
+		SetHeight = function(self, h) self.h = h end,
+		GetWidth = function(self) return self.w end,
+		GetHeight = function(self) return self.h end,
+		GetStringWidth = function(self) return #(self.text or "") * 6 end,
+		GetStringHeight = function() return 12 end,
+		GetParent = function(self) return self.parent end,
+		SetPoint = function(self, ...) self.point = { ... } end,
+		GetPoint = function(self) return "CENTER", nil, "CENTER", 0, 0 end,
+		IsMouseOver = function() return false end,
+		CreateTexture = function(self) return newFrame("Texture", self) end,
+		CreateFontString = function(self) return newFrame("FontString", self) end,
+		SetMovable = function(self, v) self.movable = v end,
+		StartMoving = function(self) self.moving = true end,
+		StopMovingOrSizing = function(self) self.moving = false end,
+	}
+	return setmetatable(f, {
+		__index = function(_, key)
+			if methods[key] then return methods[key] end
+			if type(key) == "string" and key:match("^%u") then return function() end end
+		end,
+	})
+end
+
+function H.setupFrames()
+	CreateFrame = function(kind, _, parent) return newFrame(kind, parent) end
+	UIParent = newFrame("Frame")
+	STANDARD_TEXT_FONT = "Fonts\\FRIZQT__.TTF"
+	GameTooltip = newFrame("GameTooltip")
+	GameTooltip.SetHyperlink = function(self, link) self.hyperlink = link end
+end
+
 function H.setup()
 	-- WoW string/table aliases
 	format, strlower, strmatch = string.format, string.lower, string.match
@@ -15,10 +68,7 @@ function H.setup()
 	DEFAULT_CHAT_FRAME = { AddMessage = function(_, msg) chat[#chat + 1] = msg end }
 	SlashCmdList = {}
 	Ambiguate = function(name) return (name:gsub("%-.*$", "")) end
-	CreateFrame = function()
-		return { SetScript = function() end, RegisterEvent = function() end, UnregisterAllEvents = function() end,
-			Show = function() end, Hide = function() end }
-	end
+	H.setupFrames()
 	GetAddOnMetadata = function() return "test" end
 	geterrorhandler = function() return print end
 	UnitName = function(unit) if unit == "player" then return "Tester", "Moo" end end
