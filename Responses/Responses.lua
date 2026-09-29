@@ -34,7 +34,7 @@ Responses.PALETTE = {
 }
 
 local myResponses = {} -- item -> our response id
-local draftNote = ""   -- the note that goes with our next answers (and is sent again when it changes)
+local myNotes = {}     -- item -> the note that goes with our answer to it
 
 --------------------------------------------------------------------------------
 -- Sets of buttons
@@ -168,7 +168,7 @@ local function setMine(item, id)
 end
 
 local function clearMine()
-	draftNote = ""
+	myNotes = {}
 	if next(myResponses) == nil then return end
 	myResponses = {}
 	ALC.Events:Fire("ALC_RESPONSES_CHANGED")
@@ -182,16 +182,18 @@ function Responses.CleanNote(text)
 	return string.sub(text, 1, ALC.Constants.MAX_NOTE_LENGTH)
 end
 
-function Responses:GetNote()
-	return draftNote
+-- Our note for an item ("" when there is none).
+function Responses:GetNote(item)
+	return myNotes[item or 1] or ""
 end
 
--- Sets the note that goes with the next answers, without sending anything.
-function Responses:SetDraftNote(text)
-	draftNote = Responses.CleanNote(text)
+-- Sets the note for an item, without sending anything: it goes with the next answer.
+function Responses:SetDraftNote(item, text)
+	local note = Responses.CleanNote(text)
+	myNotes[item or 1] = note ~= "" and note or nil
 end
 
--- Sends (or changes) our response to an item, with the current note. Returns true, or
+-- Sends (or changes) our response to an item, with that item's note. Returns true, or
 -- false and a message.
 function Responses:Send(id, item)
 	item = item or 1
@@ -202,7 +204,7 @@ function Responses:Send(id, item)
 	if not target then return false, L["That item is not in the session."] end
 	if target.winner then return false, L["That item has already been awarded."] end
 	local payload = { item = item, response = id, gear = ALC.Gear:GetEquipped(target.itemString) }
-	if draftNote ~= "" then payload.note = draftNote end
+	payload.note = myNotes[item]
 	local sent = ALC.Comm:SendWhisper(session.lm, "RESPONSE", session.sid, payload)
 	if not sent then return false, L["Could not send your response. See /alc debug log."] end
 	Debug:Log("Responses", "item %d: sent %s to %s", item, id, session.lm)
@@ -210,17 +212,14 @@ function Responses:Send(id, item)
 	return true
 end
 
--- Changes the note and sends it again with every answer we have given to an open item.
--- Returns how many answers were sent.
-function Responses:SetNote(text)
-	draftNote = Responses.CleanNote(text)
-	local session = ALC.Sessions:GetSession()
-	if not session then return 0 end
-	local resent = 0
-	for item, id in pairs(myResponses) do
-		if session.items[item] and not session.items[item].winner and self:Send(id, item) then resent = resent + 1 end
-	end
-	return resent
+-- Changes the note of an item and, when we have already answered it, sends the answer
+-- again with the new note. Returns true when that was done.
+function Responses:SetNote(item, text)
+	item = item or 1
+	self:SetDraftNote(item, text)
+	local id = myResponses[item]
+	if not id then return false end
+	return self:Send(id, item) == true
 end
 
 function Responses:Init()
@@ -231,7 +230,7 @@ function Responses:Init()
 	register(self, "ALC_SESSION_ENDED", clearMine)
 	-- After a reload the loot master tells us what we answered.
 	register(self, "ALC_SESSION_SNAPSHOT", function(_, p)
-		myResponses = {}
+		myResponses, myNotes = {}, {}
 		for _, mine in ipairs(p.yourResponses or {}) do
 			if ALC.Sessions:HasResponse(mine.response) then myResponses[mine.item] = mine.response end
 		end
@@ -239,10 +238,13 @@ function Responses:Init()
 	end)
 	-- The loot master got its own session back: our answers are in the restored lists.
 	register(self, "ALC_SESSION_RESTORED", function(_, session)
-		myResponses = {}
+		myResponses, myNotes = {}, {}
 		for item = 1, #session.items do
 			local mine = ALC.Candidates:Get(ALC:PlayerName(), item)
-			if mine and ALC.Sessions:HasResponse(mine.response) then myResponses[item] = mine.response end
+			if mine and ALC.Sessions:HasResponse(mine.response) then
+				myResponses[item] = mine.response
+				myNotes[item] = mine.note
+			end
 		end
 		ALC.Events:Fire("ALC_RESPONSES_CHANGED")
 	end)

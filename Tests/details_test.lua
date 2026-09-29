@@ -115,8 +115,10 @@ return function(check, H)
 	----------------------------------------------------------------------------
 	check("start a session with two items", Sessions:StartItems({ 200, 201 }) == true)
 	local sid = Sessions:GetActiveSid()
-	check("the note starts empty", Responses:GetNote() == "")
-	check("the response window has a note field", Resp.rows[1].parent.note ~= nil and Resp.rows[1].parent.note:GetText() == "")
+	check("the notes start empty", Responses:GetNote(1) == "" and Responses:GetNote(2) == "")
+	check("every row of the response window has its own note field", Resp.rows[1].note ~= nil and Resp.rows[2].note ~= nil
+		and Resp.rows[1].note:GetText() == "" and Resp.rows[1].note ~= Resp.rows[2].note)
+	check("it sits to the right of the last button", Resp.rows[1].note:IsShown() and Resp.rows[1].note.point[3] == "LEFT" and Resp.rows[1].note.point[4] > 230)
 
 	H.sent = {}
 	Comm:Process(env("RESPONSE", sid, nil, { item = 1, response = "BIS", gear = {}, note = "Need it for the raid" }), "WHISPER", "Veyra Moo")
@@ -138,19 +140,43 @@ return function(check, H)
 
 	-- Our own answers carry the note.
 	check("cleaning a note", Responses.CleanNote("  a|cff b\n c  ") == "acff b c" and Responses.CleanNote(string.rep("y", 200)) == string.rep("y", 100) and Responses.CleanNote(nil) == "")
-	Resp.rows[1].parent.note:SetText("  My alt is a healer  ")
+	-- (In the game, clicking a button takes the focus from a field, which saves what is in it.)
+	Resp.rows[1].note:SetText("  Note one  ")
+	Resp.rows[1].note.scripts.OnEditFocusLost(Resp.rows[1].note)
+	Resp.rows[2].note:SetText("Note two")
+	Resp.rows[2].note.scripts.OnEditFocusLost(Resp.rows[2].note)
+	check("what was written stays in its own field", Responses:GetNote(1) == "Note one" and Responses:GetNote(2) == "Note two")
 	H.sent = {}
 	Resp.rows[2].buttons[2].scripts.OnClick(Resp.rows[2].buttons[2]) -- Upgrade on the second item
-	check("what is written goes with the answer", Responses:GetNote() == "My alt is a healer" and Candidates:Get(ME, 2).note == "My alt is a healer")
-	check("only for the item answered", Candidates:Get(ME, 1) == nil)
-	Responses:Send("MINOR", 1)
-	check("and with the next answer too", Candidates:Get(ME, 1).note == "My alt is a healer" and Candidates:Get(ME, 1).rank == "Officer")
+	check("what is written on a row goes with the answer to that item", Responses:GetNote(2) == "Note two" and Candidates:Get(ME, 2).note == "Note two")
+	check("the other item has nothing yet", Candidates:Get(ME, 1) == nil)
+	Resp.rows[1].buttons[3].scripts.OnClick(Resp.rows[1].buttons[3]) -- Minor on the first
+	check("each item carries its own note", Candidates:Get(ME, 1).note == "Note one" and Candidates:Get(ME, 2).note == "Note two" and Candidates:Get(ME, 1).rank == "Officer")
+	check("and the notes are kept per item", Responses:GetNote(1) == "Note one" and Responses:GetNote(2) == "Note two")
 	H.sent = {}
-	local resent = Responses:SetNote("Changed for real")
-	check("Enter sends the note again with every answer given", resent == 2 and Candidates:Get(ME, 1).note == "Changed for real" and Candidates:Get(ME, 2).note == "Changed for real")
-	Resp.rows[1].parent.note:SetText("From the field")
-	Resp.rows[1].parent.note.scripts.OnEnterPressed(Resp.rows[1].parent.note)
-	check("the field does the same on Enter", Responses:GetNote() == "From the field" and Candidates:Get(ME, 2).note == "From the field")
+	Resp.rows[1].note:SetText("Note one, changed")
+	Resp.rows[1].note.scripts.OnEnterPressed(Resp.rows[1].note)
+	check("Enter sends a changed note with the answer already given, for that item only", Candidates:Get(ME, 1).note == "Note one, changed"
+		and Candidates:Get(ME, 2).note == "Note two")
+	Resp.rows[2].note:SetText("")
+	Resp.rows[2].note.scripts.OnEnterPressed(Resp.rows[2].note)
+	check("an emptied note is taken away", Candidates:Get(ME, 2).note == nil and Responses:GetNote(2) == "")
+	Resp.rows[2].note:SetText("typed, then clicked")
+	Resp.rows[2].buttons[1].scripts.OnClick(Resp.rows[2].buttons[1])
+	check("a note that is still in the field goes with the click", Candidates:Get(ME, 2).note == "typed, then clicked" and Candidates:Get(ME, 2).response == "BIS")
+	check("SetNote says whether an answer was sent", Responses:SetNote(1, "again") == true and (function()
+		return Responses:SetNote(1, "x") == true
+	end)())
+	Responses:SetNote(2, "Note two")
+	check("a note written before answering waits for the answer", (function()
+		local session = Sessions:GetSession()
+		return #session.items == 2 and Responses:SetDraftNote(1, "draft") == nil and Responses:GetNote(1) == "draft"
+	end)())
+	Responses:SetNote(1, "Note one, changed")
+	Resp.rows[1].note:SetText("written but not sent")
+	Resp.rows[1].note.scripts.OnEditFocusLost(Resp.rows[1].note)
+	check("leaving the field keeps what was written for the next answer", Responses:GetNote(1) == "written but not sent" and Candidates:Get(ME, 1).note == "Note one, changed")
+	Responses:SetNote(1, "Note one, changed")
 
 	-- The council window shows them.
 	Win:Show()
@@ -185,7 +211,7 @@ return function(check, H)
 	check("a snapshot has notes and ranks", got ~= nil and got.note == "Need it for the raid" and got.rank == "Raider" and got.rankIndex == 4)
 
 	Sessions:Cancel("done")
-	check("the note is forgotten with the session", Responses:GetNote() == "")
+	check("the notes are forgotten with the session", Responses:GetNote(1) == "" and Responses:GetNote(2) == "")
 
 	----------------------------------------------------------------------------
 	-- Custom answer buttons: the protocol

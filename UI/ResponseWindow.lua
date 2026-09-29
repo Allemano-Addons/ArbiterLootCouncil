@@ -9,7 +9,8 @@ local strupper = string.upper
 local min, max = math.min, math.max
 
 local WIDTH, PAD = 600, 16
-local HEADER_H, FOOTER_H = 52, 92
+local HEADER_H, FOOTER_H = 52, 56
+local NOTE_W = 150 -- the note field at the right end of a row
 local ROW_H, ROW_GAP = 46, 4
 local ICON = 34
 local BUTTON_W, BUTTON_H, GAP = 58, 30, 4
@@ -54,11 +55,12 @@ local function ensureButtons(row, count)
 	while #row.buttons < count do
 		local button
 		button = UI.NewButton(row, BUTTON_W, BUTTON_H, "", function()
-			ALC.Responses:SetDraftNote(frame.note:GetText()) -- what is written goes with the answer
+			ALC.Responses:SetDraftNote(button.row.item, button.row.note:GetText()) -- what is written goes with the answer
 			local ok, message = ALC.Responses:Send(button.responseId, row.item)
 			feedback = not ok and message or nil
 			ResponseWindow:Refresh()
 		end)
+		button.row = row
 		row.buttons[#row.buttons + 1] = button
 	end
 end
@@ -93,9 +95,11 @@ local function applySet(set)
 				button.responseId = nil
 			end
 		end
-		row.result:SetWidth(count * (buttonWidth + GAP) - GAP)
+		row.result:SetWidth(count * (buttonWidth + GAP) - GAP + NOTE_W + 8)
+		row.note:ClearAllPoints()
+		row.note:SetPoint("LEFT", row, "LEFT", left + count * (buttonWidth + GAP) + 4, 0)
 	end
-	frame:SetWidth(math.max(WIDTH, left + count * (buttonWidth + GAP) - GAP + 12 + 2 * PAD + 14))
+	frame:SetWidth(math.max(WIDTH, left + count * (buttonWidth + GAP) + NOTE_W + 4 + 12 + 2 * PAD + 14))
 end
 
 -- One item: its icon and name, and the answer buttons (or who won it).
@@ -132,6 +136,18 @@ local function newRow(index)
 	row.sub:SetWidth(NAME_W)
 
 	row.buttons = {} -- made as the session needs them (see applySet)
+
+	-- A note for the council about this item, sent with the answer. Enter sends it again
+	-- with an answer that was already given.
+	row.note = UI.NewEditBox(row, NOTE_W, BUTTON_H, L["Note"], function(text)
+		local resent = ALC.Responses:SetNote(row.item, text)
+		feedback = nil
+		if resent then ALC:Print(L["Note sent."]) end
+		ResponseWindow:Refresh()
+	end)
+	row.note:SetMaxLetters(ALC.Constants.MAX_NOTE_LENGTH)
+	row.note:SetSize(NOTE_W, BUTTON_H)
+	row.note:HookScript("OnEditFocusLost", function(self) ALC.Responses:SetDraftNote(row.item, self:GetText()) end)
 
 	-- Instead of the buttons once the item is awarded.
 	row.result = UI.NewText(row, 13, c.gold, "RIGHT")
@@ -212,17 +228,6 @@ local function build()
 	frame.footerLine:SetHeight(1)
 	UI.SetTextureColor(frame.footerLine, c.border)
 
-	-- A note for the council, sent with every answer (Enter sends it again with the ones already given).
-	frame.note = UI.NewEditBox(frame, WIDTH - 2 * PAD, 28, L["Note for the council (optional). Press Enter to send it with your answers."], function(text)
-		local resent = ALC.Responses:SetNote(text)
-		feedback = nil
-		if resent > 0 then ALC:Print(L["Note sent with %d answer(s)."], resent) end
-		ResponseWindow:Refresh()
-	end)
-	frame.note:SetMaxLetters(ALC.Constants.MAX_NOTE_LENGTH)
-	frame.note:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", PAD, 52)
-	frame.note:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -PAD, 52)
-
 	frame.status = UI.NewText(frame, 12, c.muted)
 	frame.status:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", PAD, 14)
 	frame.status:SetPoint("RIGHT", frame, "RIGHT", -PAD, 0)
@@ -258,6 +263,8 @@ local function renderRow(row, index, item)
 		button:SetShown(not awarded and currentSet[i] ~= nil)
 		button:SetSelected(button.responseId ~= nil and button.responseId == mine)
 	end
+	row.note:SetShown(not awarded)
+	if not row.note:HasFocus() then row.note:SetText(ALC.Responses:GetNote(index)) end -- not while it is being written
 	row.result:SetShown(awarded)
 	if awarded then
 		row.result:SetText(string.format(L["Awarded to %s"], item.winner))
@@ -369,7 +376,6 @@ function ResponseWindow:Init()
 	register(self, "ALC_SESSION_ITEM_AWARDED", refresh)
 	register(self, "ALC_SESSION_STARTED", function(_, _, restored)
 		if not restored then ResponseWindow:Show() end
-		if frame then frame.note:SetText("") end -- a new session, a new note
 	end)
 	register(self, "ALC_SESSION_SNAPSHOT", function(_, p)
 		reopen(p.yourResponses ~= nil)

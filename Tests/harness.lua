@@ -13,7 +13,13 @@ local function newFrame(kind, parent)
 	local methods = {
 		SetScript = function(self, name, fn) self.scripts[name] = fn end,
 		GetScript = function(self, name) return self.scripts[name] end,
-		HookScript = function() end,
+		HookScript = function(self, name, fn)
+				local old = self.scripts[name]
+				self.scripts[name] = function(...)
+					if old then old(...) end
+					fn(...)
+				end
+			end,
 		Show = function(self) self.shown = true end,
 		Hide = function(self) self.shown = false end,
 		SetShown = function(self, shown) self.shown = shown and true or false end,
