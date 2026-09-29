@@ -65,5 +65,6 @@ end
 --------------------------------------------------------------------------------
 function ALC:OnInitialize()
 	self.Settings:Init()
+	self.Comm:Init()
 	self.Debug:Log("Core", "Arbiter Loot Council %s loaded (protocol v%d)", self.version, self.PROTOCOL_VERSION)
 end

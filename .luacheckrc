@@ -7,5 +7,6 @@ globals = { "ALC", "ALC_DB", "SLASH_ALC1", "SlashCmdList" }
 
 read_globals = {
 	"LibStub", "C_AddOns", "GetAddOnMetadata", "Ambiguate", "DEFAULT_CHAT_FRAME",
+	"GetTime", "IsInRaid", "IsInGroup", "GetNumGroupMembers", "UnitName", "C_Timer", "C_Item", "GetItemInfoInstant",
 	"date", "time", "format", "strlower", "strmatch", "tinsert", "tremove", "wipe",
 }

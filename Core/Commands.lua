@@ -65,12 +65,15 @@ Commands:Register("debug", function(arg)
 		ALC.Debug:Clear()
 		ALC:Print(L["Debug log cleared."])
 		return
+	elseif arg == "versions" then
+		ALC.Comm:RequestVersions()
+		return
 	else
-		ALC:Print(L["Usage: /alc debug [on|off|log|clear]"])
+		ALC:Print(L["Usage: /alc debug [on|off|log|clear|versions]"])
 		return
 	end
 	ALC:Print(settings:IsDebug() and L["Debug output on."] or L["Debug output off."])
-end, L["toggle debug output (on|off|log|clear)"])
+end, L["toggle debug output (on|off|log|clear|versions)"])
 
 Commands:Register("council", function(arg)
 	local settings = ALC.Settings

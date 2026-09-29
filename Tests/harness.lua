@@ -25,6 +25,13 @@ function H.setup()
 	UnitClass = function() return "Rogue", "ROGUE" end
 	UnitRace = function() return "Human", "Human" end
 	time, date = os.time, os.date
+	H.clock = 1000
+	GetTime = function() return H.clock end
+	C_Timer = { After = function(_, fn) fn() end }
+	H.inRaid, H.inGroup = false, false
+	IsInRaid = function() return H.inRaid end
+	IsInGroup = function() return H.inGroup or H.inRaid end
+	GetNumGroupMembers = function() return 1 end
 	securecallfunction = function(f, ...) return f(...) end
 	GetCurrentRegion =function() return 3 end
 	GetLocale =function() return "enUS" end
@@ -40,19 +47,40 @@ local function load(path)
 	return chunk("ArbiterLootCouncil", {})
 end
 
+-- AceComm needs the real chat system; replace it with a recorder.
+local function stubAceComm()
+	local lib = LibStub:NewLibrary("AceComm-3.0", 1)
+	H.sent = {}
+	function lib:Embed(target)
+		target.RegisterComm = function(_, prefix, method) H.registered = { prefix = prefix, method = method } end
+		target.SendCommMessage = function(_, prefix, text, dist, to, prio)
+			H.sent[#H.sent + 1] = { prefix = prefix, text = text, dist = dist, target = to, prio = prio }
+		end
+		return target
+	end
+end
+
 function H.loadAddon()
-	for _, f in ipairs({
+	local function loadAll(files) for _, f in ipairs(files) do load(f) end end
+	loadAll({
 		"Libs/LibStub/LibStub.lua",
 		"Libs/CallbackHandler-1.0/CallbackHandler-1.0.lua",
 		"Libs/AceAddon-3.0/AceAddon-3.0.lua",
 		"Libs/AceEvent-3.0/AceEvent-3.0.lua",
+		"Libs/AceSerializer-3.0/AceSerializer-3.0.lua",
 		"Libs/AceDB-3.0/AceDB-3.0.lua",
+	})
+	stubAceComm()
+	loadAll({
 		"Core/Core.lua",
 		"Core/Locale.lua",
 		"Core/Debug.lua",
 		"Core/Settings.lua",
+		"Core/Constants.lua",
+		"Comm/Protocol.lua",
+		"Comm/Comm.lua",
 		"Core/Commands.lua",
-	}) do load(f) end
+	})
 end
 
 function H.slash(input) SlashCmdList["ALC"](input) end

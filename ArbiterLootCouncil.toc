@@ -12,4 +12,7 @@ Core\Core.lua
 Core\Locale.lua
 Core\Debug.lua
 Core\Settings.lua
+Core\Constants.lua
+Comm\Protocol.lua
+Comm\Comm.lua
 Core\Commands.lua
