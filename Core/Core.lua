@@ -176,5 +176,7 @@ function ALC:OnInitialize()
 	self.ResponseWindow:Init()
 	self.CouncilWindow:Init()
 	self.AwardDialog:Init()
+	self.SettingsWindow:Init()
+	self.MinimapButton:Init()
 	self.Debug:Log("Core", "Arbiter Loot Council %s loaded (protocol v%d)", self.version, self.PROTOCOL_VERSION)
 end

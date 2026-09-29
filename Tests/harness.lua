@@ -48,6 +48,8 @@ local function newFrame(kind, parent)
 		end,
 		GetPoint = function(self) return "CENTER", nil, "CENTER", 0, 0 end,
 		IsMouseOver = function() return false end,
+		GetCenter = function(self) return self.centerX or 500, self.centerY or 300 end,
+		GetEffectiveScale = function() return 1 end,
 		CreateTexture = function(self) return newFrame("Texture", self) end,
 		CreateFontString = function(self) return newFrame("FontString", self) end,
 		SetMovable = function(self, v) self.movable = v end,
@@ -66,6 +68,12 @@ function H.setupFrames()
 	CreateFrame = function(kind, _, parent) return newFrame(kind, parent) end
 	UIParent = newFrame("Frame")
 	STANDARD_TEXT_FONT = "Fonts\\FRIZQT__.TTF"
+	-- The minimap: 140 px wide, centred at (500, 300), with the mouse where H.cursor says.
+	Minimap = newFrame("Frame")
+	Minimap:SetSize(140, 140)
+	H.cursor = { 500, 300 }
+	GetCursorPosition = function() return H.cursor[1], H.cursor[2] end
+	GetMinimapShape = nil
 	GameTooltip = newFrame("GameTooltip")
 	GameTooltip.SetHyperlink = function(self, link) self.hyperlink = link end
 end

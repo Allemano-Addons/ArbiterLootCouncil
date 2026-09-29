@@ -150,3 +150,78 @@ function UI.NewButton(parent, width, height, label, onClick)
 
 	return button
 end
+
+-- A checkbox with a label. `onToggle(checked)` runs when the player clicks it;
+-- `checkbox:SetChecked(bool)` only changes how it looks.
+function UI.NewCheckbox(parent, label, onToggle)
+	local box = CreateFrame("Button", nil, parent)
+	box:SetSize(320, 24)
+	box:RegisterForClicks("LeftButtonUp")
+
+	box.square = CreateFrame("Frame", nil, box)
+	box.square:SetSize(18, 18)
+	box.square:SetPoint("LEFT", box, "LEFT", 0, 0)
+	box.square.bg = box.square:CreateTexture(nil, "BACKGROUND")
+	box.square.bg:SetAllPoints()
+	UI.SetTextureColor(box.square.bg, UI.color.panel)
+	box.square.border = UI.AddBorder(box.square, UI.color.border)
+	box.mark = box.square:CreateTexture(nil, "ARTWORK")
+	box.mark:SetPoint("TOPLEFT", 4, -4)
+	box.mark:SetPoint("BOTTOMRIGHT", -4, 4)
+	UI.SetTextureColor(box.mark, UI.color.gold)
+	box.mark:Hide()
+
+	box.label = UI.NewText(box, 13, UI.color.text)
+	box.label:SetPoint("LEFT", box.square, "RIGHT", 10, 0)
+	box.label:SetText(label)
+
+	box.checked = false
+	box:SetScript("OnEnter", function(self) self.square.border:SetColor(UI.color.gold) end)
+	box:SetScript("OnLeave", function(self) self.square.border:SetColor(UI.color.border) end)
+	box:SetScript("OnClick", function(self)
+		local checked = not self.checked
+		self:SetChecked(checked)
+		if onToggle then onToggle(checked) end
+	end)
+
+	function box:SetChecked(checked)
+		self.checked = checked and true or false
+		self.mark:SetShown(self.checked)
+	end
+	function box:IsChecked() return self.checked end
+
+	return box
+end
+
+-- A one-line text field. `onEnter(text)` runs when the player presses Enter.
+function UI.NewEditBox(parent, width, height, placeholder, onEnter)
+	local edit = CreateFrame("EditBox", nil, parent)
+	edit:SetSize(width, height)
+	edit:SetFont(STANDARD_TEXT_FONT, 13, "")
+	edit:SetTextColor(unpackColor(UI.color.text))
+	edit:SetTextInsets(10, 10, 0, 0)
+	edit:SetAutoFocus(false)
+	edit:SetMaxLetters(48)
+
+	edit.bg = edit:CreateTexture(nil, "BACKGROUND")
+	edit.bg:SetAllPoints()
+	UI.SetTextureColor(edit.bg, UI.color.panel)
+	edit.border = UI.AddBorder(edit, UI.color.border)
+
+	edit.placeholder = UI.NewText(edit, 13, UI.color.muted)
+	edit.placeholder:SetPoint("LEFT", edit, "LEFT", 10, 0)
+	edit.placeholder:SetText(placeholder or "")
+
+	edit:SetScript("OnEditFocusGained", function(self) self.border:SetColor(UI.color.gold) end)
+	edit:SetScript("OnEditFocusLost", function(self) self.border:SetColor(UI.color.border) end)
+	edit:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+	edit:SetScript("OnTextChanged", function(self)
+		self.placeholder:SetShown((self:GetText() or "") == "")
+	end)
+	edit:SetScript("OnEnterPressed", function(self)
+		local text = self:GetText() or ""
+		self:ClearFocus()
+		if onEnter then onEnter(text) end
+	end)
+	return edit
+end

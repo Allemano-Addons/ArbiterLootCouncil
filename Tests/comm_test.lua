@@ -6,7 +6,7 @@ return function(check, H)
 
 	-- These tests isolate Comm: the real Council and Sessions are replaced by stand-ins
 	-- and the real Sessions stops listening. Run this file after the Sessions tests.
-	for _, module in ipairs({ ALC.Sessions, ALC.LootDetection, ALC.LootWindow, ALC.Responses, ALC.Candidates, ALC.ResponseWindow, ALC.Voting, ALC.CouncilWindow, ALC.Awards, ALC.AwardDialog }) do
+	for _, module in ipairs({ ALC.Sessions, ALC.LootDetection, ALC.LootWindow, ALC.Responses, ALC.Candidates, ALC.ResponseWindow, ALC.Voting, ALC.CouncilWindow, ALC.Awards, ALC.AwardDialog, ALC.SettingsWindow, ALC.MinimapButton }) do
 		ALC.Events.UnregisterAll(module)
 	end
 	local lmName, activeSid = "Ashvane", "sid1"

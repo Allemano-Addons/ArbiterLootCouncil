@@ -31,3 +31,6 @@ UI\LootWindow.lua
 UI\ResponseWindow.lua
 UI\CouncilWindow.lua
 UI\AwardDialog.lua
+UI\SettingsWindow.lua
+UI\Launcher.lua
+UI\MinimapButton.lua

@@ -19,6 +19,7 @@ local defaults = {
 		qualityThreshold = 4, -- epic
 		debug = false,
 		autoOpenLootWindow = true,
+		minimap = { angle = 215, hidden = false }, -- position (degrees around the minimap) of the button
 		windows = {},         -- window key -> { point, relPoint, x, y }
 	},
 	global = {
@@ -70,6 +71,25 @@ end
 -- The saved loot list. LootDetection owns its contents; Settings only hands it over.
 function Settings:GetLootStore()
 	return db.global.lootList
+end
+
+-- Minimap button ----------------------------------------------------------------
+function Settings:GetMinimapAngle()
+	return db.profile.minimap.angle
+end
+
+function Settings:SetMinimapAngle(angle)
+	if type(angle) ~= "number" then return end
+	db.profile.minimap.angle = angle % 360
+end
+
+function Settings:IsMinimapHidden()
+	return db.profile.minimap.hidden == true
+end
+
+function Settings:SetMinimapHidden(hidden)
+	db.profile.minimap.hidden = hidden and true or false
+	changed("minimapHidden")
 end
 
 -- The append-only log of every award, kept for the history views (v0.4). Only Awards writes.
@@ -148,11 +168,15 @@ local function properName(name)
 	return (string.gsub(name, "(%S)(%S*)", function(first, rest) return string.upper(first) .. strlower(rest) end))
 end
 
+-- Returns true, or false and why: "invalid", "duplicate" or "full". The loot master takes
+-- one place of its own in the session's council list, hence the limit.
 function Settings:AddCouncilMember(name)
 	name = ALC:NormalizeName(name)
-	if not name then return false end
+	-- The name travels in SESSION_START, where the protocol rejects control characters and `|`.
+	if not name or #name < 2 or #name > 48 or string.find(name, "[%c|]") then return false, "invalid" end
 	name = properName(name)
-	if findCouncil(name) then return false end
+	if findCouncil(name) then return false, "duplicate" end
+	if #db.profile.council >= ALC.Constants.MAX_COUNCIL - 1 then return false, "full" end
 	tinsert(db.profile.council, name)
 	changed("council")
 	return true
