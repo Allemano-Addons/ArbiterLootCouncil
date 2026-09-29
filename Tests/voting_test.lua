@@ -220,6 +220,109 @@ return function(check, H)
 	target.vote.scripts.OnClick(target.vote)
 	check("clicking Voted takes the vote back", Voting:GetMyVote() == nil and target.vote.label:GetText() == "Vote")
 
+	-- Sorting: by response (the default), by votes, by name.
+	local function order()
+		local names = {}
+		for _, entry in ipairs(Win:GetVisible()) do names[#names + 1] = entry.name end
+		return table.concat(names, ",")
+	end
+	check("the default order is by response", Win:GetSortMode() == "response" and order() == "Veyra Moo,Tester Moo,Jonatan Moo")
+	check("the sort button names the order", frame.sort.label:GetText() == "Sort: By response")
+	Voting:Cast("Jonatan Moo")
+	check("by response still puts BiS above a vote leader", order() == "Veyra Moo,Tester Moo,Jonatan Moo")
+	Win:SetSortMode("votes")
+	check("by votes, the player with most votes is on top", order() == "Jonatan Moo,Veyra Moo,Tester Moo")
+	check("the sort button follows", frame.sort.label:GetText() == "Sort: By votes")
+	check("rows follow the order", rows[1].candidate == "Jonatan Moo")
+	Win:SetSortMode("name")
+	check("by name", order() == "Jonatan Moo,Tester Moo,Veyra Moo")
+	Win:SetSortMode("nonsense")
+	check("an unknown order is ignored", Win:GetSortMode() == "name")
+	frame.sort.scripts.OnClick(frame.sort)
+	check("the button steps to the next order", Win:GetSortMode() == "response")
+	frame.sort.scripts.OnClick(frame.sort)
+	check("and on", Win:GetSortMode() == "votes")
+	check("the order is saved", ALC.Settings:GetWindowOption("council", "sort") == "votes")
+	ALC.Settings:GetDB().profile.windows.council.sort = "garbage"
+	check("a damaged saved order falls back to response", Win:GetSortMode() == "response")
+	Voting:Cast("Jonatan Moo")
+	check("the vote is taken back", Voting:GetMyVote() == nil)
+
+	-- The right-click menu: the loot master can vote, award, change the answer and remove.
+	local function labels(items)
+		local t = {}
+		for _, item in ipairs(items) do t[#t + 1] = item.label end
+		return table.concat(t, "|")
+	end
+	local menuItems = Win:GetRowMenu("Veyra Moo")
+	check("the loot master's menu", labels(menuItems) == "Vote|Award|Change response|BiS|Upgrade|Minor|Offspec|Pass|Remove from consideration")
+	local byLabel = {}
+	for _, item in ipairs(menuItems) do byLabel[item.label] = item end
+	check("the current answer cannot be picked again", byLabel["BiS"].enabled == false and byLabel["Upgrade"].enabled == true)
+	check("Change response is a caption", byLabel["Change response"].header == true)
+	check("no menu for a stranger", #Win:GetRowMenu("Nobody Moo") == 0)
+
+	local Menu = ALC.ContextMenu
+	local rowOfVeyra
+	for _, row in ipairs(rows) do if row:IsShown() and row.candidate == "Veyra Moo" then rowOfVeyra = row end end
+	rowOfVeyra.scripts.OnClick(rowOfVeyra, "LeftButton")
+	check("a left click on a row opens no menu", not Menu:IsShown())
+	rowOfVeyra.scripts.OnClick(rowOfVeyra, "RightButton")
+	check("a right click on a row opens the menu", Menu:IsShown())
+	check("with the player's name as caption and one line per entry", Menu.rows[1].label:GetText() == "VEYRA MOO"
+		and Menu.rows[2].label:GetText() == "Vote" and Menu.rows[10].label:GetText() == "Remove from consideration"
+		and (Menu.rows[11] == nil or not Menu.rows[11]:IsShown()))
+	H.sent = {}
+	Menu.rows[6].scripts.OnClick(Menu.rows[6]) -- caption, Vote, Award, caption, BiS, Upgrade
+	check("choosing an answer closes the menu", not Menu:IsShown())
+	check("the answer was changed", Candidates:Get("Veyra Moo").response == "UPGRADE")
+	local changedUpdates = {}
+	for _, sent in ipairs(H.sent) do
+		local _, e = AceSerializer:Deserialize(sent.text)
+		if e and e.t == "CANDIDATE_UPDATE" then changedUpdates[#changedUpdates + 1] = { target = sent.target, p = e.p } end
+	end
+	check("only the council heard of it", #changedUpdates == 2 and changedUpdates[1].p.name == "Veyra Moo" and changedUpdates[1].p.response == "UPGRADE")
+	Win:OpenRowMenu("Veyra Moo")
+	Menu.rows[6].scripts.OnClick(Menu.rows[6]) -- Upgrade is the current answer now: disabled
+	check("a disabled entry does nothing", Menu:IsShown() and Candidates:Get("Veyra Moo").response == "UPGRADE")
+	Menu:Hide()
+	check("the loot master can change it back", Candidates:SetResponse("Veyra Moo", "BIS") == true and Candidates:Get("Veyra Moo").response == "BIS")
+	local okBad, msgBad = Candidates:SetResponse("Veyra Moo", "MAYBE")
+	check("an unknown answer is refused", okBad == false and msgBad ~= nil and Candidates:Get("Veyra Moo").response == "BIS")
+	local okNone, msgNone = Candidates:SetResponse("Nobody Moo", "BIS")
+	check("a stranger cannot be given an answer", okNone == false and msgNone ~= nil)
+	H.sent = {}
+	check("same answer again changes nothing and tells nobody", Candidates:SetResponse("Veyra Moo", "BIS") == true and #H.sent == 0)
+
+	-- Removing a player from the running: they no longer show, and can be put back.
+	Win:OpenRowMenu("Jonatan Moo")
+	check("Remove from consideration is the last entry", Menu.rows[10].label:GetText() == "Remove from consideration")
+	Menu.rows[10].scripts.OnClick(Menu.rows[10])
+	check("the removed player is gone from the table", order() == "Veyra Moo,Tester Moo")
+	Candidates:SetResponse("Jonatan Moo", "MINOR")
+	check("and can be put back", order() == "Veyra Moo,Tester Moo,Jonatan Moo")
+
+	-- Stopping the session: the loot master asks twice.
+	check("the loot master sees Stop session", frame.stop:IsShown() and frame.stop.label:GetText() == "Stop session")
+	H.deferTimers = true
+	frame.stop.scripts.OnClick(frame.stop)
+	check("the first click asks and stops nothing", Sessions:IsActive() and frame.stop.label:GetText() == "Sure?")
+	H.runTimers()
+	H.deferTimers = false
+	check("it goes back after a while", Sessions:IsActive() and frame.stop.label:GetText() == "Stop session")
+	H.deferTimers = true
+	frame.stop.scripts.OnClick(frame.stop)
+	frame.stop.scripts.OnClick(frame.stop)
+	H.deferTimers = false
+	H.runTimers()
+	check("the second click stops the session", not Sessions:IsActive())
+	check("and the window closes", not Win:IsShown())
+	check("the button is reset for the next session", frame.stop.label:GetText() == "Stop session")
+	check("start a new session for the rest", Sessions:Start(200) == true)
+	sid = Sessions:GetActiveSid()
+	ALC.Responses:Send("UPGRADE")
+	Win:Show()
+
 	-- Closing and the end of the session.
 	frame.header.scripts.OnDragStop(frame.header)
 	check("the position is saved", ALC.Settings:GetWindowPosition("council") ~= nil)
@@ -270,6 +373,12 @@ return function(check, H)
 
 	-- The window sorts by votes within an answer.
 	check("more votes come first", Win:GetVisible()[1].name == "Veyra Moo")
+
+	-- A council member who is not the loot master can only vote from the menu, and cannot stop.
+	check("a council member's menu has only Vote", labels(Win:GetRowMenu("Veyra Moo")) == "Vote")
+	check("and no Stop session button", not frame.stop:IsShown())
+	local okSet, msgSet = Candidates:SetResponse("Veyra Moo", "BIS")
+	check("only the loot master changes an answer", okSet == false and msgSet ~= nil and Candidates:Get("Veyra Moo").response == "UPGRADE")
 
 	Comm:Process(env("SESSION_CANCEL", "sidV", 20, { reason = "done" }), "PARTY", "Ashvane Moo")
 

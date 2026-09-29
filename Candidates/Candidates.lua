@@ -131,6 +131,22 @@ local function onResponse(_, sender, _, p)
 	ALC.Comm:SendCouncil(ALC.Council:GetReachableCouncil(), "CANDIDATE_UPDATE", session.sid, copyEntry(entry))
 end
 
+-- Loot master: changes a candidate's answer (right-click menu). The council gets the same
+-- CANDIDATE_UPDATE as for an answer from the player. Returns true, or false and a message.
+function Candidates:SetResponse(name, response)
+	local session = ALC.Sessions:GetSession()
+	if not session or not session.isLM then return false, L["Only the loot master can do that."] end
+	local index = findIndex(name)
+	if not index then return false, L["That player is not a candidate."] end
+	if not ALC.Responses:Get(response) then return false, L["That is not a valid answer."] end
+	local entry = copyEntry(list[index])
+	entry.response = response
+	if not upsert(entry) then return true end
+	Debug:Log("Candidates", "%s: %s (set by the loot master)", entry.name, response)
+	ALC.Comm:SendCouncil(ALC.Council:GetReachableCouncil(), "CANDIDATE_UPDATE", session.sid, copyEntry(entry))
+	return true
+end
+
 --------------------------------------------------------------------------------
 -- Council: CANDIDATE_UPDATE in
 --------------------------------------------------------------------------------

@@ -48,6 +48,8 @@ local frame
 local offset, historyOffset, tradeOffset = 0, 0, 0
 local activeTab = "council"     -- "council", "history" or "trades"
 local layoutCompact             -- how the candidate rows are laid out now
+local stopArmed = false         -- "Stop session" was clicked once and waits for a second click
+local disarmStop                -- resets the Stop session button (defined below)
 local councilStatic, historyStatic, tradeStatic, queueStatic = {}, {}, {}, {} -- widgets of one tab only
 local c = UI.color
 
@@ -193,6 +195,10 @@ local function newRow(index)
 	row.award.label:SetTextColor(c.gold[1], c.gold[2], c.gold[3], 1)
 	row.award:Hide()
 
+	row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+	row:SetScript("OnClick", function(self, button)
+		if button == "RightButton" and self.candidate then CouncilWindow:OpenRowMenu(self.candidate) end
+	end)
 	row:SetScript("OnEnter", function(self) UI.SetTextureColor(self.bg, c.panelHover, 0.5) end)
 	row:SetScript("OnLeave", function(self) UI.SetTextureColor(self.bg, c.bg, 0) end)
 	layoutRow(row, index, false)
@@ -541,10 +547,10 @@ local function build()
 
 	frame.name = UI.NewText(frame, 20, c.text)
 	frame.name:SetPoint("TOPLEFT", itemBox, "TOPRIGHT", 16, -2)
-	frame.name:SetWidth(430)
+	frame.name:SetWidth(340)
 	frame.sub = UI.NewText(frame, 12, c.muted)
 	frame.sub:SetPoint("BOTTOMLEFT", itemBox, "BOTTOMRIGHT", 16, 2)
-	frame.sub:SetWidth(430)
+	frame.sub:SetWidth(340)
 
 	frame.progress = UI.NewText(frame, 13, c.muted, "RIGHT")
 	frame.progress:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PAD, -(HEADER_H + 24))
@@ -580,9 +586,17 @@ local function build()
 	frame.compact:SetSize(150, 24)
 	frame.compact:SetPoint("BOTTOM", frame, "BOTTOM", 0, 16)
 
+	-- Sorting: one button that steps through the orders.
+	frame.sort = UI.NewButton(frame, 150, 24, "", function() CouncilWindow:CycleSortMode() end)
+	frame.sort:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -(PAD + 12), -(HEADER_H + ITEM_H + 5))
+
+	-- Stopping the session (loot master). The first click asks, the second stops.
+	frame.stop = UI.NewButton(frame, 120, 28, L["Stop session"], function() CouncilWindow:StopSession() end)
+	frame.stop:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -(PAD + 240), -(HEADER_H + 22))
+
 	councilStatic = { itemBox, frame.name, frame.sub, frame.progress, frame.barBg, frame.barFill, itemDivider, tableDivider,
 		headings[1], headings[2], headings[3], headings[4], frame.empty, frame.footerLine, frame.lootMaster,
-		frame.tally, frame.compact }
+		frame.tally, frame.compact, frame.sort, frame.stop }
 
 	-- Shown instead of the Council tab while no session runs.
 	frame.idle = centred(HEADER_H + 46, L["No running session. Start one from the loot window."])
@@ -683,8 +697,51 @@ end
 local ORDER = {}
 for i, response in ipairs(ALC.Responses.LIST) do ORDER[response.id] = i end
 
--- The candidates the table lists (not the ones who passed): answer first, then votes,
--- then name.
+-- How the table is sorted. Every mode ends in the name, so the order is always the same.
+CouncilWindow.SORT_MODES = {
+	{ key = "response", label = L["By response"] },
+	{ key = "votes", label = L["By votes"] },
+	{ key = "name", label = L["By name"] },
+}
+
+local COMPARE = {
+	response = function(a, b)
+		if ORDER[a.response] ~= ORDER[b.response] then return ORDER[a.response] < ORDER[b.response] end
+		if a.votes ~= b.votes then return a.votes > b.votes end
+		return a.name < b.name
+	end,
+	votes = function(a, b)
+		if a.votes ~= b.votes then return a.votes > b.votes end
+		if ORDER[a.response] ~= ORDER[b.response] then return ORDER[a.response] < ORDER[b.response] end
+		return a.name < b.name
+	end,
+	name = function(a, b) return a.name < b.name end,
+}
+
+function CouncilWindow:GetSortMode()
+	local mode = ALC.Settings:GetWindowOption("council", "sort", "response")
+	return COMPARE[mode] and mode or "response"
+end
+
+function CouncilWindow:SetSortMode(mode)
+	if not COMPARE[mode] then return end
+	ALC.Settings:SetWindowOption("council", "sort", mode)
+	offset = 0
+	self:Refresh()
+end
+
+-- The next mode in the list, for the button that steps through them.
+function CouncilWindow:CycleSortMode()
+	local current = self:GetSortMode()
+	for i, mode in ipairs(self.SORT_MODES) do
+		if mode.key == current then
+			self:SetSortMode(self.SORT_MODES[i % #self.SORT_MODES + 1].key)
+			return
+		end
+	end
+end
+
+-- The candidates the table lists (not the ones who passed), in the chosen order.
 function CouncilWindow:GetVisible()
 	local list = {}
 	for _, entry in ipairs(ALC.Candidates:GetList()) do
@@ -693,11 +750,7 @@ function CouncilWindow:GetVisible()
 			list[#list + 1] = entry
 		end
 	end
-	table.sort(list, function(a, b)
-		if ORDER[a.response] ~= ORDER[b.response] then return ORDER[a.response] < ORDER[b.response] end
-		if a.votes ~= b.votes then return a.votes > b.votes end
-		return a.name < b.name
-	end)
+	table.sort(list, COMPARE[self:GetSortMode()])
 	return list
 end
 
@@ -827,6 +880,11 @@ local function renderCouncil(self, session)
 	frame.progress:SetText(string.format("%d/%d %s", counts.responded, total, L["responded"]))
 	frame.barFill:SetWidth(max(1, 220 * (total > 0 and counts.responded / total or 0)))
 	frame.compact:SetChecked(compact)
+	for _, mode in ipairs(self.SORT_MODES) do
+		if mode.key == self:GetSortMode() then frame.sort:SetLabel(L["Sort"] .. ": " .. mode.label) end
+	end
+	frame.stop:SetShown(session.isLM == true)
+	if not session.isLM then disarmStop() end
 
 	local list = self:GetVisible()
 	local count = #list
@@ -1090,6 +1148,80 @@ function CouncilWindow:StopResize()
 end
 
 --------------------------------------------------------------------------------
+-- Stop session and the right-click menu
+--------------------------------------------------------------------------------
+function disarmStop()
+	stopArmed = false
+	if frame and frame.stop then frame.stop:SetLabel(L["Stop session"]) end
+end
+
+-- The first click asks "Sure?", the second stops the session; after 4 s it goes back.
+function CouncilWindow:StopSession()
+	local session = ALC.Sessions:GetSession()
+	if not session or not session.isLM then return end
+	if not stopArmed then
+		stopArmed = true
+		frame.stop:SetLabel(L["Sure?"])
+		C_Timer.After(4, function()
+			if stopArmed then disarmStop() end
+		end)
+		return
+	end
+	disarmStop()
+	local ok, message = ALC.Sessions:Cancel()
+	if not ok and message then ALC:Print(message) end
+end
+
+-- What the right-click menu of a candidate offers. The council can vote; the loot master
+-- can also award, change the answer and take the player out of the running.
+function CouncilWindow:GetRowMenu(name)
+	local session = ALC.Sessions:GetSession()
+	local candidate = ALC.Candidates:Get(name)
+	if not session or not session.isCouncil or not candidate then return {} end
+
+	local items = {}
+	local myVote = ALC.Voting:GetMyVote()
+	local mine = myVote ~= nil and ALC:SameName(myVote, candidate.name)
+	items[#items + 1] = {
+		label = mine and L["Voted"] or L["Vote"],
+		onClick = function()
+			local ok, message = ALC.Voting:Cast(candidate.name)
+			if not ok and message then ALC:Print(message) end
+		end,
+	}
+	if not session.isLM then return items end
+
+	items[#items + 1] = {
+		label = L["Award"], color = c.gold,
+		onClick = function() ALC.AwardDialog:Ask(candidate.name) end,
+	}
+	items[#items + 1] = { label = L["Change response"], header = true }
+	for _, response in ipairs(ALC.Responses.LIST) do
+		items[#items + 1] = {
+			label = response.label, color = response.color,
+			enabled = response.id ~= candidate.response,
+			onClick = function()
+				local ok, message = ALC.Candidates:SetResponse(candidate.name, response.id)
+				if not ok and message then ALC:Print(message) end
+			end,
+		}
+	end
+	items[#items + 1] = {
+		label = L["Remove from consideration"],
+		onClick = function()
+			local ok, message = ALC.Candidates:SetResponse(candidate.name, "PASS")
+			if not ok and message then ALC:Print(message) end
+		end,
+	}
+	return items
+end
+
+function CouncilWindow:OpenRowMenu(name)
+	local items = self:GetRowMenu(name)
+	if #items > 0 then ALC.ContextMenu:Open(items, name) end
+end
+
+--------------------------------------------------------------------------------
 -- Public
 --------------------------------------------------------------------------------
 local function ensureBuilt()
@@ -1191,6 +1323,7 @@ function CouncilWindow:Init()
 	-- the tab it was on: between sessions the Council tab offers the next item of the loot
 	-- list, so awarding many items in a row never leaves the window.
 	register(self, "ALC_SESSION_ENDED", function()
+		disarmStop()
 		if ALC.Settings:GetKeepCouncilOpen() and CouncilWindow:IsShown() then
 			CouncilWindow:Refresh()
 		else

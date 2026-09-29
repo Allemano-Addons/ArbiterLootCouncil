@@ -49,6 +49,10 @@ return function(check, H)
 	----------------------------------------------------------------------------
 	-- The settings window
 	----------------------------------------------------------------------------
+	-- The first opening picks the tab by role: here, a plain raider.
+	local realAmLootMaster, realAmCouncil = ALC.Council.AmLootMaster, ALC.Council.AmCouncil
+	ALC.Council.AmLootMaster = function() return false end
+	ALC.Council.AmCouncil = function() return false end
 	Win:Show()
 	frame = Win.rows[1].parent.parent
 	check("the window opens", Win:IsShown() and #Win.rows == 6 and #Win.qualityButtons == 6)
@@ -56,6 +60,35 @@ return function(check, H)
 	check("the count is shown", frame.count:GetText() == "1/39")
 	check("the empty hint is hidden", frame.empty:IsShown() == false)
 	check("the mark is in the header", frame.logo.texture == ALC.UI.LOGO)
+
+	-- Settings are grouped by who they matter for: everyone, the council, the loot master.
+	local function shown(widget) return widget:IsShown() end
+	check("a plain raider starts on the Everyone tab", Win:GetTab() == "everyone" and frame.role:GetText() == "You are a raider")
+	check("Everyone has the look and debug settings", shown(frame.minimap) and shown(frame.fontButton) and shown(frame.debug))
+	check("and none of the council's or the loot master's", not shown(frame.keepOpen) and not shown(frame.input) and not shown(frame.autoOpen)
+		and not shown(frame.listBox) and not shown(Win.qualityButtons[1]))
+	check("the tab says who it is for", frame.tabNote:GetText():find("Nobody else is affected", 1, true) ~= nil)
+	local tabButtons = Win.tabButtons
+	check("three tabs, the current one selected", #tabButtons == 3 and tabButtons[1].selected == true and tabButtons[2].selected == false)
+	tabButtons[2].scripts.OnClick(tabButtons[2])
+	check("the Council tab has the voting window setting", Win:GetTab() == "council" and shown(frame.keepOpen) and not shown(frame.minimap) and not shown(frame.input))
+	tabButtons[3].scripts.OnClick(tabButtons[3])
+	check("the Loot master tab has the council list and the loot settings", Win:GetTab() == "lm" and shown(frame.input) and shown(frame.listBox)
+		and shown(frame.autoOpen) and shown(Win.qualityButtons[1]) and not shown(frame.keepOpen) and not shown(frame.minimap))
+	check("each tab is its own height", Win.heights.lm ~= Win.heights.council and frame:GetHeight() == Win.heights.lm)
+	Win:SetTab("nonsense")
+	check("an unknown tab is ignored", Win:GetTab() == "lm")
+	ALC.Council.AmCouncil = function() return true end
+	Win:Refresh()
+	check("a council member is told so", frame.role:GetText() == "You are on the council" and Win:GetTab() == "lm")
+	ALC.Council.AmLootMaster = function() return true end
+	Win:Refresh()
+	check("the loot master is told so", frame.role:GetText() == "You are the loot master")
+	ALC.Council.AmLootMaster, ALC.Council.AmCouncil = realAmLootMaster, realAmCouncil
+	Win:Refresh()
+	tabButtons[1].scripts.OnClick(tabButtons[1])
+	check("back on the Everyone tab", Win:GetTab() == "everyone" and shown(frame.minimap) and not shown(frame.input))
+	tabButtons[3].scripts.OnClick(tabButtons[3]) -- the tests below work on the council list
 
 	-- Adding.
 	frame.input:SetText("kaelis moo")
