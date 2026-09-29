@@ -5,9 +5,11 @@
 -- sends the new count of every affected candidate to the council as VOTE_UPDATE.
 -- Council members show what the loot master last told them; they never count
 -- other people's votes themselves. Votes go only to the council.
+-- Items are numbered as in the session (1 = the first); functions take the item number
+-- as their last argument and mean item 1 when it is left out.
 --
 -- Events:
---   ALC_VOTING_CHANGED ()   the counts or our own vote changed, or were cleared
+--   ALC_VOTING_CHANGED ()   the counts or our own votes changed, or were cleared
 
 local ALC = ALC
 local L = ALC.L
@@ -19,11 +21,11 @@ local strlower = string.lower
 local Voting = {}
 ALC.Voting = Voting
 
--- What everybody on the council sees: lowercase candidate -> { name, voters = { ... } }.
+-- What everybody on the council sees: item -> lowercase candidate -> { name, voters = { ... } }.
 local tally = {}
-local myVote -- the candidate we voted for, nil if none
+local myVotes = {} -- item -> the candidate we voted for
 
--- Loot master only: lowercase voter -> { voter, candidate }.
+-- Loot master only: item -> lowercase voter -> { voter, candidate }.
 local voterOf = {}
 
 local function copyList(list)
@@ -40,21 +42,41 @@ local function changed()
 	ALC.Events:Fire("ALC_VOTING_CHANGED")
 end
 
+local function tallyOf(item)
+	local t = tally[item]
+	if not t then
+		t = {}
+		tally[item] = t
+	end
+	return t
+end
+
+local function votersOfItem(item)
+	local v = voterOf[item]
+	if not v then
+		v = {}
+		voterOf[item] = v
+	end
+	return v
+end
+
 local function recomputeMine()
-	myVote = nil
-	for _, entry in pairs(tally) do
-		for _, voter in ipairs(entry.voters) do
-			if isMe(voter) then myVote = entry.name end
+	myVotes = {}
+	for item, byCandidate in pairs(tally) do
+		for _, entry in pairs(byCandidate) do
+			for _, voter in ipairs(entry.voters) do
+				if isMe(voter) then myVotes[item] = entry.name end
+			end
 		end
 	end
 end
 
-local function setTally(candidate, voters)
+local function setTally(item, candidate, voters)
 	local key = strlower(candidate)
 	if #voters == 0 then
-		tally[key] = nil
+		if tally[item] then tally[item][key] = nil end
 	else
-		tally[key] = { name = candidate, voters = copyList(voters) }
+		tallyOf(item)[key] = { name = candidate, voters = copyList(voters) }
 	end
 end
 
@@ -62,31 +84,36 @@ end
 -- Getters
 --------------------------------------------------------------------------------
 
--- How many council members voted for a candidate, and who (a copy).
-function Voting:GetVotes(candidate)
-	local entry = candidate and tally[strlower(candidate)]
+-- How many council members voted for a candidate of an item, and who (a copy).
+function Voting:GetVotes(candidate, item)
+	local byCandidate = tally[item or 1]
+	local entry = candidate and byCandidate and byCandidate[strlower(candidate)]
 	if not entry then return 0, {} end
 	return #entry.voters, copyList(entry.voters)
 end
 
-function Voting:GetMyVote()
-	return myVote
+function Voting:GetMyVote(item)
+	return myVotes[item or 1]
 end
 
 --------------------------------------------------------------------------------
 -- Council: cast a vote
 --------------------------------------------------------------------------------
 
--- Votes for a candidate; voting for the one you already chose takes the vote back.
--- Returns true, or false and a message.
-function Voting:Cast(candidate)
+-- Votes for a candidate of an item; voting for the one you already chose takes the vote
+-- back. Returns true, or false and a message.
+function Voting:Cast(candidate, item)
+	item = item or 1
 	local session = ALC.Sessions:GetSession()
 	if not session then return false, L["There is no active session."] end
 	if not session.isCouncil then return false, L["Only the council can vote."] end
+	if not ALC.Sessions:GetItem(item) then return false, L["That item is not in the session."] end
+	if not ALC.Sessions:IsItemOpen(item) then return false, L["That item has already been awarded."] end
 
-	local payload = {}
-	if candidate and not (myVote and ALC:SameName(myVote, candidate)) then
-		local entry = ALC.Candidates:Get(candidate)
+	local payload = { item = item }
+	local mine = myVotes[item]
+	if candidate and not (mine and ALC:SameName(mine, candidate)) then
+		local entry = ALC.Candidates:Get(candidate, item)
 		if not entry then return false, L["That player has not answered."] end
 		if entry.response == "PASS" then return false, L["That player passed."] end
 		payload.candidate = entry.name
@@ -100,9 +127,9 @@ end
 --------------------------------------------------------------------------------
 -- Loot master: VOTE in, VOTE_UPDATE out
 --------------------------------------------------------------------------------
-local function votersFor(candidate)
+local function votersFor(item, candidate)
 	local voters = {}
-	for _, vote in pairs(voterOf) do
+	for _, vote in pairs(votersOfItem(item)) do
 		if ALC:SameName(vote.candidate, candidate) then voters[#voters + 1] = vote.voter end
 	end
 	table.sort(voters)
@@ -111,37 +138,51 @@ end
 
 local function persist()
 	local saved = {}
-	for _, vote in pairs(voterOf) do saved[#saved + 1] = { voter = vote.voter, candidate = vote.candidate } end
+	for item, byVoter in pairs(voterOf) do
+		for _, vote in pairs(byVoter) do
+			saved[#saved + 1] = { item = item, voter = vote.voter, candidate = vote.candidate }
+		end
+	end
+	table.sort(saved, function(a, b)
+		if a.item ~= b.item then return a.item < b.item end
+		return a.voter < b.voter
+	end)
 	ALC.Settings:GetSessionStore().votes = saved
 end
 
-local function broadcast(session, candidate)
-	local voters = votersFor(candidate)
+local function broadcast(session, item, candidate)
+	local voters = votersFor(item, candidate)
 	ALC.Comm:SendCouncil(ALC.Council:GetReachableCouncil(), "VOTE_UPDATE", session.sid,
-		{ candidate = candidate, votes = #voters, voters = voters })
+		{ item = item, candidate = candidate, votes = #voters, voters = voters })
 end
 
 local function onVote(_, sender, _, p)
 	local session = ALC.Sessions:GetSession()
 	if not session or not session.isLM then return end
+	local item = p.item
+	if not ALC.Sessions:IsItemOpen(item) then
+		Debug:Warn("Voting", "%s voted on item %d, which is not open", sender, item)
+		return
+	end
 
-	local entry = p.candidate and ALC.Candidates:Get(p.candidate)
+	local entry = p.candidate and ALC.Candidates:Get(p.candidate, item)
 	if p.candidate and (not entry or entry.response == "PASS") then
-		Debug:Warn("Voting", "%s voted for %s, who is not a candidate", sender, tostring(p.candidate))
+		Debug:Warn("Voting", "%s voted for %s, who is not a candidate for item %d", sender, tostring(p.candidate), item)
 		return
 	end
 	local newCandidate = entry and entry.name or nil
 	local key = strlower(sender)
-	local old = voterOf[key] and voterOf[key].candidate or nil
+	local byVoter = votersOfItem(item)
+	local old = byVoter[key] and byVoter[key].candidate or nil
 
 	local same = (old == nil and newCandidate == nil) or (old ~= nil and newCandidate ~= nil and ALC:SameName(old, newCandidate))
 	if same then return end
 
-	voterOf[key] = newCandidate and { voter = sender, candidate = newCandidate } or nil
+	byVoter[key] = newCandidate and { voter = sender, candidate = newCandidate } or nil
 	persist()
-	Debug:Log("Voting", "%s: %s -> %s", sender, tostring(old), tostring(newCandidate))
-	if old then broadcast(session, old) end
-	if newCandidate then broadcast(session, newCandidate) end
+	Debug:Log("Voting", "item %d, %s: %s -> %s", item, sender, tostring(old), tostring(newCandidate))
+	if old then broadcast(session, item, old) end
+	if newCandidate then broadcast(session, item, newCandidate) end
 end
 
 --------------------------------------------------------------------------------
@@ -150,7 +191,7 @@ end
 local function onUpdate(_, _, _, p)
 	local session = ALC.Sessions:GetSession()
 	if not session or not session.isCouncil then return end
-	setTally(p.candidate, p.voters)
+	setTally(p.item, p.candidate, p.voters)
 	recomputeMine()
 	changed()
 end
@@ -160,30 +201,38 @@ end
 --------------------------------------------------------------------------------
 local function clear()
 	ALC.Settings:GetSessionStore().votes = nil
-	if next(tally) == nil and next(voterOf) == nil and myVote == nil then return end
-	tally, voterOf, myVote = {}, {}, nil
+	if next(tally) == nil and next(voterOf) == nil and next(myVotes) == nil then return end
+	tally, voterOf, myVotes = {}, {}, {}
 	changed()
 end
 
--- A snapshot for a council member: the votes as they stand, and their own vote.
+-- A snapshot for a council member: the votes as they stand, and their own votes.
 local function onSnapshotBuild(_, payload, requester, isCouncil)
 	if not isCouncil then return end
 	-- From the loot master's own records, not from what it displays.
-	local names, votes = {}, {}
-	for _, vote in pairs(voterOf) do names[strlower(vote.candidate)] = vote.candidate end
-	for _, candidate in pairs(names) do
-		votes[#votes + 1] = { candidate = candidate, voters = votersFor(candidate) }
+	local votes, mine = {}, {}
+	local key = strlower(requester)
+	for item, byVoter in pairs(voterOf) do
+		local names = {}
+		for _, vote in pairs(byVoter) do names[strlower(vote.candidate)] = vote.candidate end
+		for _, candidate in pairs(names) do
+			votes[#votes + 1] = { item = item, candidate = candidate, voters = votersFor(item, candidate) }
+		end
+		if byVoter[key] then mine[#mine + 1] = { item = item, candidate = byVoter[key].candidate } end
 	end
-	table.sort(votes, function(a, b) return a.candidate < b.candidate end)
+	table.sort(votes, function(a, b)
+		if a.item ~= b.item then return a.item < b.item end
+		return a.candidate < b.candidate
+	end)
+	table.sort(mine, function(a, b) return a.item < b.item end)
 	payload.votes = votes
-	local mine = voterOf[strlower(requester)]
-	if mine then payload.yourVote = mine.candidate end
+	if #mine > 0 then payload.yourVotes = mine end
 end
 
 local function onSnapshot(_, p, session)
-	tally, myVote = {}, nil
+	tally, myVotes = {}, {}
 	if session.isCouncil then
-		for _, vote in ipairs(p.votes or {}) do setTally(vote.candidate, vote.voters) end
+		for _, vote in ipairs(p.votes or {}) do setTally(vote.item, vote.candidate, vote.voters) end
 		recomputeMine()
 	end
 	changed()
@@ -196,13 +245,16 @@ local function onSessionStarted(_, session, restored)
 		return
 	end
 	if not session.isLM then return end
-	tally, voterOf, myVote = {}, {}, nil
+	tally, voterOf, myVotes = {}, {}, {}
 	for _, vote in ipairs(ALC.Settings:GetSessionStore().votes or {}) do
-		voterOf[strlower(vote.voter)] = { voter = vote.voter, candidate = vote.candidate }
+		local item = vote.item or 1 -- votes saved by version 0.1 have no item
+		votersOfItem(item)[strlower(vote.voter)] = { voter = vote.voter, candidate = vote.candidate }
 	end
-	local candidates = {}
-	for _, vote in pairs(voterOf) do candidates[strlower(vote.candidate)] = vote.candidate end
-	for _, candidate in pairs(candidates) do setTally(candidate, votersFor(candidate)) end
+	for item, byVoter in pairs(voterOf) do
+		local candidates = {}
+		for _, vote in pairs(byVoter) do candidates[strlower(vote.candidate)] = vote.candidate end
+		for _, candidate in pairs(candidates) do setTally(item, candidate, votersFor(item, candidate)) end
+	end
 	recomputeMine()
 	changed()
 end
@@ -217,12 +269,13 @@ function Voting:Init()
 	register(self, "ALC_SESSION_ENDED", clear)
 end
 
--- /alc vote opens the voting window; /alc vote <name> votes from the chat.
+-- /alc vote opens the voting window; /alc vote <name> votes from the chat, on the item the window shows.
 ALC.Commands:Register("vote", function(arg)
 	if arg == "" then
 		if ALC.CouncilWindow then ALC.CouncilWindow:Toggle() end
 		return
 	end
-	local ok, message = Voting:Cast(arg)
+	local item = ALC.CouncilWindow and ALC.CouncilWindow:GetFocus() or 1
+	local ok, message = Voting:Cast(arg, item)
 	if not ok then ALC:Print(message) end
-end, L["open the voting window, or vote for a player: /alc vote <name>"])
+end, L["open the voting window, or vote for a player on the item shown: /alc vote <name>"])

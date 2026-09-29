@@ -36,18 +36,37 @@ function TestMode:PickItem()
 	return best
 end
 
-function TestMode:Start()
+-- The best `count` items in the bags, best first (a stack of the same item counts once).
+function TestMode:PickItems(count)
+	local picked, seen = {}, {}
+	for _, link in ipairs(self.GetBagItemLinks()) do
+		local itemString = ALC:ParseItem(link)
+		if itemString and not seen[itemString] then
+			seen[itemString] = true
+			picked[#picked + 1] = { link = link, quality = select(3, ALC:GetItemInfo(link)) or -1, order = #picked }
+		end
+	end
+	table.sort(picked, function(a, b)
+		if a.quality ~= b.quality then return a.quality > b.quality end
+		return a.order < b.order
+	end)
+	local links = {}
+	for i = 1, math.min(count, #picked) do links[i] = picked[i].link end
+	return links
+end
+
+function TestMode:Start(count)
 	if IsInGroup() then
 		return false, L["Test mode only runs outside a group."]
 	end
-	local link = self:PickItem()
-	if not link then
+	local links = self:PickItems(math.max(1, count or 1))
+	if #links == 0 then
 		return false, L["You have no items in your bags to test with."]
 	end
-	return ALC.Sessions:Start(link)
+	return ALC.Sessions:StartItems(links)
 end
 
-ALC.Commands:Register("test", function()
-	local ok, message = TestMode:Start()
+ALC.Commands:Register("test", function(arg)
+	local ok, message = TestMode:Start(tonumber(arg))
 	if not ok then ALC:Print(message) end
-end, L["start a solo test session with an item from your bags"])
+end, L["start a solo test session with items from your bags: /alc test [number of items]"])

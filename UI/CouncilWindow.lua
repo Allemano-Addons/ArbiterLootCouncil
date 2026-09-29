@@ -48,6 +48,7 @@ local frame
 local offset, historyOffset, tradeOffset = 0, 0, 0
 local activeTab = "council"     -- "council", "history" or "trades"
 local layoutCompact             -- how the candidate rows are laid out now
+local focus = 1                -- the item of the session the Council tab shows
 local stopArmed = false         -- "Stop session" was clicked once and waits for a second click
 local disarmStop                -- resets the Stop session button (defined below)
 local councilStatic, historyStatic, tradeStatic, queueStatic = {}, {}, {}, {} -- widgets of one tab only
@@ -181,14 +182,14 @@ local function newRow(index)
 	row.votes:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
 	row.vote = UI.NewButton(row, BUTTON_W, 34, L["Vote"], function()
-		local ok, message = ALC.Voting:Cast(row.candidate)
+		local ok, message = ALC.Voting:Cast(row.candidate, focus)
 		if not ok and message then ALC:Print(message) end
 	end)
 	row.vote:SetPoint("RIGHT", row, "RIGHT", -12, 0)
 
 	-- Only the loot master hands the item out; the amber frame marks the final step.
 	row.award = UI.NewButton(row, BUTTON_W, 34, L["Award"], function()
-		ALC.AwardDialog:Ask(row.candidate)
+		ALC.AwardDialog:Ask(row.candidate, focus)
 	end)
 	row.award:SetPoint("RIGHT", row, "RIGHT", -12, 0)
 	row.award:SetSelected(true)
@@ -416,6 +417,49 @@ local function buildTabs(header)
 end
 
 -- The grip in the bottom right corner (Council tab): drag it to show more or fewer rows.
+local STRIP_BUTTON, STRIP_GAP, STRIP_COLUMN = 44, 6, 8
+
+-- The item strip is part of the window but hangs outside its left edge, like RCLC's.
+local function buildStrip()
+	CouncilWindow.strip = {}
+	for i = 1, ALC.Constants.MAX_SESSION_ITEMS do
+		local column, row = math.floor((i - 1) / STRIP_COLUMN), (i - 1) % STRIP_COLUMN
+		local button = CreateFrame("Button", nil, frame)
+		button:SetSize(STRIP_BUTTON, STRIP_BUTTON)
+		button:SetPoint("TOPRIGHT", frame, "TOPLEFT",
+			-(STRIP_GAP + column * (STRIP_BUTTON + STRIP_GAP)), -(HEADER_H + row * (STRIP_BUTTON + STRIP_GAP)))
+		button.selected = button:CreateTexture(nil, "BACKGROUND")
+		button.selected:SetPoint("TOPLEFT", -3, 3)
+		button.selected:SetPoint("BOTTOMRIGHT", 3, -3)
+		UI.SetTextureColor(button.selected, c.goldTint)
+		button.icon = button:CreateTexture(nil, "ARTWORK")
+		button.icon:SetPoint("TOPLEFT", 2, -2)
+		button.icon:SetPoint("BOTTOMRIGHT", -2, 2)
+		button.ring = UI.AddBorder(button, c.border, 2, 8, "OVERLAY")
+		button.check = UI.NewText(button, 12, c.gold, "CENTER") -- "Won" over the dimmed icon of an awarded item
+		button.check:SetPoint("CENTER", 0, 0)
+		button.check:SetText(strupper(L["Won"]))
+		button.badge = CreateFrame("Frame", nil, button)
+		button.badge:SetSize(18, 16)
+		button.badge:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", 3, -3)
+		button.badge.bg = UI.NewFill(button.badge, 4)
+		UI.SetTextureColor(button.badge.bg, c.gold)
+		button.badge.text = UI.NewText(button.badge, 10, c.bg, "CENTER")
+		button.badge.text:SetPoint("CENTER", 0, 0)
+		button:SetScript("OnClick", function(self) if self.item then CouncilWindow:SetFocus(self.item) end end)
+		button:SetScript("OnEnter", function(self)
+			if not self.itemString then return end
+			GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+			GameTooltip:SetHyperlink(self.itemString)
+			if self.winner then GameTooltip:AddLine(string.format(L["Awarded to %s"], self.winner), c.gold[1], c.gold[2], c.gold[3]) end
+			GameTooltip:Show()
+		end)
+		button:SetScript("OnLeave", function() GameTooltip:Hide() end)
+		button:Hide()
+		CouncilWindow.strip[i] = button
+	end
+end
+
 local function buildGrip()
 	frame.grip = CreateFrame("Button", nil, frame)
 	frame.grip:SetSize(14, 14)
@@ -540,8 +584,8 @@ local function build()
 	frame.icon:SetPoint("BOTTOMRIGHT", -2, 2)
 	frame.iconBorder = UI.AddBorder(itemBox, c.border, 2, 8, "OVERLAY")
 	itemBox:SetScript("OnEnter", function(self)
-		local session = ALC.Sessions:GetSession()
-		if session then showItemTooltip(self, session.itemString) end
+		local target = ALC.Sessions:GetItem(focus)
+		if target then showItemTooltip(self, target.itemString) end
 	end)
 	itemBox:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
@@ -604,6 +648,13 @@ local function build()
 	frame.queueLabel = UI.NewText(frame, 11, c.muted)
 	frame.queueLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -(HEADER_H + 26))
 	frame.queueLabel:SetText(strupper(L["Next in the loot list"]))
+	-- Start every waiting item in one session.
+	frame.startAll = UI.NewButton(frame, 130, 26, L["Start all"], function()
+		local ok, message = ALC.LootDetection:StartAll()
+		if not ok and message then ALC:Print(message) end
+	end)
+	frame.startAll:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PAD, -(HEADER_H + 18))
+	frame.startAll:Hide()
 	frame.queueMore = UI.NewText(frame, 12, c.muted)
 	frame.queueMore:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -(HEADER_H + 54 + QUEUE_ROWS * QUEUE_ROW_H))
 	queueStatic = { frame.queueLabel, frame.queueMore }
@@ -675,6 +726,7 @@ local function build()
 	frame.tradeScroll:Hide()
 
 	buildGrip()
+	buildStrip()
 
 	frame:SetScript("OnMouseWheel", function(_, delta)
 		if activeTab == "history" then
@@ -744,9 +796,9 @@ end
 -- The candidates the table lists (not the ones who passed), in the chosen order.
 function CouncilWindow:GetVisible()
 	local list = {}
-	for _, entry in ipairs(ALC.Candidates:GetList()) do
+	for _, entry in ipairs(ALC.Candidates:GetList(focus)) do
 		if entry.response ~= "PASS" then
-			entry.votes = ALC.Voting:GetVotes(entry.name)
+			entry.votes = ALC.Voting:GetVotes(entry.name, focus)
 			list[#list + 1] = entry
 		end
 	end
@@ -769,7 +821,7 @@ end
 --------------------------------------------------------------------------------
 -- Rendering: the Council tab
 --------------------------------------------------------------------------------
-local function renderRow(row, entry, myVote, topVotes, isLM, compact)
+local function renderRow(row, entry, myVote, topVotes, isLM, compact, open)
 	row.candidate = entry.name
 	local classColor = UI.ClassColor(entry.class)
 	row.name:SetTextColor(classColor[1], classColor[2], classColor[3], 1)
@@ -804,7 +856,7 @@ local function renderRow(row, entry, myVote, topVotes, isLM, compact)
 	local extra = compact and (#entry.gear - 1) or 0
 	row.more:SetText(extra > 0 and ("+" .. extra) or "")
 
-	local count, voters = ALC.Voting:GetVotes(entry.name)
+	local count, voters = ALC.Voting:GetVotes(entry.name, focus)
 	row.votes.voters = voters
 	if count == 0 then
 		row.votes.text:SetTextColor(c.muted[1], c.muted[2], c.muted[3], 1)
@@ -819,20 +871,23 @@ local function renderRow(row, entry, myVote, topVotes, isLM, compact)
 	row.vote:SetLabel(mine and L["Voted"] or L["Vote"])
 	row.vote:SetSelected(mine)
 
-	-- The loot master also gets Award; Vote then moves left to make room.
+	-- The loot master also gets Award; Vote then moves left to make room. Nothing to do
+	-- for an item that was awarded.
 	row.vote:ClearAllPoints()
 	if isLM then
 		row.vote:SetPoint("RIGHT", row.award, "LEFT", -8, 0)
-		row.award:Show()
+		row.award:SetShown(open)
 	else
 		row.vote:SetPoint("RIGHT", row, "RIGHT", -12, 0)
 		row.award:Hide()
 	end
+	row.vote:SetShown(open)
 	row:Show()
 end
 
 local function hideCouncilRows(self)
 	for _, row in ipairs(self.rows) do row:Hide() end
+	for _, button in ipairs(self.strip) do button:Hide() end
 	frame.scroll:Hide()
 	frame.grip:Hide()
 end
@@ -851,7 +906,39 @@ end
 
 local function hideQueue(self)
 	setShown(queueStatic, false)
+	if frame.startAll then frame.startAll:Hide() end
 	for _, row in ipairs(self.queueRows) do row:Hide() end
+end
+
+-- The strip of items at the left edge of the window: one button per item of the session,
+-- shown when there is more than one. A click chooses the item the table is about.
+local function updateStrip(self, session)
+	local count = #session.items
+	-- The strip hangs outside the window: keep it on the screen too.
+	local columns = count > 1 and math.ceil(count / STRIP_COLUMN) or 0
+	frame:SetClampRectInsets(columns > 0 and (columns * (STRIP_BUTTON + STRIP_GAP) + STRIP_GAP) or 0, 0, 0, 0)
+	for i, button in ipairs(self.strip) do
+		local item = session.items[i]
+		if item and count > 1 then
+			local display = ALC.LootDetection:GetItemDisplay({ itemString = item.itemString, itemID = item.itemID })
+			button.item = i
+			button.itemString = item.itemString
+			button.winner = item.winner
+			button.icon:SetTexture(display.icon or UNKNOWN_ICON)
+			button.icon:SetVertexColor(1, 1, 1, item.winner and 0.35 or 1)
+			local qc = UI.QualityColor(display.quality)
+			button.ring:SetColor(i == focus and c.gold or qc)
+			button.check:SetShown(item.winner ~= nil)
+			local counts = ALC.Candidates:GetCounts(i)
+			button.badge.text:SetText(tostring(counts.wanting))
+			button.badge:SetShown(item.winner == nil and counts.wanting > 0)
+			button.selected:SetShown(i == focus)
+			button:Show()
+		else
+			button.item = nil
+			button:Hide()
+		end
+	end
 end
 
 local function renderCouncil(self, session)
@@ -867,15 +954,24 @@ local function renderCouncil(self, session)
 	local rowH = compact and COMPACT_ROW_H or ROW_H
 	local rowsAllowed = maxRows()
 
-	local display = ALC.LootDetection:GetItemDisplay({ itemString = session.itemString, itemID = session.itemID })
+	if focus > #session.items then focus = #session.items end
+	local target = session.items[focus]
+	local display = ALC.LootDetection:GetItemDisplay({ itemString = target.itemString, itemID = target.itemID })
 	frame.icon:SetTexture(display.icon or UNKNOWN_ICON)
 	local qc = UI.QualityColor(display.quality)
 	frame.iconBorder:SetColor(qc)
 	frame.name:SetTextColor(qc[1], qc[2], qc[3], 1)
 	frame.name:SetText(display.name or L["Loading..."])
-	frame.sub:SetText(display.subtitle)
+	local sub = display.subtitle
+	if #session.items > 1 then
+		sub = string.format(L["Item %d of %d"], focus, #session.items) .. (sub ~= "" and (" \194\183 " .. sub) or "")
+	end
+	if target.winner then sub = string.format(L["Awarded to %s"], target.winner) end
+	frame.sub:SetText(sub)
+	frame.sub:SetTextColor(target.winner and c.gold[1] or c.muted[1], target.winner and c.gold[2] or c.muted[2], target.winner and c.gold[3] or c.muted[3], 1)
+	updateStrip(self, session)
 
-	local counts = ALC.Candidates:GetCounts()
+	local counts = ALC.Candidates:GetCounts(focus)
 	local total = counts.responded + counts.silent
 	frame.progress:SetText(string.format("%d/%d %s", counts.responded, total, L["responded"]))
 	frame.barFill:SetWidth(max(1, 220 * (total > 0 and counts.responded / total or 0)))
@@ -894,13 +990,13 @@ local function renderCouncil(self, session)
 		if entry.votes > topVotes then topVotes = entry.votes end
 	end
 
-	local myVote = ALC.Voting:GetMyVote()
+	local myVote = ALC.Voting:GetMyVote(focus)
 	local shown = min(count - offset, rowsAllowed)
 	for i = 1, POOL do
 		local row = self.rows[i]
 		local entry = list[offset + i]
 		if entry and i <= shown then
-			renderRow(row, entry, myVote, topVotes, session.isLM, compact)
+			renderRow(row, entry, myVote, topVotes, session.isLM, compact, target.winner == nil)
 		else
 			row.candidate = nil
 			row:Hide()
@@ -944,6 +1040,8 @@ local function renderIdle(self)
 
 	frame.idle:Hide()
 	frame.queueLabel:Show()
+	frame.startAll:SetShown(#pending > 1)
+	frame.startAll:SetLabel(string.format("%s (%d)", L["Start all"], min(#pending, ALC.Constants.MAX_SESSION_ITEMS)))
 	local shown = min(#pending, QUEUE_ROWS)
 	for i = 1, QUEUE_ROWS do
 		local row = self.queueRows[i]
@@ -1176,16 +1274,17 @@ end
 -- can also award, change the answer and take the player out of the running.
 function CouncilWindow:GetRowMenu(name)
 	local session = ALC.Sessions:GetSession()
-	local candidate = ALC.Candidates:Get(name)
+	local candidate = ALC.Candidates:Get(name, focus)
 	if not session or not session.isCouncil or not candidate then return {} end
+	if not ALC.Sessions:IsItemOpen(focus) then return {} end -- awarded: nothing left to do
 
 	local items = {}
-	local myVote = ALC.Voting:GetMyVote()
+	local myVote = ALC.Voting:GetMyVote(focus)
 	local mine = myVote ~= nil and ALC:SameName(myVote, candidate.name)
 	items[#items + 1] = {
 		label = mine and L["Voted"] or L["Vote"],
 		onClick = function()
-			local ok, message = ALC.Voting:Cast(candidate.name)
+			local ok, message = ALC.Voting:Cast(candidate.name, focus)
 			if not ok and message then ALC:Print(message) end
 		end,
 	}
@@ -1193,7 +1292,7 @@ function CouncilWindow:GetRowMenu(name)
 
 	items[#items + 1] = {
 		label = L["Award"], color = c.gold,
-		onClick = function() ALC.AwardDialog:Ask(candidate.name) end,
+		onClick = function() ALC.AwardDialog:Ask(candidate.name, focus) end,
 	}
 	items[#items + 1] = { label = L["Change response"], header = true }
 	for _, response in ipairs(ALC.Responses.LIST) do
@@ -1201,7 +1300,7 @@ function CouncilWindow:GetRowMenu(name)
 			label = response.label, color = response.color,
 			enabled = response.id ~= candidate.response,
 			onClick = function()
-				local ok, message = ALC.Candidates:SetResponse(candidate.name, response.id)
+				local ok, message = ALC.Candidates:SetResponse(candidate.name, response.id, focus)
 				if not ok and message then ALC:Print(message) end
 			end,
 		}
@@ -1209,7 +1308,7 @@ function CouncilWindow:GetRowMenu(name)
 	items[#items + 1] = {
 		label = L["Remove from consideration"],
 		onClick = function()
-			local ok, message = ALC.Candidates:SetResponse(candidate.name, "PASS")
+			local ok, message = ALC.Candidates:SetResponse(candidate.name, "PASS", focus)
 			if not ok and message then ALC:Print(message) end
 		end,
 	}
@@ -1236,6 +1335,21 @@ end
 
 function CouncilWindow:GetTab()
 	return activeTab
+end
+
+-- The item of the session the Council tab shows (1 = the first).
+function CouncilWindow:GetFocus()
+	return focus
+end
+
+function CouncilWindow:SetFocus(item)
+	local count = ALC.Sessions:GetItemCount()
+	if count == 0 or not item or item < 1 or item > count then return false end
+	focus = item
+	offset = 0
+	ALC.ContextMenu:Hide()
+	self:Refresh()
+	return true
 end
 
 -- Switches tab. The Council tab is for the council; History and Trade Queue are for anybody.
@@ -1315,7 +1429,23 @@ function CouncilWindow:Init()
 	register(self, "ALC_LOOT_CHANGED", refresh)
 	register(self, "ALC_AWARDS_ANNOUNCED", refresh)
 	register(self, "ALC_SESSION_STARTED", function(_, session, restored)
+		focus = 1
 		if not restored and session.isCouncil then CouncilWindow:Show() end
+	end)
+	-- An awarded item is done: the table moves on to the next item that is still open.
+	register(self, "ALC_SESSION_ITEM_AWARDED", function(_, item)
+		if item == focus then
+			local count = ALC.Sessions:GetItemCount()
+			for step = 1, count - 1 do
+				local candidate = (focus - 1 + step) % count + 1
+				if ALC.Sessions:IsItemOpen(candidate) then
+					focus = candidate
+					offset = 0
+					break
+				end
+			end
+		end
+		CouncilWindow:Refresh()
 	end)
 	register(self, "ALC_SESSION_SNAPSHOT", reopen)
 	register(self, "ALC_SESSION_RESTORED", reopen)
@@ -1324,6 +1454,7 @@ function CouncilWindow:Init()
 	-- list, so awarding many items in a row never leaves the window.
 	register(self, "ALC_SESSION_ENDED", function()
 		disarmStop()
+		focus = 1
 		if ALC.Settings:GetKeepCouncilOpen() and CouncilWindow:IsShown() then
 			CouncilWindow:Refresh()
 		else

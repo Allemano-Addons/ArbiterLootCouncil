@@ -16,7 +16,7 @@ return function(check, H)
 	end)
 	ALC.Events.Register(listener, "ALC_SESSION_SNAPSHOT", function(_, p) applied[#applied + 1] = p end)
 
-	local function env(t, sid, seq, p) return { v = 1, t = t, sid = sid, seq = seq, p = p } end
+	local env = H.env
 
 	-- A fake group: who is in it, who leads, and the loot method.
 	local units = {}
@@ -146,7 +146,7 @@ return function(check, H)
 	ok = Sessions:Start(19019)
 	check("start by item id", ok == true and Sessions:IsActive())
 	local s = Sessions:GetSession()
-	check("session state", s.itemID == 19019 and s.itemString == "item:19019" and s.lm == ME and s.isLM and s.isCouncil and not s.restored)
+	check("session state", #s.items == 1 and s.items[1].itemID == 19019 and s.items[1].itemString == "item:19019" and s.lm == ME and s.isLM and s.isCouncil and not s.restored)
 	check("council in the session", #s.council == 2 and s.council[1] == ME and s.council[2] == "Veyra Moo")
 	check("started event fired once", #started == 1 and started[1].s.sid == s.sid and started[1].restored == false)
 	check("GetActiveSid", Sessions:GetActiveSid() == s.sid)
@@ -166,7 +166,7 @@ return function(check, H)
 	-- Two sessions in a row: nothing from the first leaks into the second.
 	check("start again", Sessions:Start("|cffa335ee|Hitem:19019::::::::80::::::::|h[Thunderfury]|h|r") == true)
 	local second = Sessions:GetSession()
-	check("item link parsed to an itemString", second.itemString == "item:19019::::::::80" and second.itemID == 19019)
+	check("item link parsed to an itemString", second.items[1].itemString == "item:19019::::::::80" and second.items[1].itemID == 19019)
 	check("new session id", second.sid ~= firstSid)
 	local before = #started
 	check("stale message for the old session is rejected",
@@ -176,7 +176,7 @@ return function(check, H)
 
 	-- An AWARD ends the session.
 	Sessions:Start(19019)
-	check("AWARD from the loot master accepted", Comm:SendRaid("AWARD", Sessions:GetActiveSid(), { winner = "Veyra Moo", itemID = 19019, response = "BIS" }) == true)
+	check("AWARD from the loot master accepted", Comm:SendRaid("AWARD", Sessions:GetActiveSid(), { item = 1, winner = "Veyra Moo", itemID = 19019, response = "BIS" }) == true)
 	check("the session ended on AWARD", not Sessions:IsActive() and ended[#ended].reason == "awarded")
 
 	----------------------------------------------------------------------------
@@ -236,7 +236,7 @@ return function(check, H)
 		#H.sent == 1 and H.sent[1].dist == "WHISPER" and H.sent[1].target == "Ashvane Moo" and req.t == "STATE_REQUEST" and req.sid == nil)
 	check("requested snapshot restores the session",
 		Comm:Process(env("STATE_SNAPSHOT", "sidS1", 5, snapPayload), "WHISPER", "Ashvane Moo") == true and Sessions:GetActiveSid() == "sidS1")
-	check("restored flag and events", Sessions:GetSession().restored == true and started[#started].restored == true and #applied == 1 and applied[1].yourResponse == "PASS")
+	check("restored flag and events", Sessions:GetSession().restored == true and started[#started].restored == true and #applied == 1 and applied[1].yourResponses[1].response == "PASS")
 	check("no second request while a session is active", Sessions:RequestState() == false)
 	Comm:Process(env("SESSION_CANCEL", "sidS1", 6, { reason = "done" }), "PARTY", "Ashvane Moo")
 	check("cancel after restore works (seq continues)", not Sessions:IsActive())
@@ -264,7 +264,7 @@ return function(check, H)
 	check("the loot master answers with a snapshot", #H.sent == 1 and H.sent[1].target == "Veyra Moo")
 	local _, snap = AceSerializer:Deserialize(H.sent[1].text)
 	check("snapshot envelope", snap.t == "STATE_SNAPSHOT" and snap.sid == sid and snap.seq ~= nil)
-	check("snapshot carries the session", snap.p.itemID == 19019 and snap.p.lm == ME and #snap.p.council == 2)
+	check("snapshot carries the session", snap.p.items[1].itemID == 19019 and snap.p.lm == ME and #snap.p.council == 2)
 	check("council member gets the council-only fields", snap.p.candidates ~= nil and builds[#builds] == "Veyra Moo")
 
 	H.sent = {}
@@ -299,7 +299,7 @@ return function(check, H)
 	ALC.TestMode.GetBagItemLinks = function() return { "|Hitem:100|h[a]|h", "|Hitem:200|h[b]|h", "|Hitem:300|h[c]|h" } end
 	check("test mode picks the best item", ALC.TestMode:PickItem():find("item:200", 1, true) ~= nil)
 	local okT = ALC.TestMode:Start()
-	check("test mode starts a session", okT == true and Sessions:IsActive() and Sessions:GetSession().itemID == 200)
+	check("test mode starts a session", okT == true and Sessions:IsActive() and Sessions:GetSession().items[1].itemID == 200)
 	Sessions:Cancel("done")
 
 	ALC.TestMode.GetBagItemLinks = function() return {} end

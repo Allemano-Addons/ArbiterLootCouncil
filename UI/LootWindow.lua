@@ -223,7 +223,14 @@ local function build()
 		local ok, message = ALC.Sessions:Cancel("cancelled")
 		if not ok and message then ALC:Print(message) end
 	end)
-	frame.cancel:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -PAD, 12)
+	frame.startAll = UI.NewButton(frame, 130, 40, L["Start all"], function()
+		local ok, message = ALC.LootDetection:StartAll()
+		if not ok and message then ALC:Print(message) end
+	end)
+	frame.startAll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -PAD, 12)
+	frame.startAll:SetSelected(true)
+	frame.startAll.label:SetTextColor(c.gold[1], c.gold[2], c.gold[3], 1)
+	frame.cancel:SetPoint("RIGHT", frame.startAll, "LEFT", -10, 0)
 
 	for i = 1, POOL do
 		LootWindow.rows[i] = newRow(i)
@@ -374,8 +381,11 @@ function LootWindow:Refresh()
 	end
 
 	frame.empty:SetShown(count == 0)
-	frame.hint:SetText(sessionActive and L["Session in progress"] or L["One item at a time"])
+	frame.hint:SetText(sessionActive and L["Session in progress"] or L["Start one item, or all at once"])
 	frame.cancel:SetAvailable(sessionActive and session.isLM)
+	local waiting = #LootDetection:GetPending()
+	frame.startAll:SetLabel(waiting > 1 and string.format("%s (%d)", L["Start all"], waiting) or L["Start all"])
+	frame.startAll:SetAvailable(isLM and not sessionActive and waiting > 1)
 
 	local body = max(shown, 1) * (ROW_H + ROW_GAP) - ROW_GAP
 	if count == 0 then body = 64 end

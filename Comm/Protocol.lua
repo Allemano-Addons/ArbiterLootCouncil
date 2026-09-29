@@ -71,6 +71,28 @@ local function checkItem(p)
 	return true
 end
 
+-- Which item of the session a message is about (1 = the first).
+local function checkItemIndex(p)
+	if not isInt(p.item, 1, C.MAX_SESSION_ITEMS) then return fail("bad item index") end
+	return true
+end
+
+-- The items of a session: { itemID, itemString [, winner] } each. `winner` is only set on
+-- items that were already awarded (a snapshot for a player who joined late or reloaded).
+local function checkItems(items)
+	if not isArray(items, C.MAX_SESSION_ITEMS) or #items == 0 then return fail("bad items list") end
+	for _, item in ipairs(items) do
+		if type(item) ~= "table" then return fail("bad item") end
+		local ok, reason = checkItem(item)
+		if not ok then return fail(reason) end
+		if not isItemString(item.itemString) or itemStringID(item.itemString) ~= item.itemID then
+			return fail("itemString does not match itemID")
+		end
+		if item.winner ~= nil and not isName(item.winner) then return fail("bad winner") end
+	end
+	return true
+end
+
 local function checkGear(gear)
 	if not isArray(gear, C.MAX_GEAR_ITEMS) then return fail("bad gear list") end
 	for _, s in ipairs(gear) do
@@ -89,6 +111,8 @@ end
 
 local function checkCandidate(c)
 	if type(c) ~= "table" then return fail("bad candidate") end
+	local ok, reason = checkItemIndex(c)
+	if not ok then return fail(reason) end
 	if not isName(c.name) then return fail("bad candidate name") end
 	if not (type(c.class) == "string" and #c.class <= 16 and strmatch(c.class, "^%u+$")) then
 		return fail("bad candidate class")
@@ -110,11 +134,8 @@ Protocol.specs = specs
 specs.SESSION_START = {
 	allowed = "lm", channel = "GROUP", sid = "new", seq = true,
 	validate = function(p, sender)
-		local ok, reason = checkItem(p)
+		local ok, reason = checkItems(p.items)
 		if not ok then return fail(reason) end
-		if not isItemString(p.itemString) or itemStringID(p.itemString) ~= p.itemID then
-			return fail("itemString does not match itemID")
-		end
 		ok, reason = checkNameList(p.council, C.MAX_COUNCIL, "council")
 		if not ok then return fail(reason) end
 		if not isName(p.lm) or not SameName(p.lm, sender) then return fail("lm does not match sender") end
@@ -133,6 +154,8 @@ specs.SESSION_CANCEL = {
 specs.RESPONSE = {
 	allowed = "group", channel = "WHISPER", sid = "active", seq = false,
 	validate = function(p)
+		local ok, reason = checkItemIndex(p)
+		if not ok then return fail(reason) end
 		if not isResponse(p.response) then return fail("bad response") end
 		return checkGear(p.gear)
 	end,
@@ -146,6 +169,8 @@ specs.CANDIDATE_UPDATE = {
 specs.VOTE = {
 	allowed = "council", channel = "WHISPER", sid = "active", seq = false,
 	validate = function(p)
+		local ok, reason = checkItemIndex(p)
+		if not ok then return fail(reason) end
 		if p.candidate ~= nil and not isName(p.candidate) then return fail("bad candidate") end
 		return true
 	end,
@@ -154,8 +179,10 @@ specs.VOTE = {
 specs.VOTE_UPDATE = {
 	allowed = "lm", channel = "WHISPER", sid = "active", seq = true,
 	validate = function(p)
+		local ok, reason = checkItemIndex(p)
+		if not ok then return fail(reason) end
 		if not isName(p.candidate) then return fail("bad candidate") end
-		local ok, reason = checkVoters(p.voters)
+		ok, reason = checkVoters(p.voters)
 		if not ok then return fail(reason) end
 		if not isInt(p.votes, 0, C.MAX_COUNCIL) or p.votes ~= #p.voters then
 			return fail("votes does not match voters")
@@ -167,7 +194,9 @@ specs.VOTE_UPDATE = {
 specs.AWARD = {
 	allowed = "lm", channel = "GROUP", sid = "active", seq = true,
 	validate = function(p)
-		local ok, reason = checkItem(p)
+		local ok, reason = checkItemIndex(p)
+		if not ok then return fail(reason) end
+		ok, reason = checkItem(p)
 		if not ok then return fail(reason) end
 		if not isName(p.winner) then return fail("bad winner") end
 		if not isResponse(p.response) then return fail("bad response") end
@@ -188,22 +217,36 @@ specs.STATE_SNAPSHOT = {
 		local ok, reason = specs.SESSION_START.validate(p, sender)
 		if not ok then return fail(reason) end
 		if p.candidates ~= nil then
-			if not isArray(p.candidates, C.MAX_CANDIDATES) then return fail("bad candidates") end
+			if not isArray(p.candidates, C.MAX_CANDIDATES * C.MAX_SESSION_ITEMS) then return fail("bad candidates") end
 			for _, c in ipairs(p.candidates) do
 				ok, reason = checkCandidate(c)
 				if not ok then return fail(reason) end
 			end
 		end
 		if p.votes ~= nil then
-			if not isArray(p.votes, C.MAX_CANDIDATES) then return fail("bad votes") end
+			if not isArray(p.votes, C.MAX_CANDIDATES * C.MAX_SESSION_ITEMS) then return fail("bad votes") end
 			for _, v in ipairs(p.votes) do
-				if type(v) ~= "table" or not isName(v.candidate) then return fail("bad vote entry") end
+				if type(v) ~= "table" then return fail("bad vote entry") end
+				ok, reason = checkItemIndex(v)
+				if not ok then return fail(reason) end
+				if not isName(v.candidate) then return fail("bad vote entry") end
 				ok, reason = checkVoters(v.voters)
 				if not ok then return fail(reason) end
 			end
 		end
-		if p.yourResponse ~= nil and not isResponse(p.yourResponse) then return fail("bad yourResponse") end
-		if p.yourVote ~= nil and not isName(p.yourVote) then return fail("bad yourVote") end
+		-- What the receiver itself answered and voted, one entry per item.
+		if p.yourResponses ~= nil then
+			if not isArray(p.yourResponses, C.MAX_SESSION_ITEMS) then return fail("bad yourResponses") end
+			for _, r in ipairs(p.yourResponses) do
+				if type(r) ~= "table" or not checkItemIndex(r) or not isResponse(r.response) then return fail("bad yourResponses entry") end
+			end
+		end
+		if p.yourVotes ~= nil then
+			if not isArray(p.yourVotes, C.MAX_SESSION_ITEMS) then return fail("bad yourVotes") end
+			for _, v in ipairs(p.yourVotes) do
+				if type(v) ~= "table" or not checkItemIndex(v) or not isName(v.candidate) then return fail("bad yourVotes entry") end
+			end
+		end
 		return true
 	end,
 }

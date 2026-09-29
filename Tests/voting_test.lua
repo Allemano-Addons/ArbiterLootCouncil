@@ -6,7 +6,7 @@ return function(check, H)
 	local AceSerializer = LibStub("AceSerializer-3.0")
 	local ME = "Tester Moo"
 
-	local function env(t, sid, seq, p) return { v = 1, t = t, sid = sid, seq = seq, p = p } end
+	local env = H.env
 
 	-- Item data.
 	local db = {
@@ -173,12 +173,12 @@ return function(check, H)
 	local _, councilSnap = AceSerializer:Deserialize(H.sent[1].text)
 	local votesByName = {}
 	for _, vote in ipairs(councilSnap.p.votes or {}) do votesByName[vote.candidate] = #vote.voters end
-	check("a council member gets the votes and their own vote", votesByName["Jonatan Moo"] == 1 and votesByName["Veyra Moo"] == 1 and councilSnap.p.yourVote == "Veyra Moo")
+	check("a council member gets the votes and their own vote", votesByName["Jonatan Moo"] == 1 and votesByName["Veyra Moo"] == 1 and councilSnap.p.yourVotes[1].candidate == "Veyra Moo" and councilSnap.p.yourVotes[1].item == 1)
 	H.sent = {}
 	H.clock = H.clock + 100
 	Comm:Process(env("STATE_REQUEST", nil, nil, {}), "WHISPER", "Jonatan Moo")
 	local _, raiderSnap = AceSerializer:Deserialize(H.sent[1].text)
-	check("a raider gets no votes", raiderSnap.p.votes == nil and raiderSnap.p.yourVote == nil)
+	check("a raider gets no votes", raiderSnap.p.votes == nil and raiderSnap.p.yourVotes == nil)
 
 	----------------------------------------------------------------------------
 	-- The council window

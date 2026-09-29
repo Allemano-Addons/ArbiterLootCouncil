@@ -12,7 +12,7 @@ local format = string.format
 local ALC = AceAddon:NewAddon("ALC", "AceEvent-3.0")
 _G.ALC = ALC
 
-ALC.PROTOCOL_VERSION = 1
+ALC.PROTOCOL_VERSION = 2
 ALC.PREFIX = "ALC"
 
 do

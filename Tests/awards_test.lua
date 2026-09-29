@@ -8,7 +8,7 @@ return function(check, H)
 	local AceSerializer = LibStub("AceSerializer-3.0")
 	local ME = "Tester Moo"
 
-	local function env(t, sid, seq, p) return { v = 1, t = t, sid = sid, seq = seq, p = p } end
+	local env = H.env
 
 	-- Item data.
 	local db = { [200] = { "Crown of Destruction", 4, "INVTYPE_HEAD" }, [300] = { "Small Paw", 1, "INVTYPE_NON_EQUIP_IGNORE" } }

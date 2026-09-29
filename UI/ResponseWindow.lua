@@ -1,23 +1,28 @@
--- ResponseWindow: the window every player gets when a session starts: the item and
--- five buttons. Presentation only; answers go through Responses.
+-- ResponseWindow: the window every player gets when a session starts: one row per item
+-- with five buttons. Presentation only; answers go through Responses.
 
 local ALC = ALC
 local UI = ALC.UI
 local L = ALC.L
 
 local strupper = string.upper
+local min, max = math.min, math.max
 
-local WIDTH, PAD = 400, 16
-local HEADER_H = 52
-local ICON = 52
-local BUTTON_H, GAP = 44, 6
+local WIDTH, PAD = 600, 16
+local HEADER_H, FOOTER_H = 52, 64
+local ROW_H, ROW_GAP = 66, 6
+local ICON = 46
+local BUTTON_W, BUTTON_H, GAP = 62, 34, 4
+local NAME_W = 170
+local POOL, MAX_VISIBLE = ALC.Constants.MAX_SESSION_ITEMS, 6
 local UNKNOWN_ICON = "Interface\\Icons\\INV_Misc_QuestionMark"
 
 local ResponseWindow = {}
 ALC.ResponseWindow = ResponseWindow
-ResponseWindow.buttons = {}
+ResponseWindow.rows = {}
 
 local frame
+local offset = 0
 local c = UI.color
 local feedback -- an error from the last click, shown until the next refresh with a response
 
@@ -39,6 +44,61 @@ local function restorePosition()
 	end
 end
 
+-- One item: its icon and name, and the five answer buttons (or who won it).
+local function newRow(index)
+	local row = CreateFrame("Frame", nil, frame)
+	row:SetHeight(ROW_H)
+	local top = -(HEADER_H + 10 + (index - 1) * (ROW_H + ROW_GAP))
+	row:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, top)
+	row:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PAD - 14, top)
+	row.bg = UI.NewFill(row, 8)
+	UI.SetTextureColor(row.bg, c.panel)
+	row.border = UI.AddBorder(row, c.border, 1, 8)
+
+	row.itemBox = CreateFrame("Button", nil, row)
+	row.itemBox:SetSize(ICON, ICON)
+	row.itemBox:SetPoint("LEFT", row, "LEFT", 10, 0)
+	row.icon = row.itemBox:CreateTexture(nil, "ARTWORK")
+	row.icon:SetPoint("TOPLEFT", 2, -2)
+	row.icon:SetPoint("BOTTOMRIGHT", -2, 2)
+	row.iconBorder = UI.AddBorder(row.itemBox, c.border, 2, 8, "OVERLAY")
+	row.itemBox:SetScript("OnEnter", function(self)
+		if not row.itemString then return end
+		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+		GameTooltip:SetHyperlink(row.itemString)
+		GameTooltip:Show()
+	end)
+	row.itemBox:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+	row.name = UI.NewText(row, 13, c.text)
+	row.name:SetPoint("TOPLEFT", row.itemBox, "TOPRIGHT", 10, -3)
+	row.name:SetWidth(NAME_W)
+	row.sub = UI.NewText(row, 11, c.muted)
+	row.sub:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -4)
+	row.sub:SetWidth(NAME_W)
+
+	local left = 10 + ICON + 10 + NAME_W + 10
+	row.buttons = {}
+	for i, response in ipairs(ALC.Responses.LIST) do
+		local button = UI.NewButton(row, BUTTON_W, BUTTON_H, response.label, function()
+			local ok, message = ALC.Responses:Send(response.id, row.item)
+			feedback = not ok and message or nil
+			ResponseWindow:Refresh()
+		end)
+		button:SetPoint("LEFT", row, "LEFT", left + (i - 1) * (BUTTON_W + GAP), 0)
+		button.label:SetTextColor(response.color[1], response.color[2], response.color[3], 1)
+		button.responseId = response.id
+		row.buttons[i] = button
+	end
+
+	-- Instead of the buttons once the item is awarded.
+	row.result = UI.NewText(row, 13, c.gold, "RIGHT")
+	row.result:SetPoint("RIGHT", row, "RIGHT", -14, 0)
+	row.result:SetWidth(5 * (BUTTON_W + GAP) - GAP)
+	row.result:Hide()
+	return row
+end
+
 local function build()
 	frame = CreateFrame("Frame", nil, UIParent)
 	frame:SetSize(WIDTH, 270)
@@ -48,6 +108,7 @@ local function build()
 	frame:SetClampedToScreen(true)
 	frame:SetMovable(true)
 	frame:EnableMouse(true)
+	frame:EnableMouseWheel(true)
 	frame:Hide()
 
 	local bg = UI.NewFill(frame, 10)
@@ -73,6 +134,7 @@ local function build()
 	local title = UI.NewText(header, 15, c.text)
 	title:SetPoint("LEFT", logo, "RIGHT", 10, 0)
 	title:SetText(strupper(L["Loot response"]))
+	frame.lm = UI.NewText(header, 12, c.muted, "RIGHT")
 
 	local close = CreateFrame("Button", nil, header)
 	close:SetSize(28, 28)
@@ -83,6 +145,7 @@ local function build()
 	close:SetScript("OnEnter", function(self) self.text:SetTextColor(c.text[1], c.text[2], c.text[3], 1) end)
 	close:SetScript("OnLeave", function(self) self.text:SetTextColor(c.muted[1], c.muted[2], c.muted[3], 1) end)
 	close:SetScript("OnClick", function() ResponseWindow:Hide() end)
+	frame.lm:SetPoint("RIGHT", close, "LEFT", -10, 0)
 
 	local divider = frame:CreateTexture(nil, "BORDER")
 	divider:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -HEADER_H)
@@ -90,59 +153,34 @@ local function build()
 	divider:SetHeight(1)
 	UI.SetTextureColor(divider, c.border)
 
-	-- The item.
-	local itemBox = CreateFrame("Frame", nil, frame)
-	itemBox:SetSize(ICON, ICON)
-	itemBox:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -(HEADER_H + 18))
-	itemBox:EnableMouse(true)
-	frame.iconBorder = UI.AddBorder(itemBox, c.border, 2, 8, "OVERLAY")
-	frame.icon = itemBox:CreateTexture(nil, "ARTWORK")
-	frame.icon:SetPoint("TOPLEFT", 2, -2)
-	frame.icon:SetPoint("BOTTOMRIGHT", -2, 2)
-	itemBox:SetScript("OnEnter", function(self)
-		local session = ALC.Sessions:GetSession()
-		if not session then return end
-		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-		GameTooltip:SetHyperlink(session.itemString)
-		GameTooltip:Show()
-	end)
-	itemBox:SetScript("OnLeave", function() GameTooltip:Hide() end)
-
-	frame.name = UI.NewText(frame, 16, c.text)
-	frame.name:SetPoint("TOPLEFT", itemBox, "TOPRIGHT", 14, -4)
-	frame.name:SetPoint("RIGHT", frame, "RIGHT", -PAD, 0)
-	frame.sub = UI.NewText(frame, 11, c.muted)
-	frame.sub:SetPoint("TOPLEFT", frame.name, "BOTTOMLEFT", 0, -5)
-	frame.sub:SetPoint("RIGHT", frame, "RIGHT", -PAD, 0)
-	frame.lm = UI.NewText(frame, 11, c.muted)
-	frame.lm:SetPoint("BOTTOMLEFT", itemBox, "BOTTOMRIGHT", 14, 2)
-	frame.lm:SetPoint("RIGHT", frame, "RIGHT", -PAD, 0)
-
-	-- The five answers.
-	local prompt = UI.NewText(frame, 11, c.muted)
-	prompt:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -(HEADER_H + 18 + ICON + 20))
-	prompt:SetText(strupper(L["Choose your response"]))
-
-	local list = ALC.Responses.LIST
-	local width = math.floor((WIDTH - 2 * PAD - (#list - 1) * GAP) / #list)
-	for i, response in ipairs(list) do
-		local button = UI.NewButton(frame, width, BUTTON_H, response.label, function()
-			local ok, message = ALC.Responses:Send(response.id)
-			feedback = not ok and message or nil
-			ResponseWindow:Refresh()
-		end)
-		button:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD + (i - 1) * (width + GAP), -(HEADER_H + 18 + ICON + 40))
-		button.label:SetTextColor(response.color[1], response.color[2], response.color[3], 1)
-		button.responseId = response.id
-		ResponseWindow.buttons[i] = button
+	for i = 1, POOL do
+		ResponseWindow.rows[i] = newRow(i)
 	end
+	frame.scroll = UI.NewScrollBar(frame, function(newOffset)
+		offset = newOffset
+		ResponseWindow:Refresh()
+	end)
+	frame.scroll:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -8, -(HEADER_H + 10))
+	frame.scroll:SetHeight(ROW_H)
+	frame.scroll:Hide()
+
+	frame.footerLine = frame:CreateTexture(nil, "BORDER")
+	frame.footerLine:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 1, FOOTER_H)
+	frame.footerLine:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -1, FOOTER_H)
+	frame.footerLine:SetHeight(1)
+	UI.SetTextureColor(frame.footerLine, c.border)
 
 	frame.status = UI.NewText(frame, 12, c.muted)
-	frame.status:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", PAD, 16)
+	frame.status:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", PAD, 14)
 	frame.status:SetPoint("RIGHT", frame, "RIGHT", -PAD, 0)
 	frame.status:SetWordWrap(true) -- the longer messages take two lines
 	frame.status:SetJustifyV("BOTTOM")
 
+	frame:SetScript("OnMouseWheel", function(_, delta)
+		local count = ALC.Sessions:GetItemCount()
+		offset = max(0, min(offset - delta, max(0, count - MAX_VISIBLE)))
+		ResponseWindow:Refresh()
+	end)
 	frame:SetScript("OnShow", function() ResponseWindow:Refresh() end)
 	restorePosition()
 end
@@ -150,6 +188,33 @@ end
 --------------------------------------------------------------------------------
 -- Rendering
 --------------------------------------------------------------------------------
+local function renderRow(row, index, item)
+	row.item = index
+	row.itemString = item.itemString
+	local display = ALC.LootDetection:GetItemDisplay({ itemString = item.itemString, itemID = item.itemID })
+	row.icon:SetTexture(display.icon or UNKNOWN_ICON)
+	local qc = UI.QualityColor(display.quality)
+	row.iconBorder:SetColor(qc)
+	row.name:SetTextColor(qc[1], qc[2], qc[3], 1)
+	row.name:SetText(display.name or L["Loading..."])
+	row.sub:SetText(display.subtitle)
+
+	local mine = ALC.Responses:GetMyResponse(index)
+	local awarded = item.winner ~= nil
+	for _, button in ipairs(row.buttons) do
+		button:SetShown(not awarded)
+		button:SetSelected(button.responseId == mine)
+	end
+	row.result:SetShown(awarded)
+	if awarded then
+		row.result:SetText(string.format(L["Awarded to %s"], item.winner))
+		UI.SetTextureColor(row.bg, c.panel, 0.5)
+	else
+		UI.SetTextureColor(row.bg, c.panel)
+	end
+	row:Show()
+end
+
 function ResponseWindow:Refresh()
 	if not frame or not frame:IsShown() then return end
 	local session = ALC.Sessions:GetSession()
@@ -158,29 +223,36 @@ function ResponseWindow:Refresh()
 		return
 	end
 
-	local display = ALC.LootDetection:GetItemDisplay({ itemString = session.itemString, itemID = session.itemID })
-	frame.icon:SetTexture(display.icon or UNKNOWN_ICON)
-	local qc = UI.QualityColor(display.quality)
-	frame.iconBorder:SetColor(qc)
-	frame.name:SetTextColor(qc[1], qc[2], qc[3], 1)
-	frame.name:SetText(display.name or L["Loading..."])
-	frame.sub:SetText(display.subtitle)
-	frame.lm:SetText(L["Loot master"] .. ": " .. session.lm)
-
-	local mine = ALC.Responses:GetMyResponse()
-	for _, button in ipairs(self.buttons) do
-		button:SetSelected(button.responseId == mine)
+	local count = #session.items
+	local visible = min(count, MAX_VISIBLE)
+	offset = max(0, min(offset, max(0, count - visible)))
+	for i = 1, POOL do
+		local item = session.items[offset + i]
+		if item and i <= visible then renderRow(self.rows[i], offset + i, item) else self.rows[i]:Hide() end
 	end
+	frame.scroll:SetHeight(visible * (ROW_H + ROW_GAP) - ROW_GAP)
+	frame.scroll:Update(count, visible, offset)
+	frame.lm:SetText(L["Loot master"] .. ": " .. session.lm)
+	frame:SetHeight(HEADER_H + 10 + visible * (ROW_H + ROW_GAP) - ROW_GAP + 14 + FOOTER_H)
 
+	local open = 0
+	for _, item in ipairs(session.items) do
+		if not item.winner then open = open + 1 end
+	end
+	local answered = ALC.Responses:CountMine()
 	if feedback then
 		frame.status:SetTextColor(c.danger[1], c.danger[2], c.danger[3], 1)
 		frame.status:SetText(feedback)
-	elseif mine then
+	elseif count == 1 and answered == 1 then
 		frame.status:SetTextColor(c.gold[1], c.gold[2], c.gold[3], 1)
-		frame.status:SetText(L["Your response: %s. You can change it until the session ends."]:format(ALC.Responses:GetLabel(mine)))
-	else
+		frame.status:SetText(L["Your response: %s. You can change it until the session ends."]:format(ALC.Responses:GetLabel(ALC.Responses:GetMyResponse(1))))
+	elseif count == 1 then
 		frame.status:SetTextColor(c.muted[1], c.muted[2], c.muted[3], 1)
 		frame.status:SetText(L["Pick one. The council sees it right away."])
+	else
+		local color = (answered >= count or open == 0) and c.gold or c.muted
+		frame.status:SetTextColor(color[1], color[2], color[3], 1)
+		frame.status:SetText(string.format(L["Answered %d of %d items. You can change an answer until its item is awarded."], answered, count))
 	end
 end
 
@@ -202,6 +274,7 @@ function ResponseWindow:Show()
 		end
 	end
 	feedback = nil
+	offset = 0
 	frame:Show()
 	ALC.Settings:SetWindowShown("response", true)
 	self:Refresh()
@@ -231,15 +304,21 @@ function ResponseWindow:Init()
 	local refresh = function() ResponseWindow:Refresh() end
 	register(self, "ALC_RESPONSES_CHANGED", refresh)
 	register(self, "ALC_LOOT_CHANGED", refresh)
+	register(self, "ALC_SESSION_ITEM_AWARDED", refresh)
 	register(self, "ALC_SESSION_STARTED", function(_, _, restored)
 		if not restored then ResponseWindow:Show() end
 	end)
 	register(self, "ALC_SESSION_SNAPSHOT", function(_, p)
-		reopen(p.yourResponse ~= nil)
+		reopen(p.yourResponses ~= nil)
 	end)
-	-- The loot master's own session came back; our answer is in the restored list.
-	register(self, "ALC_SESSION_RESTORED", function()
-		reopen(ALC.Candidates:Get(ALC:PlayerName()) ~= nil)
+	-- The loot master's own session came back; our answers are in the restored lists.
+	register(self, "ALC_SESSION_RESTORED", function(_, session)
+		-- Read from the candidates: the order in which modules hear of the event is not fixed.
+		local answered = false
+		for item = 1, #session.items do
+			if ALC.Candidates:Get(ALC:PlayerName(), item) then answered = true end
+		end
+		reopen(answered)
 	end)
 	register(self, "ALC_SESSION_ENDED", function() ResponseWindow:Hide() end)
 end

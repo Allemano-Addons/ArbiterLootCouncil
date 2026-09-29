@@ -66,7 +66,7 @@ return function(check)
 	check("thickness is 1 or 2", UI.AddBorder(holder, UI.color.gold, 3, 6).pieces[1].texture == UI.SHAPES .. "ring_r6_t1")
 
 	-- Each window has its own band of frame levels, so windows never mix when they overlap.
-	local loot, response, council = ALC.LootWindow.rows[1].parent, ALC.ResponseWindow.buttons[1].parent, ALC.CouncilWindow.rows[1].parent
+	local loot, response, council = ALC.LootWindow.rows[1].parent, ALC.ResponseWindow.rows[1].parent, ALC.CouncilWindow.rows[1].parent
 	check("windows sit in separate level bands", loot.level == 20 and response.level == 40 and council.level == 60)
 	check("and the clicked one comes to the front", loot.toplevel and response.toplevel and council.toplevel)
 

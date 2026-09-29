@@ -69,8 +69,10 @@ local function build()
 	AwardDialog.frame = frame
 end
 
--- Asks whether to award the running session's item to a candidate.
-function AwardDialog:Ask(name)
+-- Asks whether to award an item of the running session (the first when none is named)
+-- to a candidate.
+function AwardDialog:Ask(name, item)
+	item = item or 1
 	local session = ALC.Sessions:GetSession()
 	if not session then
 		ALC:Print(L["There is no active session."])
@@ -80,7 +82,16 @@ function AwardDialog:Ask(name)
 		ALC:Print(L["Only the loot master can award items."])
 		return
 	end
-	local entry = ALC.Candidates:Get(name)
+	local target = ALC.Sessions:GetItem(item)
+	if not target then
+		ALC:Print(L["That item is not in the session."])
+		return
+	end
+	if target.winner then
+		ALC:Print(L["That item has already been awarded."])
+		return
+	end
+	local entry = ALC.Candidates:Get(name, item)
 	if not entry then
 		ALC:Print(L["That player has not answered."])
 		return
@@ -88,8 +99,9 @@ function AwardDialog:Ask(name)
 
 	if not frame then build() end
 	self.candidate = entry.name
+	self.item = item
 
-	local display = ALC.LootDetection:GetItemDisplay({ itemString = session.itemString, itemID = session.itemID })
+	local display = ALC.LootDetection:GetItemDisplay({ itemString = target.itemString, itemID = target.itemID })
 	frame.icon:SetTexture(display.icon or UNKNOWN_ICON)
 	local qc = UI.QualityColor(display.quality)
 	frame.iconBorder:SetColor(qc)
@@ -100,25 +112,25 @@ function AwardDialog:Ask(name)
 	frame.winner:SetTextColor(cc[1], cc[2], cc[3], 1)
 	frame.winner:SetText(L["to"] .. " " .. entry.name)
 
-	local votes = ALC.Voting:GetVotes(entry.name)
+	local votes = ALC.Voting:GetVotes(entry.name, item)
 	frame.details:SetText(string.format("%s: %s  \194\183  %s: %d", L["Response"], ALC.Responses:GetLabel(entry.response), L["Votes"], votes))
-	frame.note:SetText(ALC.Awards:CanGiveNow(entry.name)
+	frame.note:SetText(ALC.Awards:CanGiveNow(entry.name, item)
 		and L["The item is handed out from the open loot window."]
 		or L["The loot window is not open for this item: it will be marked Awaiting trade and you trade it yourself."])
 	frame:Show()
 end
 
 function AwardDialog:Confirm()
-	local name = self.candidate
+	local name, item = self.candidate, self.item
 	self:Hide()
 	if not name then return end
-	local ok, message = ALC.Awards:Award(name)
+	local ok, message = ALC.Awards:Award(name, item)
 	if not ok and message then ALC:Print(message) end
 end
 
 function AwardDialog:Hide()
 	if frame then frame:Hide() end
-	self.candidate = nil
+	self.candidate, self.item = nil, nil
 end
 
 function AwardDialog:IsShown()
@@ -126,6 +138,9 @@ function AwardDialog:IsShown()
 end
 
 function AwardDialog:Init()
-	-- The question makes no sense once the session is over.
+	-- The question makes no sense once the session is over, or the item is awarded.
 	ALC.Events.Register(self, "ALC_SESSION_ENDED", function() AwardDialog:Hide() end)
+	ALC.Events.Register(self, "ALC_SESSION_ITEM_AWARDED", function(_, item)
+		if AwardDialog.item == item then AwardDialog:Hide() end
+	end)
 end

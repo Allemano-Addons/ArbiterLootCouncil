@@ -31,12 +31,12 @@ return function(check, H)
 	end
 	local function total() local n = 0 for _, c in pairs(accepted) do n = n + c end return n end
 
-	local function env(t, sid, seq, p) return { v = 1, t = t, sid = sid, seq = seq, p = p } end
+	local env = H.env
 	local function start()
-		return { itemID = 19019, itemString = "item:19019:0:0:0:0:0:0:0", council = { "Ashvane", "Veyra" }, lm = "Ashvane" }
+		return { items = { { itemID = 19019, itemString = "item:19019:0:0:0:0:0:0:0" } }, council = { "Ashvane", "Veyra" }, lm = "Ashvane" }
 	end
 	local function candidate()
-		return { name = "Jonatan", class = "WARRIOR", response = "UPGRADE", gear = { "item:12345:0:0:0" } }
+		return { item = 1, name = "Jonatan", class = "WARRIOR", response = "UPGRADE", gear = { "item:12345:0:0:0" } }
 	end
 	local function warnCount(pattern)
 		local n = 0
@@ -57,11 +57,21 @@ return function(check, H)
 	-- Step 1-2: envelope and type
 	----------------------------------------------------------------------------
 	rejects("non-table envelope", "junk", "RAID", "Ashvane")
-	rejects("missing payload", { v = 1, t = "SESSION_START", sid = "s", seq = 1 }, "RAID", "Ashvane")
-	rejects("wrong protocol version", { v = 2, t = "SESSION_START", sid = "s", seq = 1, p = start() }, "RAID", "Ashvane")
-	rejects("wrong protocol version again", { v = 2, t = "SESSION_START", sid = "s", seq = 2, p = start() }, "RAID", "Ashvane")
-	check("incompatible version logged once per sender", warnCount("incompatible protocol v2") == 1)
-	check("incompatible version recorded", Comm:GetVersions()["ashvane"].proto == 2)
+	rejects("missing payload", { v = 2, t = "SESSION_START", sid = "s", seq = 1 }, "RAID", "Ashvane")
+	rejects("wrong protocol version", { v = 1, t = "SESSION_START", sid = "s", seq = 1, p = start() }, "RAID", "Ashvane")
+	rejects("wrong protocol version again", { v = 1, t = "SESSION_START", sid = "s", seq = 2, p = start() }, "RAID", "Ashvane")
+	check("incompatible version logged once per sender", warnCount("incompatible protocol v1") == 1)
+	check("incompatible version recorded", Comm:GetVersions()["ashvane"].proto == 1)
+	local notices = 0
+	for _, line in ipairs(H.chat) do
+		if line:find("another version of the addon", 1, true) then notices = notices + 1 end
+	end
+	check("the player is told once, in chat, that a group member has another version", notices == 1)
+	check("and it names the protocol", (function()
+		for _, line in ipairs(H.chat) do
+			if line:find("another version of the addon", 1, true) then return line:find("Ashvane", 1, true) and line:find("v1", 1, true) and line:find("v2", 1, true) end
+		end
+	end)() ~= nil)
 	rejects("unknown type", env("HACK", nil, nil, {}), "RAID", "Ashvane")
 	rejects("no sender", env("VERSION_REQUEST", nil, nil, {}), "RAID", nil)
 
@@ -109,11 +119,11 @@ return function(check, H)
 	-- Step 6: payloads. High seq so only the payload can be the reason.
 	----------------------------------------------------------------------------
 	local bad = {
-		{ "SESSION_START itemString/itemID mismatch", "SESSION_START", "sidX", function(p) p.itemString = "item:1:0" end, "RAID", "Ashvane" },
+		{ "SESSION_START itemString/itemID mismatch", "SESSION_START", "sidX", function(p) p.items[1].itemString = "item:1:0" end, "RAID", "Ashvane" },
 		{ "SESSION_START lm is not the sender", "SESSION_START", "sidX", function(p) p.lm = "Veyra" end, "RAID", "Ashvane" },
 		{ "SESSION_START council too big", "SESSION_START", "sidX", function(p) p.council = {} for i = 1, 41 do p.council[i] = "Name" .. i end end, "RAID", "Ashvane" },
-		{ "SESSION_START itemString injection", "SESSION_START", "sidX", function(p) p.itemString = "item:19019|cffff0000" end, "RAID", "Ashvane" },
-		{ "SESSION_START negative itemID", "SESSION_START", "sidX", function(p) p.itemID = -5 end, "RAID", "Ashvane" },
+		{ "SESSION_START itemString injection", "SESSION_START", "sidX", function(p) p.items[1].itemString = "item:19019|cffff0000" end, "RAID", "Ashvane" },
+		{ "SESSION_START negative itemID", "SESSION_START", "sidX", function(p) p.items[1].itemID = -5 end, "RAID", "Ashvane" },
 		{ "SESSION_START council name with |", "SESSION_START", "sidX", function(p) p.council = { "Bad|cffff0000Name" } end, "RAID", "Ashvane" },
 	}
 	for _, c in ipairs(bad) do
@@ -144,12 +154,12 @@ return function(check, H)
 	-- STATE_SNAPSHOT: council view and raider view.
 	local snapshot = start()
 	snapshot.candidates = { candidate() }
-	snapshot.votes = { { candidate = "Jonatan", voters = { "Veyra" } } }
-	snapshot.yourVote = "Jonatan"
+	snapshot.votes = { { item = 1, candidate = "Jonatan", voters = { "Veyra" } } }
+	snapshot.yourVotes = { { item = 1, candidate = "Jonatan" } }
 	check("council snapshot accepted", Comm:Process(env("STATE_SNAPSHOT", "sid1", 101, snapshot), "WHISPER", "Ashvane") == true)
-	check("raider snapshot accepted", Comm:Process(env("STATE_SNAPSHOT", "sid1", 102, (function() local p = start() p.yourResponse = "PASS" return p end)()), "WHISPER", "Ashvane") == true)
+	check("raider snapshot accepted", Comm:Process(env("STATE_SNAPSHOT", "sid1", 102, (function() local p = start() p.yourResponses = { { item = 1, response = "PASS" } } return p end)()), "WHISPER", "Ashvane") == true)
 	local badSnap = start()
-	badSnap.candidates = { { name = "Jonatan", class = "WARRIOR", response = "NOPE", gear = {} } }
+	badSnap.candidates = { { item = 1, name = "Jonatan", class = "WARRIOR", response = "NOPE", gear = {} } }
 	rejects("snapshot with a bad candidate", env("STATE_SNAPSHOT", "sid1", 103, badSnap), "WHISPER", "Ashvane")
 
 	----------------------------------------------------------------------------
@@ -175,7 +185,7 @@ return function(check, H)
 	before = total()
 	check("non-LM cannot send SESSION_CANCEL", Comm:SendRaid("SESSION_CANCEL", "sid1", { reason = "x" }) == false)
 	check("nothing sent or delivered", #H.sent == 0 and total() == before)
-	check("wrong channel refused", Comm:SendWhisper("Veyra", "AWARD", "sid1", { winner = "Jonatan", itemID = 19019, response = "BIS" }) == false)
+	check("wrong channel refused", Comm:SendWhisper("Veyra", "AWARD", "sid1", { item = 1, winner = "Jonatan", itemID = 19019, response = "BIS" }) == false)
 	check("invalid payload refused", Comm:SendWhisper("Veyra", "VOTE", "sid1", { candidate = 42 }) == false)
 	check("missing target refused", Comm:SendWhisper("", "STATE_REQUEST", nil, {}) == false)
 
@@ -189,10 +199,10 @@ return function(check, H)
 	check("sent on the raid channel", #H.sent == 1 and H.sent[1].dist == "RAID" and H.sent[1].prefix == "ALC")
 	check("loopback delivered it to ourselves", last.SESSION_START.sid == "sidLM" and last.SESSION_START.sender == "Tester Moo" and last.SESSION_START.seq == 1)
 	check("loopback is an independent copy", last.SESSION_START.p ~= mine)
-	check("LM sends AWARD with the next seq", Comm:SendRaid("AWARD", "sidLM", { winner = "Jonatan", itemID = 19019, response = "BIS" }) == true)
+	check("LM sends AWARD with the next seq", Comm:SendRaid("AWARD", "sidLM", { item = 1, winner = "Jonatan", itemID = 19019, response = "BIS" }) == true)
 	check("seq increments per session", last.AWARD.seq == 2)
 	local okDecode, decoded = AceSerializer:Deserialize(H.sent[2].text)
-	check("wire message is a valid envelope", okDecode and decoded.v == 1 and decoded.t == "AWARD" and decoded.seq == 2 and decoded.sid == "sidLM")
+	check("wire message is a valid envelope", okDecode and decoded.v == 2 and decoded.t == "AWARD" and decoded.seq == 2 and decoded.sid == "sidLM")
 
 	-- Solo: no network traffic, still delivered locally.
 	H.inRaid = false
@@ -213,7 +223,7 @@ return function(check, H)
 	H.sent = {}
 	acceptedBefore = accepted.VOTE_UPDATE or 0
 	check("council fan-out", Comm:SendCouncil({ "Veyra", "veyra", "Tester Moo", "Allemano Moo" }, "VOTE_UPDATE", "sidLM",
-		{ candidate = "Jonatan", votes = 1, voters = { "Veyra" } }) == true)
+		{ item = 1, candidate = "Jonatan", votes = 1, voters = { "Veyra" } }) == true)
 	check("one whisper per distinct remote target", #H.sent == 2 and H.sent[1].target == "Veyra" and H.sent[2].target == "Allemano Moo")
 	check("self got it by loopback", accepted.VOTE_UPDATE == acceptedBefore + 1)
 	local _, e1 = AceSerializer:Deserialize(H.sent[1].text)
@@ -232,7 +242,7 @@ return function(check, H)
 	Comm:OnCommReceived("ALC", AceSerializer:Serialize(env("VERSION_REQUEST", nil, nil, {})), "RAID", "Jonatan")
 	check("version request answered by whisper", #H.sent == 1 and H.sent[1].dist == "WHISPER" and H.sent[1].target == "Jonatan")
 	local _, reply = AceSerializer:Deserialize(H.sent[1].text)
-	check("reply carries our versions", reply.t == "VERSION" and reply.p.addon == ALC.version and reply.p.proto == 1)
+	check("reply carries our versions", reply.t == "VERSION" and reply.p.addon == ALC.version and reply.p.proto == 2)
 	Comm:OnCommReceived("ALC", AceSerializer:Serialize(env("VERSION", nil, nil, { addon = "0.1.0", proto = 1 })), "WHISPER", "Veyra")
 	check("version reply recorded", Comm:GetVersions()["veyra"].addon == "0.1.0")
 

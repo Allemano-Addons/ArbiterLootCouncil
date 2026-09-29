@@ -183,6 +183,26 @@ end
 
 function H.slash(input) SlashCmdList["ALC"](input) end
 
+-- Builds a protocol envelope. Payloads written for a single-item session (itemID and
+-- itemString at the top, no `item`) are upgraded, so most tests need not spell out items.
+local ITEM_TYPES = { RESPONSE = true, CANDIDATE_UPDATE = true, VOTE = true, VOTE_UPDATE = true, AWARD = true }
+function H.env(t, sid, seq, p)
+	if type(p) == "table" then
+		if (t == "SESSION_START" or t == "STATE_SNAPSHOT") and p.itemID and not p.items then
+			p.items = { { itemID = p.itemID, itemString = p.itemString } }
+			p.itemID, p.itemString = nil, nil
+		end
+		if t == "STATE_SNAPSHOT" then
+			for _, c in ipairs(p.candidates or {}) do c.item = c.item or 1 end
+			for _, v in ipairs(p.votes or {}) do v.item = v.item or 1 end
+			if p.yourResponse then p.yourResponses = { { item = 1, response = p.yourResponse } }; p.yourResponse = nil end
+			if p.yourVote then p.yourVotes = { { item = 1, candidate = p.yourVote } }; p.yourVote = nil end
+		end
+		if ITEM_TYPES[t] and p.item == nil then p.item = 1 end
+	end
+	return { v = 2, t = t, sid = sid, seq = seq, p = p }
+end
+
 -- Runs the timers held back while H.deferTimers was on.
 function H.runTimers()
 	local due = H.timers

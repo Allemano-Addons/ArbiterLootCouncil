@@ -109,9 +109,10 @@ local function find(id)
 	end
 end
 
-local function findBySid(sid)
+-- The entry of one item of a session (item 1 when none is named).
+local function findBySid(sid, item)
 	for _, entry in ipairs(store.items) do
-		if entry.sid == sid then return entry end
+		if entry.sid == sid and (entry.item or 1) == (item or 1) then return entry end
 	end
 end
 
@@ -204,6 +205,10 @@ end
 --------------------------------------------------------------------------------
 -- Starting a session from the list
 --------------------------------------------------------------------------------
+local function clearStarting()
+	for _, entry in ipairs(store.items) do entry.starting = nil end
+end
+
 function LootDetection:StartSession(id)
 	local entry = find(id)
 	if not entry then return false, L["That item is no longer in the list."] end
@@ -217,37 +222,82 @@ function LootDetection:StartSession(id)
 	return true
 end
 
--- Ties a running session to a list entry: the one being started, else a waiting
--- item of the same kind, else a new entry (a session started by /alc start or /alc test).
+-- The items that wait for a session, in list order.
+function LootDetection:GetPending()
+	local list = {}
+	for _, entry in ipairs(store.items) do
+		if entry.status == STATUS.PENDING then list[#list + 1] = copyEntry(entry) end
+	end
+	return list
+end
+
+-- Starts one session for every item that waits (at most as many as a session holds).
+function LootDetection:StartAll()
+	local max = ALC.Constants.MAX_SESSION_ITEMS
+	local entries, strings = {}, {}
+	for _, entry in ipairs(store.items) do
+		if entry.status == STATUS.PENDING and #entries < max then
+			entries[#entries + 1] = entry
+			strings[#strings + 1] = entry.itemString
+		end
+	end
+	if #entries == 0 then return false, L["No items are waiting for a session."] end
+	for _, entry in ipairs(entries) do entry.starting = true end
+	local ok, result = ALC.Sessions:StartItems(strings)
+	if not ok then
+		clearStarting()
+		return false, result
+	end
+	return true, #entries
+end
+
+-- Ties the items of a running session to list entries. Item by item: the entry that was
+-- being started (in order), else a waiting entry of the same kind, else a new entry (a
+-- session started by /alc start or /alc test).
 local function onSessionStarted(_, session)
 	if not session.isLM then return end
-	-- A session restored after a reload belongs to the entry that started it.
-	local restored = findBySid(session.sid)
-	if restored then
-		restored.starting = nil
-		restored.status = STATUS.SESSION
+	-- A session restored after a reload belongs to the entries that started it.
+	local restoredAny = false
+	for i = 1, #session.items do
+		local restored = findBySid(session.sid, i)
+		if restored then
+			restored.starting = nil
+			if not session.items[i].winner and restored.status ~= STATUS.AWARDED and restored.status ~= STATUS.TRADE then
+				restored.status = STATUS.SESSION
+			end
+			restoredAny = true
+		end
+	end
+	if restoredAny then
 		changed()
 		return
 	end
-	local target
+
+	local starting = {}
 	for _, entry in ipairs(store.items) do
-		if entry.starting then target = entry break end
+		if entry.starting then starting[#starting + 1] = entry end
 	end
-	if not target then
-		for _, entry in ipairs(store.items) do
-			if entry.status == STATUS.PENDING and entry.itemID == session.itemID then target = entry break end
+	local used, created = {}, 0
+	for i, item in ipairs(session.items) do
+		local target = table.remove(starting, 1)
+		if not target then
+			for _, entry in ipairs(store.items) do
+				if entry.status == STATUS.PENDING and entry.itemID == item.itemID and not used[entry] then target = entry break end
+			end
 		end
+		if not target then
+			target = newEntry(item.itemString, item.itemID, itemQuality(item.itemString), "session")
+			created = created + 1
+		end
+		used[target] = true
+		target.starting = nil
+		target.status = STATUS.SESSION
+		target.sid = session.sid
+		target.item = i
 	end
-	local created = false
-	if not target then
-		target = newEntry(session.itemString, session.itemID, itemQuality(session.itemString), "session")
-		created = true
-	end
-	target.starting = nil
-	target.status = STATUS.SESSION
-	target.sid = session.sid
+	clearStarting()
 	changed()
-	if created then ALC.Events:Fire("ALC_LOOT_ADDED", 1) end
+	if created > 0 then ALC.Events:Fire("ALC_LOOT_ADDED", created) end
 end
 
 -- An awarded item is "awarded", or "trade" while it still has to be traded to the winner.
@@ -255,16 +305,24 @@ local function awardedStatus(entry)
 	return entry.trade and STATUS.TRADE or STATUS.AWARDED
 end
 
+-- Items still in the session go back to waiting, unless they were all awarded.
 local function onSessionEnded(_, sid, reason)
-	local entry = findBySid(sid)
-	if not entry then return end
-	entry.starting = nil
-	entry.status = (reason == "awarded") and awardedStatus(entry) or STATUS.PENDING
-	changed()
+	local touched = false
+	for _, entry in ipairs(store.items) do
+		if entry.sid == sid then
+			entry.starting = nil
+			if entry.status == STATUS.SESSION then
+				entry.status = (reason == "awarded") and awardedStatus(entry) or STATUS.PENDING
+				if entry.status == STATUS.PENDING then entry.sid, entry.item = nil, nil end
+			end
+			touched = true
+		end
+	end
+	if touched then changed() end
 end
 
 local function onAward(_, _, sid, p)
-	local entry = findBySid(sid)
+	local entry = findBySid(sid, p.item)
 	if not entry then return end
 	entry.winner = p.winner
 	entry.awardedAt = time()
@@ -275,8 +333,8 @@ end
 -- The item of this session has to be traded to the winner (Awards calls this when it
 -- could not be handed out through the loot window). Works before or after the AWARD
 -- message is handled.
-function LootDetection:MarkAwaitingTrade(sid)
-	local entry = findBySid(sid)
+function LootDetection:MarkAwaitingTrade(sid, item)
+	local entry = findBySid(sid, item)
 	if not entry then return false end
 	entry.trade = true
 	if entry.status == STATUS.AWARDED then entry.status = STATUS.TRADE end

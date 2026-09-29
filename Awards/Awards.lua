@@ -3,7 +3,7 @@
 -- Award(name) does, in this order:
 --   1. finds out whether the item can be handed out now (loot window open, we are the
 --      master looter and the winner is a loot candidate);
---   2. broadcasts AWARD, which ends the session for everybody;
+--   2. broadcasts AWARD for that item (the session ends for everybody when its last item is awarded);
 --   3. gives the item with GiveMasterLoot, or marks it "Awaiting trade";
 --   4. announces the winner in raid chat;
 --   5. appends a line to the award log.
@@ -79,16 +79,16 @@ function Awards:FindGiveTarget(itemID, winner)
 end
 
 -- True when Award would hand the item out at once (used by the confirmation dialog).
-function Awards:CanGiveNow(winner)
-	local session = ALC.Sessions:GetSession()
-	return session ~= nil and self:FindGiveTarget(session.itemID, winner) ~= nil
+function Awards:CanGiveNow(winner, item)
+	local target = ALC.Sessions:GetItem(item or 1)
+	return target ~= nil and self:FindGiveTarget(target.itemID, winner) ~= nil
 end
 
 --------------------------------------------------------------------------------
 -- Announcing and logging
 --------------------------------------------------------------------------------
-local function announce(session, entry)
-	local link = select(2, ALC:GetItemInfo(session.itemString)) or ("[item:" .. session.itemID .. "]")
+local function announce(target, entry)
+	local link = select(2, ALC:GetItemInfo(target.itemString)) or ("[item:" .. target.itemID .. "]")
 	local text = format("[ALC] %s -> %s (%s)", link, entry.name, ALC.Responses:GetLabel(entry.response))
 	lastAnnouncement = text
 	local channel = (IsInRaid() and "RAID") or (IsInGroup() and "PARTY") or nil
@@ -100,11 +100,11 @@ local function announce(session, entry)
 	ALC.Events:Fire("ALC_AWARDS_ANNOUNCED", text)
 end
 
-local function logAward(session, entry, votes)
+local function logAward(session, target, entry, votes)
 	local log = ALC.Settings:GetAwardLog()
 	log[#log + 1] = {
-		itemID = session.itemID,
-		itemString = session.itemString,
+		itemID = target.itemID,
+		itemString = target.itemString,
 		winner = entry.name,
 		class = entry.class,
 		response = entry.response,
@@ -120,26 +120,31 @@ end
 -- Award
 --------------------------------------------------------------------------------
 
--- Awards the item of the running session to a candidate. Returns true, or false and a message.
-function Awards:Award(name)
+-- Awards an item of the running session (the first when none is named) to a candidate.
+-- Returns true, or false and a message.
+function Awards:Award(name, item)
+	item = item or 1
 	local session = ALC.Sessions:GetSession()
 	if not session then return false, L["There is no active session."] end
 	if not session.isLM or not ALC.Council:AmLootMaster() then
 		return false, L["Only the loot master can award items."]
 	end
-	local entry = ALC.Candidates:Get(name)
+	local target = session.items[item]
+	if not target then return false, L["That item is not in the session."] end
+	if target.winner then return false, L["That item has already been awarded."] end
+	local entry = ALC.Candidates:Get(name, item)
 	if not entry then return false, L["That player has not answered."] end
 	if entry.response == "PASS" then return false, L["That player passed."] end
 
-	local votes = ALC.Voting:GetVotes(entry.name)
-	local slot, index = self:FindGiveTarget(session.itemID, entry.name)
+	local votes = ALC.Voting:GetVotes(entry.name, item)
+	local slot, index = self:FindGiveTarget(target.itemID, entry.name)
 	-- An item that is awarded to the loot master is already in the loot master's bags.
 	if not slot and not ALC:SameName(entry.name, ALC:PlayerName()) then
-		ALC.LootDetection:MarkAwaitingTrade(session.sid)
+		ALC.LootDetection:MarkAwaitingTrade(session.sid, item)
 	end
 
 	local sent = ALC.Comm:SendRaid("AWARD", session.sid,
-		{ winner = entry.name, itemID = session.itemID, response = entry.response })
+		{ item = item, winner = entry.name, itemID = target.itemID, response = entry.response })
 	if not sent then
 		return false, L["Could not send the award. See /alc debug log."]
 	end
@@ -147,20 +152,20 @@ function Awards:Award(name)
 	if slot then
 		local ok, err = pcall(GiveMasterLoot, slot, index)
 		if ok then
-			pendingGive = { slot = slot, sid = session.sid, winner = entry.name, itemString = session.itemString }
+			pendingGive = { slot = slot, sid = session.sid, item = item, winner = entry.name, itemString = target.itemString }
 			local waiting = pendingGive
 			C_Timer.After(GIVE_TIMEOUT, function() Awards:OnGiveTimeout(waiting) end)
 		else
 			Debug:Error("Awards", "GiveMasterLoot failed: %s", tostring(err))
-			ALC.LootDetection:MarkAwaitingTrade(session.sid)
+			ALC.LootDetection:MarkAwaitingTrade(session.sid, item)
 			ALC:Print(L["Could not hand out the item. Trade it to %s."], entry.name)
 		end
 	end
 
 	-- Log first: the announcement refreshes windows that read the log (the history).
-	logAward(session, entry, votes)
-	announce(session, entry)
-	Debug:Log("Awards", "%s -> %s (%s, %d votes, %s)", session.itemString, entry.name, entry.response, votes,
+	logAward(session, target, entry, votes)
+	announce(target, entry)
+	Debug:Log("Awards", "%s -> %s (%s, %d votes, %s)", target.itemString, entry.name, entry.response, votes,
 		slot and "given" or "awaiting trade")
 	return true
 end
@@ -177,7 +182,7 @@ end
 function Awards:OnGiveTimeout(waiting)
 	if pendingGive ~= waiting then return end
 	pendingGive = nil
-	ALC.LootDetection:MarkAwaitingTrade(waiting.sid)
+	ALC.LootDetection:MarkAwaitingTrade(waiting.sid, waiting.item)
 	ALC:Print(L["%s was not handed out. Trade it to %s."], select(2, ALC:GetItemInfo(waiting.itemString)) or waiting.itemString, waiting.winner)
 end
 
@@ -191,10 +196,12 @@ end
 function Awards:SetLootOpen(open) lootOpen = open and true or false end
 
 ALC.Commands:Register("award", function(arg)
-	if arg == "" then
-		ALC:Print(L["Usage: /alc award <name>"])
+	-- /alc award <name> [item number]
+	local name, number = string.match(arg or "", "^(.-)%s*(%d*)$")
+	if not name or name == "" then
+		ALC:Print(L["Usage: /alc award <name> [item number]"])
 		return
 	end
-	local ok, message = Awards:Award(arg)
+	local ok, message = Awards:Award(name, tonumber(number) or 1)
 	if not ok then ALC:Print(message) end
 end, L["award the item to a candidate, without asking (loot master)"])

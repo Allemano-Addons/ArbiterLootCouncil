@@ -7,7 +7,7 @@ return function(check, H)
 	local AceSerializer = LibStub("AceSerializer-3.0")
 	local ME = "Tester Moo"
 
-	local function env(t, sid, seq, p) return { v = 1, t = t, sid = sid, seq = seq, p = p } end
+	local env = H.env
 
 	----------------------------------------------------------------------------
 	-- Fake item data
@@ -146,7 +146,7 @@ return function(check, H)
 	check("start a session", Sessions:Start(200) == true and Sessions:IsActive())
 	check("the response window opens for a new session", Win:IsShown())
 	check("no response yet", Responses:GetMyResponse() == nil)
-	check("there are five buttons", #Win.buttons == 5)
+	check("there are five buttons", #Win.rows[1].buttons == 5)
 	H.sent = {}
 
 	check("send a response", Responses:Send("UPGRADE") == true)
@@ -202,12 +202,12 @@ return function(check, H)
 	Comm:Process(env("STATE_REQUEST", nil, nil, {}), "WHISPER", "Veyra Moo")
 	local _, councilSnap = AceSerializer:Deserialize(H.sent[1].text)
 	check("a council member gets the candidates", councilSnap.p.candidates ~= nil and #councilSnap.p.candidates == 3)
-	check("and their own response", councilSnap.p.yourResponse == "UPGRADE")
+	check("and their own response", councilSnap.p.yourResponses[1].response == "UPGRADE" and councilSnap.p.yourResponses[1].item == 1)
 	H.sent = {}
 	H.clock = H.clock + 100
 	Comm:Process(env("STATE_REQUEST", nil, nil, {}), "WHISPER", "Jonatan Moo")
 	local _, raiderSnap = AceSerializer:Deserialize(H.sent[1].text)
-	check("a raider gets no candidates but their own response", raiderSnap.p.candidates == nil and raiderSnap.p.yourResponse == "PASS")
+	check("a raider gets no candidates but their own response", raiderSnap.p.candidates == nil and raiderSnap.p.yourResponses[1].response == "PASS")
 	H.sent = {}
 	H.clock = H.clock + 100
 	Comm:Process(env("STATE_REQUEST", nil, nil, {}), "WHISPER", "Kaelis Moo")
@@ -225,19 +225,19 @@ return function(check, H)
 	check("/alc respond opens the window", Win:IsShown())
 
 	-- The window.
-	local buttons = Win.buttons
+	local buttons = Win.rows[1].buttons
 	check("the selected button is highlighted", buttons[3].selected == true and buttons[1].selected == false)
 	buttons[1].scripts.OnClick(buttons[1])
 	check("clicking a button answers", Responses:GetMyResponse() == "BIS" and buttons[1].selected == true and buttons[3].selected == false)
-	local status = buttons[1].parent.status:GetText()
+	local status = Win.rows[1].parent.status:GetText()
 	check("the status shows the answer", status:find("BiS", 1, true) ~= nil)
 	local realSend = Comm.SendWhisper
 	Comm.SendWhisper = function() return false end
 	buttons[2].scripts.OnClick(buttons[2])
-	check("a failed send is reported, not remembered", Responses:GetMyResponse() == "BIS" and buttons[2].parent.status:GetText():find("Could not", 1, true) ~= nil)
+	check("a failed send is reported, not remembered", Responses:GetMyResponse() == "BIS" and Win.rows[1].parent.status:GetText():find("Could not", 1, true) ~= nil)
 	Comm.SendWhisper = realSend
-	local frame = buttons[1].parent
-	check("the window shows the item", frame.name:GetText() == "Crown of Destruction" and frame.icon.texture == 133101)
+	local frame = Win.rows[1].parent
+	check("the window shows the item", Win.rows[1].name:GetText() == "Crown of Destruction" and Win.rows[1].icon.texture == 133101)
 	check("and the loot master", frame.lm:GetText():find(ME, 1, true) ~= nil)
 	frame.header.scripts.OnDragStop(frame.header)
 	check("the window position is saved", ALC.Settings:GetWindowPosition("response") ~= nil)

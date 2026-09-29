@@ -182,6 +182,11 @@ function Comm:Process(env, distribution, sender)
 		if not versionWarned:get(sender) then
 			versionWarned:set(sender, true)
 			Debug:Warn("Comm", "%s uses incompatible protocol v%s (ours is v%d)", sender, tostring(env.v), Protocol.VERSION)
+			-- Without this the two of you would just not see each other's sessions.
+			if Comm:IsGroupMember(sender) then
+				ALC:Print(ALC.L["%s has another version of the addon (protocol v%s, yours is v%d). Update it to play together."],
+					sender, tostring(env.v), Protocol.VERSION)
+			end
 		end
 		if env.v == floor(env.v) and env.v >= 0 and env.v <= 9999 then
 			recordVersion(sender, nil, env.v)
@@ -248,6 +253,15 @@ function Comm:Process(env, distribution, sender)
 	if not ok then
 		reject(sender, t, "invalid payload: " .. tostring(reason))
 		return false
+	end
+
+	-- The item a message is about has to be one of the active session's items.
+	if spec.sid == "active" and env.p.item ~= nil then
+		local sessions = ALC.Sessions
+		if sessions and sessions.GetItemCount and env.p.item > sessions:GetItemCount() then
+			reject(sender, t, "item out of range")
+			return false
+		end
 	end
 
 	-- Accepted

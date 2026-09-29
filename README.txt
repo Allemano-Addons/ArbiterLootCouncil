@@ -1,4 +1,6 @@
-Arbiter Loot Council (ALC) 0.1.0 - test build
+Arbiter Loot Council (ALC) 0.2.0-alpha1 - test build
+NOTE: this version cannot talk to 0.1.x. Everybody in the raid needs the same version;
+a player with the old one is named in chat when the addon notices.
 Part of Allemano Addons. For WoW Forever.
 
 INSTALL
@@ -11,10 +13,13 @@ QUICK START
   Loot master:
     /alc council add <First Last>   who is on the council (once, before raid)
     /alc add [item link]            put an item in the loot list (loot from bosses is added by itself)
-    Click Start on an item in the loot window.
-  Everybody: answer in the "Loot response" window (BiS, Upgrade, Minor, Offspec, Pass).
+    Click Start on an item in the loot window, or Start all for one session with every
+    waiting item (up to 20). The council window then shows the items as icons to the left:
+    click one to see its candidates. Each item is awarded on its own; the session ends
+    with the last one, or with Stop session / Cancel session.
+  Everybody: answer in the "Loot response" window (BiS, Upgrade, Minor, Offspec, Pass), one row per item.
   Council: vote in the council window (/alc vote). Loot master: Award.
-  Solo test: /alc test
+  Solo test: /alc test         (/alc test 5 uses the five best items in your bags)
 
 USEFUL
   /alc            list all commands

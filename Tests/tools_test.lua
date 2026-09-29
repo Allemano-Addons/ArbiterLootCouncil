@@ -9,7 +9,7 @@ return function(check, H)
 	local Settings, Win, Launcher, Button = ALC.Settings, ALC.SettingsWindow, ALC.Launcher, ALC.MinimapButton
 	local frame
 
-	local function env(t, sid, seq, p) return { v = 1, t = t, sid = sid, seq = seq, p = p } end
+	local env = H.env
 	local function hasText(list, text)
 		for _, line in ipairs(list) do
 			if line:find(text, 1, true) then return true end

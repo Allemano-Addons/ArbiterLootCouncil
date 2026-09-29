@@ -6,7 +6,7 @@ return function(check, H)
 	local AceSerializer = LibStub("AceSerializer-3.0")
 	local ME = "Tester Moo"
 
-	local function env(t, sid, seq, p) return { v = 1, t = t, sid = sid, seq = seq, p = p } end
+	local env = H.env
 
 	-- The world after each reload: the fake party, item data and who leads.
 	local leader = ME
@@ -86,7 +86,7 @@ return function(check, H)
 	check("the session is restored for the loot master", Sessions:GetActiveSid() == sid)
 	local restored = Sessions:GetSession()
 	check("it knows it is the loot master and on the council", restored.isLM and restored.isCouncil and restored.restored)
-	check("the item and council are the same", restored.itemID == 200 and #restored.council == 2)
+	check("the item and council are the same", restored.items[1].itemID == 200 and #restored.council == 2)
 	check("the candidates are back", #Candidates:GetList() == 2 and Candidates:Get("Veyra Moo").response == "BIS"
 		and Candidates:Get(ME).response == "UPGRADE")
 	check("our own answer is back", Responses:GetMyResponse() == "UPGRADE")
@@ -106,7 +106,7 @@ return function(check, H)
 	check("the loot master's next message continues the numbering", update ~= nil and update.seq == seqBefore + 1 and update.sid == sid)
 
 	-- The session works as before.
-	check("the loot master can award it", Comm:SendRaid("AWARD", sid, { winner = "Veyra Moo", itemID = 200, response = "BIS" }) == true)
+	check("the loot master can award it", Comm:SendRaid("AWARD", sid, { item = 1, winner = "Veyra Moo", itemID = 200, response = "BIS" }) == true)
 	check("which ends it and clears what was saved", not Sessions:IsActive()
 		and ALC.Settings:GetSessionStore().session == nil and ALC.Settings:GetSessionStore().candidates == nil)
 	check("and the entry is awarded", LD:GetEntry(entryId).status == LD.STATUS.AWARDED and LD:GetEntry(entryId).winner == "Veyra Moo")
