@@ -250,9 +250,9 @@ return function(check, H)
 	----------------------------------------------------------------------------
 	reset()
 	setGroup({}, nil)
-	local realGetItemInfo = GetItemInfo
+	local realGetItemInfo = C_Item.GetItemInfo
 	local qualities = { ["item:100"] = 1, ["item:200"] = 4, ["item:300"] = 3 }
-	GetItemInfo = function(link) local q = qualities[link:match("(item:%d+)")]; return "Name", link, q end
+	C_Item.GetItemInfo = function(link) local q = qualities[link:match("(item:%d+)")]; return "Name", link, q end
 	ALC.TestMode.GetBagItemLinks = function() return { "|Hitem:100|h[a]|h", "|Hitem:200|h[b]|h", "|Hitem:300|h[c]|h" } end
 	check("test mode picks the best item", ALC.TestMode:PickItem():find("item:200", 1, true) ~= nil)
 	local okT = ALC.TestMode:Start()
@@ -278,7 +278,7 @@ return function(check, H)
 	H.slash("cancel")
 	check("/alc cancel", not Sessions:IsActive())
 	H.slash("test")
-	GetItemInfo = realGetItemInfo
+	C_Item.GetItemInfo = realGetItemInfo
 	ALC.TestMode.GetBagItemLinks = function() return {} end
 	H.slash("cancel")
 	H.slash("debug lm")

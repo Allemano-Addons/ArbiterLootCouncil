@@ -30,7 +30,7 @@ end
 function TestMode:PickItem()
 	local best, bestQuality
 	for _, link in ipairs(self.GetBagItemLinks()) do
-		local quality = select(3, GetItemInfo(link)) or -1
+		local quality = select(3, ALC:GetItemInfo(link)) or -1
 		if not best or quality > bestQuality then best, bestQuality = link, quality end
 	end
 	return best

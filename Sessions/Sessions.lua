@@ -301,14 +301,14 @@ ALC.Commands:Register("status", function()
 		ALC:Print(L["No active session."])
 		return
 	end
-	local link = select(2, GetItemInfo(session.itemString)) or session.itemString
+	local link = select(2, ALC:GetItemInfo(session.itemString)) or session.itemString
 	ALC:Print(L["Session %s: %s, loot master %s, council of %d%s."], session.sid, link, session.lm,
 		#session.council, session.isCouncil and (", " .. L["you are on the council"]) or "")
 end, L["show the active session"])
 
 -- Temporary chat feedback until the windows exist.
 ALC.Events.Register(Sessions, "ALC_SESSION_STARTED", function(_, s, restored)
-	local link = select(2, GetItemInfo(s.itemString)) or s.itemString
+	local link = select(2, ALC:GetItemInfo(s.itemString)) or s.itemString
 	ALC:Print(restored and L["Session restored: %s (loot master %s)."] or L["Session started: %s (loot master %s)."], link, s.lm)
 end)
 

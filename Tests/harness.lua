@@ -22,7 +22,9 @@ function H.setup()
 	GetAddOnMetadata = function() return "test" end
 	geterrorhandler = function() return print end
 	UnitName = function(unit) if unit == "player" then return "Tester", "Moo" end end
-	GetItemInfo = function() end
+	-- The client has no global GetItemInfo; it lives in C_Item.
+	GetItemInfo = nil
+	C_Item = { GetItemInfo = function() end }
 	UnitClass = function() return "Rogue", "ROGUE" end
 	UnitRace = function() return "Human", "Human" end
 	time, date = os.time, os.date

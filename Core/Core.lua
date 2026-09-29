@@ -72,6 +72,13 @@ function ALC:SameName(a, b)
 	return a ~= nil and b ~= nil and strlower(a) == strlower(b)
 end
 
+-- GetItemInfo moved into C_Item on newer clients (the global is gone on WoW Forever).
+function ALC:GetItemInfo(item)
+	local fn = (C_Item and C_Item.GetItemInfo) or GetItemInfo
+	if not fn then return nil end
+	return fn(item)
+end
+
 function ALC:Print(msg, ...)
 	if select("#", ...) > 0 then msg = format(msg, ...) end
 	DEFAULT_CHAT_FRAME:AddMessage("|cffE6A93C[ALC]|r " .. tostring(msg))
