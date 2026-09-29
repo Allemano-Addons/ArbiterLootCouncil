@@ -246,7 +246,7 @@ return function(check, H)
 	Win:Hide()
 	check("the window can be hidden", not Win:IsShown())
 	Win:Show()
-	check("the window is shown", Win:IsShown() and #rows == 8)
+	check("the window is shown, with a pool of rows to scroll through", Win:IsShown() and #rows == 24)
 	check("empty list: no rows", not rows[1]:IsShown() and rows[1].entry == nil)
 	local frame = rows[1].parent
 	check("empty list: the hint is shown", frame.empty:IsShown() == true)
@@ -319,6 +319,54 @@ return function(check, H)
 	for _ = 1, 10 do frame.scripts.OnMouseWheel(frame, 1) end
 	check("and at the top", rows[1].entryId == LD:GetItems()[1].id)
 
+	-- The scrollbar.
+	local bar = frame.scroll
+	check("a long list has a scrollbar", bar:IsShown() and bar.thumbHeight < bar:GetHeight() and bar.thumbHeight >= 20)
+	check("the thumb starts at the top", bar.thumb.point[5] == 0 or bar.thumb.point[5] == -0)
+	frame.scripts.OnMouseWheel(frame, -1)
+	check("scrolling moves the thumb down", bar.thumb.point[5] < 0)
+	frame.scripts.OnMouseWheel(frame, 1)
+	H.cursor = { 0, bar:GetTop() - bar:GetHeight() } -- the mouse at the bottom of the track
+	bar.scripts.OnMouseDown(bar)
+	check("clicking the bottom of the track scrolls to the end", rows[8].entryId == LD:GetItems()[11].id)
+	check("and following the mouse goes on while the button is down", bar.scripts.OnUpdate ~= nil)
+	H.cursor = { 0, bar:GetTop() + 100 } -- above the track
+	bar.scripts.OnUpdate(bar)
+	check("dragging above the track goes back to the top", rows[1].entryId == LD:GetItems()[1].id)
+	bar.scripts.OnMouseUp(bar)
+	check("letting go stops following", bar.scripts.OnUpdate == nil)
+
+	-- The grip: drag it to show more or fewer rows.
+	local settings = ALC.Settings
+	check("eight rows by default", settings:GetWindowOption("loot", "maxRows", 8) == 8)
+	frame.grip.scripts.OnMouseDown(frame.grip)
+	check("dragging anchors the window by its top edge", frame.point[1] == "TOPLEFT" and frame.point[3] == "BOTTOMLEFT" and frame.point[5] == 800)
+	local topOfRows = 52 + 34 + 14 + 64 -- header, label, gap and footer
+	H.cursor = { 0, 800 - topOfRows - 5 * 64 }
+	frame.grip.scripts.OnUpdate(frame.grip)
+	check("the mouse decides how many rows: five", settings:GetWindowOption("loot", "maxRows", 8) == 5 and rows[5]:IsShown() and not rows[6]:IsShown())
+	check("the scrollbar follows", bar:IsShown() and bar:GetHeight() == 5 * 64 - 8)
+	H.cursor = { 0, -5000 }
+	frame.grip.scripts.OnUpdate(frame.grip)
+	check("never more rows than the window is built with", settings:GetWindowOption("loot", "maxRows", 8) == 24 and rows[11]:IsShown() and not bar:IsShown())
+	H.cursor = { 0, 5000 }
+	frame.grip.scripts.OnUpdate(frame.grip)
+	check("never fewer than three", settings:GetWindowOption("loot", "maxRows", 8) == 3 and rows[3]:IsShown() and not rows[4]:IsShown())
+	frame.grip.scripts.OnMouseUp(frame.grip)
+	check("letting go stops it and saves the position", frame.grip.scripts.OnUpdate == nil and settings:GetWindowPosition("loot").point == "TOPLEFT")
+	frame.grip.scripts.OnEnter(frame.grip)
+	frame.grip.scripts.OnLeave(frame.grip)
+	settings:SetWindowOption("loot", "maxRows", 0) -- a damaged saved value
+	Win:Refresh()
+	check("a broken saved row count still shows at least three rows", rows[3]:IsShown() and not rows[4]:IsShown())
+	settings:SetWindowOption("loot", "maxRows", 500)
+	Win:Refresh()
+	check("and never more than the window is built with", rows[24] ~= nil and #Win.rows == 24)
+	settings:SetWindowOption("loot", "maxRows", 8)
+	Win:Refresh()
+	check("back to eight rows", rows[8]:IsShown() and not rows[9]:IsShown())
+	check("the chosen rows are kept with the position", settings:GetWindowOption("loot", "maxRows", 8) == 8 and settings:GetWindowPosition("loot") ~= nil)
+
 	-- Reloading: an open window comes back, a closed one stays closed.
 	Win:Show()
 	frame:Hide() -- what a reload does to the frame; the saved flag stays
@@ -350,7 +398,7 @@ return function(check, H)
 	check("dragging the header moves the window", frame.moving == true)
 	frame.header.scripts.OnDragStop(frame.header)
 	local pos = ALC.Settings:GetWindowPosition("loot")
-	check("the position is saved when the window stops moving", frame.moving == false and pos ~= nil and pos.point == "CENTER")
+	check("the position is saved when the window stops moving", frame.moving == false and pos ~= nil and pos.point == frame.point[1])
 
 	-- Leave things as the next tests expect.
 	ALC.Events.UnregisterAll(listener)

@@ -46,7 +46,7 @@ return function(check, H)
 	check("a failing build raises its error", built == false)
 	check("and leaves no window open", not ALC.LootWindow:IsShown())
 	ALC.LootWindow:Show()
-	check("the next try builds the whole window", ALC.LootWindow:IsShown() and #ALC.LootWindow.rows == 8)
+	check("the next try builds the whole window", ALC.LootWindow:IsShown() and #ALC.LootWindow.rows == 24)
 	ALC.LootWindow:Hide()
 
 	leader = ME

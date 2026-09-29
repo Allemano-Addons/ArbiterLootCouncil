@@ -154,8 +154,9 @@ function Awards:Award(name)
 		end
 	end
 
-	announce(session, entry)
+	-- Log first: the announcement refreshes windows that read the log (the history).
 	logAward(session, entry, votes)
+	announce(session, entry)
 	Debug:Log("Awards", "%s -> %s (%s, %d votes, %s)", session.itemString, entry.name, entry.response, votes,
 		slot and "given" or "awaiting trade")
 	return true

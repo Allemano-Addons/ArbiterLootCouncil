@@ -326,6 +326,87 @@ return function(check, H)
 	Loot:Hide()
 
 	----------------------------------------------------------------------------
+	-- The History tab
+	----------------------------------------------------------------------------
+	reset()
+	Win:Hide()
+	if Sessions:IsActive() then Sessions:Cancel("test reset") end
+	Win:ShowHistory()
+	local hframe = Win.rows[1].parent
+	check("the history opens without a session", Win:IsShown() and Win:GetTab() == "history")
+	check("the History tab is marked", Win.tabs.history.underline:IsShown() and not Win.tabs.council.underline:IsShown())
+	check("the Council tab's widgets are hidden", not hframe.name:IsShown() and not Win.rows[1]:IsShown() and hframe.historyEmpty:IsShown() == false)
+	local history, log = Win:GetHistory(), Awards:GetLog()
+	check("the newest award comes first", #history == #log and history[1] == log[#log] and history[#history] == log[1])
+	local top = Win.historyRows[1]
+	check("a row tells what, to whom and with which answer", top.item.text:GetText() == "Crown of Destruction"
+		and top.winner:GetText() == history[1].winner and top.chip.label:GetText() ~= nil and top.time:GetText() ~= nil)
+	check("and the votes", top.votes:GetText() == (history[1].votes > 0 and tostring(history[1].votes) or "\226\128\148"))
+	top.item.scripts.OnEnter(top.item)
+	check("hovering the item shows its tooltip", GameTooltip.hyperlink == history[1].itemString)
+	check("the footer counts the awards", hframe.historyCount:GetText() == (#history .. " awards"))
+	H.slash("history")
+	check("/alc history closes it when it is on that tab", not Win:IsShown())
+	H.slash("history")
+	check("and opens it again", Win:IsShown() and Win:GetTab() == "history")
+
+	-- A long history scrolls.
+	for i = 1, 14 do
+		reset()
+		newSession()
+		Awards:Award(i % 2 == 1 and "Veyra Moo" or "Jonatan Moo")
+	end
+	history = Win:GetHistory()
+	Win:ShowHistory() -- every session closed the window
+	check("many awards", #history >= 15)
+	check("twelve rows show at most, with a scrollbar", Win.historyRows[12]:IsShown() and hframe.historyScroll:IsShown())
+	local firstWinner = Win.historyRows[1].winner:GetText()
+	hframe.scripts.OnMouseWheel(hframe, -1)
+	check("scrolling moves the list one award", Win.historyRows[1].winner:GetText() == history[2].winner and history[2].winner ~= firstWinner)
+	for _ = 1, 30 do hframe.scripts.OnMouseWheel(hframe, -1) end
+	check("scrolling stops at the oldest award", Win.historyRows[12].winner:GetText() == history[#history].winner)
+	for _ = 1, 30 do hframe.scripts.OnMouseWheel(hframe, 1) end
+	check("and at the newest", Win.historyRows[1].winner:GetText() == history[1].winner)
+	local bar = hframe.historyScroll
+	H.cursor = { 0, bar:GetTop() - bar:GetHeight() }
+	bar.scripts.OnMouseDown(bar)
+	bar.scripts.OnMouseUp(bar)
+	check("the scrollbar jumps to the oldest awards", Win.historyRows[12].winner:GetText() == history[#history].winner)
+
+	-- Switching tabs.
+	Win:ShowHistory()
+	Win.tabs.council.scripts.OnClick(Win.tabs.council)
+	check("the Council tab without a session shows a hint", Win:GetTab() == "council" and hframe.idle:IsShown() and not hframe.name:IsShown() and not Win.rows[1]:IsShown())
+	check("and the window is short", hframe:GetHeight() < 300)
+	Win.tabs.history.scripts.OnClick(Win.tabs.history)
+	check("the History tab brings the list back", Win:GetTab() == "history" and not hframe.idle:IsShown() and Win.historyRows[1]:IsShown())
+	reset()
+	newSession()
+	check("a new session switches to the voting tab", Win:IsShown() and Win:GetTab() == "council" and hframe.name:IsShown() and not Win.historyRows[1]:IsShown())
+	check("the tab buttons follow", Win.tabs.council.underline:IsShown() and not Win.tabs.history.underline:IsShown())
+
+	-- After a session the window closes ...
+	Awards:Award("Veyra Moo")
+	check("by default an award closes the voting window", not Win:IsShown())
+	-- ... unless the player keeps it open.
+	ALC.Settings:SetKeepCouncilOpen(true)
+	reset()
+	newSession()
+	check("with the option on the window opens as usual", Win:IsShown() and Win:GetTab() == "council")
+	Awards:Award("Jonatan Moo")
+	check("an award leaves it open, on the history", Win:IsShown() and Win:GetTab() == "history")
+	check("with the new award at the top", Win.historyRows[1].winner:GetText() == "Jonatan Moo")
+	reset()
+	newSession()
+	Sessions:Cancel("changed my mind")
+	check("a cancelled session leaves it open on the hint", Win:IsShown() and Win:GetTab() == "council" and hframe.idle:IsShown())
+	ALC.Settings:SetKeepCouncilOpen(false)
+	reset()
+	newSession()
+	Sessions:Cancel("again")
+	check("switched off again, a session end closes it", not Win:IsShown())
+
+	----------------------------------------------------------------------------
 	-- /alc award
 	----------------------------------------------------------------------------
 	reset()

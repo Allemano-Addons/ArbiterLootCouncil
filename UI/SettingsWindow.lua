@@ -243,6 +243,11 @@ local function build()
 		ALC.Settings:SetMinimapHidden(not checked)
 	end)
 	frame.minimap:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
+	y = y + 30
+	frame.keepOpen = UI.NewCheckbox(frame, L["Keep the voting window open after an award"], function(checked)
+		ALC.Settings:SetKeepCouncilOpen(checked)
+	end)
+	frame.keepOpen:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
 	y = y + 38
 
 	-- Debug -----------------------------------------------------------------
@@ -310,6 +315,7 @@ function SettingsWindow:Refresh()
 	end
 	frame.autoOpen:SetChecked(settings:GetAutoOpenLootWindow())
 	frame.minimap:SetChecked(not settings:IsMinimapHidden())
+	frame.keepOpen:SetChecked(settings:GetKeepCouncilOpen())
 	frame.debug:SetChecked(settings:IsDebug())
 end
 

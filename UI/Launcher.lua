@@ -45,6 +45,11 @@ Launcher.entries = {
 		open = function() ALC.ResponseWindow:Show() end,
 	},
 	{
+		icon = "history", label = L["Award history"],
+		available = function() return true end,
+		open = function() ALC.CouncilWindow:ToggleHistory() end,
+	},
+	{
 		icon = "settings", label = L["Settings"],
 		available = function() return true end,
 		open = function() ALC.SettingsWindow:Toggle() end,

@@ -151,6 +151,64 @@ function UI.NewButton(parent, width, height, label, onClick)
 	return button
 end
 
+-- A thin scrollbar for lists made of a fixed set of rows. The caller anchors it, gives it
+-- a height, and calls bar:Update(total, visible, offset) after every change of the list.
+-- Dragging the thumb, or clicking the track, calls onScroll(newOffset); the caller
+-- changes its offset and updates the bar again. The bar hides itself when everything fits.
+function UI.NewScrollBar(parent, onScroll)
+	local bar = CreateFrame("Button", nil, parent)
+	bar:SetWidth(6)
+	bar:EnableMouse(true)
+	bar:RegisterForClicks("LeftButtonUp")
+
+	bar.track = bar:CreateTexture(nil, "BACKGROUND")
+	bar.track:SetAllPoints()
+	UI.SetTextureColor(bar.track, UI.color.panelHover, 0.7)
+	bar.thumb = bar:CreateTexture(nil, "ARTWORK")
+	UI.SetTextureColor(bar.thumb, UI.color.muted, 0.8)
+
+	bar.total, bar.visible, bar.offset, bar.thumbHeight = 0, 0, 0, 0
+
+	function bar:Update(total, visible, offset)
+		self.total, self.visible, self.offset = total, visible, offset
+		if total <= visible or visible <= 0 then
+			self:Hide()
+			return
+		end
+		self:Show()
+		local height = self:GetHeight()
+		self.thumbHeight = math.max(20, height * visible / total)
+		local travel = height - self.thumbHeight
+		local position = travel * offset / (total - visible)
+		self.thumb:ClearAllPoints()
+		self.thumb:SetPoint("TOPLEFT", self, "TOPLEFT", 0, -position)
+		self.thumb:SetPoint("TOPRIGHT", self, "TOPRIGHT", 0, -position)
+		self.thumb:SetHeight(self.thumbHeight)
+	end
+
+	-- The thumb is centred on the mouse while the button is down.
+	local function follow(self)
+		local _, cursorY = GetCursorPosition()
+		cursorY = cursorY / self:GetEffectiveScale()
+		local travel = self:GetHeight() - self.thumbHeight
+		if travel <= 0 then return end
+		local ratio = ((self:GetTop() - cursorY) - self.thumbHeight / 2) / travel
+		ratio = math.max(0, math.min(1, ratio))
+		local newOffset = math.floor(ratio * (self.total - self.visible) + 0.5)
+		if newOffset ~= self.offset and onScroll then onScroll(newOffset) end
+	end
+	bar:SetScript("OnMouseDown", function(self)
+		follow(self)
+		self:SetScript("OnUpdate", follow)
+	end)
+	bar:SetScript("OnMouseUp", function(self)
+		self:SetScript("OnUpdate", nil)
+	end)
+	bar.Follow = follow
+
+	return bar
+end
+
 -- A checkbox with a label. `onToggle(checked)` runs when the player clicks it;
 -- `checkbox:SetChecked(bool)` only changes how it looks.
 function UI.NewCheckbox(parent, label, onToggle)

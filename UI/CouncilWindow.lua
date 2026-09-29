@@ -18,12 +18,25 @@ local NAME_X, RESPONSE_X, GEAR_X, VOTES_X = 16, 200, 308, 512
 local GEAR_W = 196
 local UNKNOWN_ICON = "Interface\\Icons\\INV_Misc_QuestionMark"
 
+-- The History tab: one row per award in the award log, newest first.
+local HISTORY_ROW_H, HISTORY_ROWS = 48, 12
+local TIME_X, HITEM_X, WINNER_X, HRESPONSE_X, HVOTES_X = 16, 150, 470, 656, 756
+local HITEM_W = 300
+
 local CouncilWindow = {}
 ALC.CouncilWindow = CouncilWindow
-CouncilWindow.rows = {}
+CouncilWindow.rows = {}         -- the candidate rows of the Council tab
+CouncilWindow.historyRows = {}  -- the award rows of the History tab
+CouncilWindow.tabs = {}
 
-local frame, offset = nil, 0
+local frame, offset, historyOffset = nil, 0, 0
+local activeTab = "council"     -- "council" or "history"
+local councilStatic, historyStatic = {}, {} -- widgets that belong to one tab only
 local c = UI.color
+
+local function setShown(widgets, shown)
+	for _, widget in ipairs(widgets) do widget:SetShown(shown) end
+end
 
 --------------------------------------------------------------------------------
 -- Building
@@ -112,6 +125,62 @@ local function newRow(index)
 	return row
 end
 
+-- A row of the History tab: when, what, to whom, with which answer, and the votes.
+local function newHistoryRow(index)
+	local row = CreateFrame("Frame", nil, frame)
+	row:SetHeight(HISTORY_ROW_H)
+	local top = -(HEADER_H + TABLE_HEAD_H + (index - 1) * HISTORY_ROW_H)
+	row:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, top)
+	row:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PAD, top)
+
+	row.line = row:CreateTexture(nil, "BORDER")
+	row.line:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 0, 0)
+	row.line:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", 0, 0)
+	row.line:SetHeight(1)
+	UI.SetTextureColor(row.line, c.border, 0.6)
+
+	row.time = UI.NewText(row, 12, c.text)
+	row.time:SetPoint("TOPLEFT", row, "TOPLEFT", TIME_X, -9)
+	row.zone = UI.NewText(row, 10, c.muted)
+	row.zone:SetPoint("TOPLEFT", row.time, "BOTTOMLEFT", 0, -3)
+	row.zone:SetWidth(HITEM_X - TIME_X - 10)
+
+	row.item = CreateFrame("Button", nil, row)
+	row.item:SetSize(HITEM_W, 36)
+	row.item:SetPoint("LEFT", row, "LEFT", HITEM_X, 0)
+	row.item.iconBorder = CreateFrame("Frame", nil, row.item)
+	row.item.iconBorder:SetSize(30, 30)
+	row.item.iconBorder:SetPoint("LEFT", row.item, "LEFT", 0, 0)
+	row.item.border = UI.AddBorder(row.item.iconBorder, c.border, 1)
+	row.item.icon = row.item.iconBorder:CreateTexture(nil, "ARTWORK")
+	row.item.icon:SetPoint("TOPLEFT", 1, -1)
+	row.item.icon:SetPoint("BOTTOMRIGHT", -1, 1)
+	row.item.text = UI.NewText(row.item, 13, c.text)
+	row.item.text:SetPoint("LEFT", row.item.iconBorder, "RIGHT", 10, 0)
+	row.item.text:SetWidth(HITEM_W - 44)
+	row.item:SetScript("OnEnter", function(self) showItemTooltip(self, self.itemString) end)
+	row.item:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+	row.winner = UI.NewText(row, 14, c.text)
+	row.winner:SetPoint("TOPLEFT", row, "TOPLEFT", WINNER_X, -9)
+	row.winner:SetWidth(HRESPONSE_X - WINNER_X - 10)
+	row.class = UI.NewText(row, 11, c.muted)
+	row.class:SetPoint("TOPLEFT", row.winner, "BOTTOMLEFT", 0, -3)
+
+	row.chip = CreateFrame("Frame", nil, row)
+	row.chip:SetSize(90, 24)
+	row.chip:SetPoint("LEFT", row, "LEFT", HRESPONSE_X, 0)
+	row.chip.bg = row.chip:CreateTexture(nil, "BACKGROUND")
+	row.chip.bg:SetAllPoints()
+	row.chip.label = UI.NewText(row.chip, 12, c.text, "CENTER")
+	row.chip.label:SetPoint("CENTER", 0, 0)
+
+	row.votes = UI.NewText(row, 15, c.text, "CENTER")
+	row.votes:SetPoint("LEFT", row, "LEFT", HVOTES_X - 8, 0)
+	row.votes:SetWidth(48)
+	return row
+end
+
 local function savePosition()
 	local point, _, relPoint, x, y = frame:GetPoint()
 	ALC.Settings:SetWindowPosition("council", point, relPoint, x, y)
@@ -175,6 +244,29 @@ local function build()
 	close:SetScript("OnLeave", function(self) self.text:SetTextColor(c.muted[1], c.muted[2], c.muted[3], 1) end)
 	close:SetScript("OnClick", function() CouncilWindow:Hide() end)
 
+	-- Tabs, after the title: the active one has an amber line under it.
+	for i, tab in ipairs({ { "council", L["Council"] }, { "history", L["History"] } }) do
+		local button = CreateFrame("Button", nil, header)
+		button:SetSize(100, HEADER_H)
+		button:SetPoint("LEFT", header, "LEFT", 320 + (i - 1) * 104, 0)
+		button.label = UI.NewText(button, 14, c.muted, "CENTER")
+		button.label:SetPoint("CENTER", 0, 1)
+		button.label:SetText(tab[2])
+		button.underline = button:CreateTexture(nil, "OVERLAY")
+		button.underline:SetHeight(2)
+		button.underline:SetPoint("BOTTOMLEFT", button, "BOTTOMLEFT", 8, 0)
+		button.underline:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -8, 0)
+		UI.SetTextureColor(button.underline, c.gold)
+		button.underline:Hide()
+		button.tab = tab[1]
+		button:SetScript("OnClick", function(self) CouncilWindow:SetTab(self.tab) end)
+		button:SetScript("OnEnter", function(self)
+			if activeTab ~= self.tab then self.label:SetTextColor(c.text[1], c.text[2], c.text[3], 1) end
+		end)
+		button:SetScript("OnLeave", function() CouncilWindow:Refresh() end)
+		CouncilWindow.tabs[tab[1]] = button
+	end
+
 	local function divider(y)
 		local line = frame:CreateTexture(nil, "BORDER")
 		line:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, y)
@@ -220,19 +312,23 @@ local function build()
 	UI.SetTextureColor(frame.barFill, c.gold)
 
 	-- Column headings.
-	divider(-(HEADER_H + ITEM_H))
-	local function heading(text, x, justify, width)
+	local itemDivider = divider(-(HEADER_H + ITEM_H))
+	local function heading(text, x, justify, width, y)
 		local fs = UI.NewText(frame, 11, c.muted, justify)
-		fs:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD + x, -(HEADER_H + ITEM_H + 12))
+		fs:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD + x, -(y or (HEADER_H + ITEM_H + 12)))
 		if width then fs:SetWidth(width) end
 		fs:SetText(strupper(text))
 		return fs
 	end
-	heading(L["Player"], NAME_X)
-	heading(L["Response"], RESPONSE_X)
-	heading(L["Current gear"], GEAR_X)
-	heading(L["Votes"], VOTES_X, "CENTER", 60)
-	divider(-(HEADER_H + ITEM_H + TABLE_HEAD_H))
+	local headings = {
+		heading(L["Player"], NAME_X),
+		heading(L["Response"], RESPONSE_X),
+		heading(L["Current gear"], GEAR_X),
+		heading(L["Votes"], VOTES_X, "CENTER", 60),
+	}
+	local tableDivider = divider(-(HEADER_H + ITEM_H + TABLE_HEAD_H))
+	councilStatic = { itemBox, frame.name, frame.sub, frame.progress, frame.barBg, frame.barFill,
+		itemDivider, tableDivider, headings[1], headings[2], headings[3], headings[4] }
 
 	frame.empty = UI.NewText(frame, 13, c.muted, "CENTER")
 	frame.empty:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -(HEADER_H + ITEM_H + TABLE_HEAD_H + 26))
@@ -249,14 +345,68 @@ local function build()
 	frame.lootMaster:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", PAD, 18)
 	frame.tally = UI.NewText(frame, 13, c.muted, "RIGHT")
 	frame.tally:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -PAD, 18)
+	councilStatic[#councilStatic + 1] = frame.empty
+	councilStatic[#councilStatic + 1] = frame.footerLine
+	councilStatic[#councilStatic + 1] = frame.lootMaster
+	councilStatic[#councilStatic + 1] = frame.tally
+
+	-- Shown instead of the Council tab while no session is running.
+	frame.idle = UI.NewText(frame, 13, c.muted, "CENTER")
+	frame.idle:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -(HEADER_H + 46))
+	frame.idle:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PAD, -(HEADER_H + 46))
+	frame.idle:SetText(L["No running session. Start one from the loot window."])
+	frame.idle:Hide()
 
 	for i = 1, MAX_ROWS do
 		CouncilWindow.rows[i] = newRow(i)
 	end
+	frame.scroll = UI.NewScrollBar(frame, function(newOffset)
+		offset = newOffset
+		CouncilWindow:Refresh()
+	end)
+	frame.scroll:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -8, -(HEADER_H + ITEM_H + TABLE_HEAD_H))
+	frame.scroll:SetHeight(MAX_ROWS * ROW_H)
+	frame.scroll:Hide()
+
+	-- The History tab.
+	local historyHeadings = {
+		heading(L["Time"], TIME_X, nil, nil, HEADER_H + 12),
+		heading(L["Item"], HITEM_X, nil, nil, HEADER_H + 12),
+		heading(L["Winner"], WINNER_X, nil, nil, HEADER_H + 12),
+		heading(L["Response"], HRESPONSE_X, nil, nil, HEADER_H + 12),
+		heading(L["Votes"], HVOTES_X - 8, "CENTER", 48, HEADER_H + 12),
+	}
+	local historyDivider = divider(-(HEADER_H + TABLE_HEAD_H))
+	frame.historyEmpty = UI.NewText(frame, 13, c.muted, "CENTER")
+	frame.historyEmpty:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -(HEADER_H + TABLE_HEAD_H + 30))
+	frame.historyEmpty:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PAD, -(HEADER_H + TABLE_HEAD_H + 30))
+	frame.historyEmpty:SetText(L["No awards recorded on this character yet."])
+	frame.historyFooterLine = frame:CreateTexture(nil, "BORDER")
+	frame.historyFooterLine:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 1, FOOTER_H)
+	frame.historyFooterLine:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -1, FOOTER_H)
+	frame.historyFooterLine:SetHeight(1)
+	UI.SetTextureColor(frame.historyFooterLine, c.border)
+	frame.historyCount = UI.NewText(frame, 13, c.muted)
+	frame.historyCount:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", PAD, 18)
+	historyStatic = { historyHeadings[1], historyHeadings[2], historyHeadings[3], historyHeadings[4], historyHeadings[5],
+		historyDivider, frame.historyEmpty, frame.historyFooterLine, frame.historyCount }
+	for i = 1, HISTORY_ROWS do
+		CouncilWindow.historyRows[i] = newHistoryRow(i)
+	end
+	frame.historyScroll = UI.NewScrollBar(frame, function(newOffset)
+		historyOffset = newOffset
+		CouncilWindow:Refresh()
+	end)
+	frame.historyScroll:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -8, -(HEADER_H + TABLE_HEAD_H))
+	frame.historyScroll:SetHeight(HISTORY_ROWS * HISTORY_ROW_H)
+	frame.historyScroll:Hide()
 
 	frame:SetScript("OnMouseWheel", function(_, delta)
-		local count = #CouncilWindow:GetVisible()
-		offset = max(0, min(offset - delta, max(0, count - MAX_ROWS)))
+		if activeTab == "history" then
+			historyOffset = max(0, min(historyOffset - delta, max(0, #CouncilWindow:GetHistory() - HISTORY_ROWS)))
+		else
+			offset = max(0, min(offset - delta, max(0, #CouncilWindow:GetVisible() - MAX_ROWS)))
+		end
 		CouncilWindow:Refresh()
 	end)
 	frame:SetScript("OnShow", function() CouncilWindow:Refresh() end)
@@ -351,13 +501,9 @@ local function renderRow(row, entry, myVote, topVotes, isLM)
 	row:Show()
 end
 
-function CouncilWindow:Refresh()
-	if not frame or not frame:IsShown() then return end
-	local session = ALC.Sessions:GetSession()
-	if not session then
-		self:Hide()
-		return
-	end
+local function renderCouncil(self, session)
+	setShown(councilStatic, true)
+	frame.idle:Hide()
 
 	local display = ALC.LootDetection:GetItemDisplay({ itemString = session.itemString, itemID = session.itemID })
 	frame.icon:SetTexture(display.icon or UNKNOWN_ICON)
@@ -393,6 +539,7 @@ function CouncilWindow:Refresh()
 		end
 	end
 	frame.empty:SetShown(count == 0)
+	frame.scroll:Update(count, MAX_ROWS, offset)
 
 	frame.lootMaster:SetText(L["Loot master"] .. ": " .. session.lm)
 	frame.tally:SetText(string.format("%d %s \194\183 %d %s", counts.passed, L["passed"], counts.silent, L["not responded"]))
@@ -401,10 +548,136 @@ function CouncilWindow:Refresh()
 	frame:SetHeight(HEADER_H + ITEM_H + TABLE_HEAD_H + rows * ROW_H + FOOTER_H)
 end
 
+-- The Council tab without a session: only a hint (the window can stay open after an award).
+local function renderIdle(self)
+	setShown(councilStatic, false)
+	for _, row in ipairs(self.rows) do row:Hide() end
+	frame.scroll:Hide()
+	frame.idle:Show()
+	frame:SetHeight(HEADER_H + 130)
+end
+
+local function hideHistory(self)
+	setShown(historyStatic, false)
+	for _, row in ipairs(self.historyRows) do row:Hide() end
+	frame.historyScroll:Hide()
+end
+
+-- The awards in the log, newest first (a copy of the list, the entries are shared).
+function CouncilWindow:GetHistory()
+	local log = ALC.Awards:GetLog()
+	local list = {}
+	for i = #log, 1, -1 do list[#list + 1] = log[i] end
+	return list
+end
+
+local function renderHistoryRow(row, entry)
+	row.time:SetText(date("%d %b  %H:%M", entry.time or 0))
+	row.zone:SetText(entry.zone or "")
+
+	local display = ALC.LootDetection:GetItemDisplay({ itemString = entry.itemString, itemID = entry.itemID })
+	row.item.itemString = entry.itemString
+	row.item.icon:SetTexture(display.icon or UNKNOWN_ICON)
+	local qc = UI.QualityColor(display.quality)
+	row.item.border:SetColor(qc)
+	row.item.text:SetTextColor(qc[1], qc[2], qc[3], 1)
+	row.item.text:SetText(display.name or L["Loading..."])
+
+	local cc = UI.ClassColor(entry.class)
+	row.winner:SetTextColor(cc[1], cc[2], cc[3], 1)
+	row.winner:SetText(entry.winner)
+	row.class:SetText((LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[entry.class]) or entry.class or "")
+
+	local response = ALC.Responses:Get(entry.response)
+	local rc = response and response.color or c.muted
+	UI.SetTextureColor(row.chip.bg, rc, 0.22)
+	row.chip.label:SetTextColor(rc[1], rc[2], rc[3], 1)
+	row.chip.label:SetText(response and response.label or tostring(entry.response))
+
+	local votes = entry.votes or 0
+	row.votes:SetTextColor(votes > 0 and c.text[1] or c.muted[1], votes > 0 and c.text[2] or c.muted[2], votes > 0 and c.text[3] or c.muted[3], 1)
+	row.votes:SetText(votes > 0 and tostring(votes) or "\226\128\148")
+	row:Show()
+end
+
+local function renderHistory(self)
+	setShown(councilStatic, false)
+	frame.idle:Hide()
+	frame.scroll:Hide()
+	for _, row in ipairs(self.rows) do row:Hide() end
+	setShown(historyStatic, true)
+
+	local list = self:GetHistory()
+	local count = #list
+	historyOffset = max(0, min(historyOffset, max(0, count - HISTORY_ROWS)))
+	local shown = min(count - historyOffset, HISTORY_ROWS)
+	for i = 1, HISTORY_ROWS do
+		local row = self.historyRows[i]
+		local entry = list[historyOffset + i]
+		if entry and i <= shown then renderHistoryRow(row, entry) else row:Hide() end
+	end
+	frame.historyEmpty:SetShown(count == 0)
+	frame.historyCount:SetText(string.format("%d %s", count, count == 1 and L["award"] or L["awards"]))
+	frame.historyScroll:Update(count, HISTORY_ROWS, historyOffset)
+	frame:SetHeight(HEADER_H + TABLE_HEAD_H + max(shown, 3) * HISTORY_ROW_H + FOOTER_H)
+end
+
+function CouncilWindow:Refresh()
+	if not frame or not frame:IsShown() then return end
+
+	for tab, button in pairs(self.tabs) do
+		local active = tab == activeTab
+		button.underline:SetShown(active)
+		local color = active and c.text or c.muted
+		button.label:SetTextColor(color[1], color[2], color[3], 1)
+	end
+
+	if activeTab == "history" then
+		renderHistory(self)
+		return
+	end
+	hideHistory(self)
+	local session = ALC.Sessions:GetSession()
+	if not session then
+		renderIdle(self)
+		return
+	end
+	renderCouncil(self, session)
+end
+
 --------------------------------------------------------------------------------
 -- Public
 --------------------------------------------------------------------------------
--- Only the council opens it. Whether it is open is remembered across a /reload.
+local function ensureBuilt()
+	if frame then return end
+	-- A build that fails half way must not leave a broken frame behind.
+	local ok, err = pcall(build)
+	if not ok then
+		frame = nil
+		error(err, 0)
+	end
+end
+
+function CouncilWindow:GetTab()
+	return activeTab
+end
+
+-- Switches tab. The Council tab is for the council; the History tab is for anybody.
+function CouncilWindow:SetTab(tab)
+	if tab ~= "council" and tab ~= "history" then return end
+	if tab == "council" then
+		local session = ALC.Sessions:GetSession()
+		if session and not session.isCouncil then
+			ALC:Print(L["Only the council can open the voting window."])
+			return
+		end
+	end
+	activeTab = tab
+	self:Refresh()
+end
+
+-- Only the council opens the voting tab, during a session. Whether the window is open is
+-- remembered across a /reload.
 function CouncilWindow:Show()
 	local session = ALC.Sessions:GetSession()
 	if not session then
@@ -415,14 +688,17 @@ function CouncilWindow:Show()
 		ALC:Print(L["Only the council can open the voting window."])
 		return
 	end
-	if not frame then
-		-- A build that fails half way must not leave a broken frame behind.
-		local ok, err = pcall(build)
-		if not ok then
-			frame = nil
-			error(err, 0)
-		end
-	end
+	ensureBuilt()
+	activeTab = "council"
+	frame:Show()
+	ALC.Settings:SetWindowShown("council", true)
+	self:Refresh()
+end
+
+-- The History tab needs no session.
+function CouncilWindow:ShowHistory()
+	ensureBuilt()
+	activeTab = "history"
 	frame:Show()
 	ALC.Settings:SetWindowShown("council", true)
 	self:Refresh()
@@ -435,6 +711,10 @@ end
 
 function CouncilWindow:Toggle()
 	if frame and frame:IsShown() then self:Hide() else self:Show() end
+end
+
+function CouncilWindow:ToggleHistory()
+	if frame and frame:IsShown() and activeTab == "history" then self:Hide() else self:ShowHistory() end
 end
 
 function CouncilWindow:IsShown()
@@ -460,5 +740,21 @@ function CouncilWindow:Init()
 	end)
 	register(self, "ALC_SESSION_SNAPSHOT", reopen)
 	register(self, "ALC_SESSION_RESTORED", reopen)
-	register(self, "ALC_SESSION_ENDED", function() CouncilWindow:Hide() end)
+	register(self, "ALC_AWARDS_ANNOUNCED", refresh)
+	-- After a session the window closes, unless the player wants to keep it: then it stays
+	-- and, after an award, shows the history with the new award at the top.
+	register(self, "ALC_SESSION_ENDED", function(_, _, reason)
+		if ALC.Settings:GetKeepCouncilOpen() and CouncilWindow:IsShown() then
+			if reason == "awarded" then
+				historyOffset = 0
+				CouncilWindow:SetTab("history")
+			else
+				CouncilWindow:Refresh()
+			end
+		else
+			CouncilWindow:Hide()
+		end
+	end)
 end
+
+ALC.Commands:Register("history", function() CouncilWindow:ToggleHistory() end, L["open the award history"])

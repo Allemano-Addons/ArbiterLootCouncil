@@ -19,6 +19,7 @@ local defaults = {
 		qualityThreshold = 4, -- epic
 		debug = false,
 		autoOpenLootWindow = true,
+		keepCouncilOpen = false, -- keep the voting window open after an award
 		minimap = { hidden = false }, -- the launcher button; its position is saved once it has been moved
 		windows = {},         -- window key -> { point, relPoint, x, y }
 	},
@@ -71,6 +72,30 @@ end
 -- The saved loot list. LootDetection owns its contents; Settings only hands it over.
 function Settings:GetLootStore()
 	return db.global.lootList
+end
+
+-- Whether the voting window stays open after an award (it then shows the history).
+function Settings:GetKeepCouncilOpen()
+	return db.profile.keepCouncilOpen == true
+end
+
+function Settings:SetKeepCouncilOpen(enabled)
+	db.profile.keepCouncilOpen = enabled and true or false
+	changed("keepCouncilOpen")
+end
+
+-- Small per-window values, such as how many rows the loot window shows.
+function Settings:GetWindowOption(key, name, default)
+	local window = db.profile.windows[key]
+	local value = window and window[name]
+	if value == nil then return default end
+	return value
+end
+
+function Settings:SetWindowOption(key, name, value)
+	local window = db.profile.windows[key] or {}
+	window[name] = value
+	db.profile.windows[key] = window
 end
 
 -- Launcher button (the "minimap button") ----------------------------------------

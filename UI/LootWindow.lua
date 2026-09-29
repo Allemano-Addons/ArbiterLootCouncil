@@ -11,7 +11,8 @@ local min, max = math.min, math.max
 
 local WIDTH, PAD = 400, 16
 local HEADER_H, LABEL_H, FOOTER_H = 52, 34, 64
-local ROW_H, ROW_GAP, MAX_ROWS = 56, 8, 8
+local ROW_H, ROW_GAP = 56, 8
+local POOL, DEFAULT_ROWS, MIN_ROWS = 24, 8, 3 -- rows built, rows shown by default, fewest rows
 local ICON = 40
 local REMOVE_SIZE = 28
 local CHAT_BOX_H = 44
@@ -24,7 +25,14 @@ LibStub("AceEvent-3.0"):Embed(LootWindow)
 LootWindow.rows = {}
 
 local frame, offset = nil, 0
+local chatExtra = 0 -- height of the raid chat preview while it is shown
 local c = UI.color
+
+-- How many rows the window shows at most; the player changes it with the grip.
+local function maxRows()
+	local rows = ALC.Settings:GetWindowOption("loot", "maxRows", DEFAULT_ROWS)
+	return max(MIN_ROWS, min(POOL, rows))
+end
 
 --------------------------------------------------------------------------------
 -- Building
@@ -216,13 +224,50 @@ local function build()
 	end)
 	frame.cancel:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -PAD, 12)
 
-	for i = 1, MAX_ROWS do
+	for i = 1, POOL do
 		LootWindow.rows[i] = newRow(i)
 	end
 
+	-- The scrollbar sits in the right margin, beside the rows.
+	frame.scroll = UI.NewScrollBar(frame, function(newOffset)
+		offset = newOffset
+		LootWindow:Refresh()
+	end)
+	frame.scroll:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -5, -(HEADER_H + LABEL_H))
+	frame.scroll:SetHeight(DEFAULT_ROWS * (ROW_H + ROW_GAP) - ROW_GAP)
+	frame.scroll:Hide()
+
+	-- The grip in the bottom right corner: drag it to show more or fewer rows.
+	frame.grip = CreateFrame("Button", nil, frame)
+	frame.grip:SetSize(14, 14)
+	frame.grip:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -2, 2)
+	frame.grip.dots = {}
+	for _, spot in ipairs({ { 2, 2 }, { 7, 2 }, { 12, 2 }, { 2, 7 }, { 7, 7 }, { 2, 12 } }) do
+		local dot = frame.grip:CreateTexture(nil, "OVERLAY")
+		dot:SetSize(2, 2)
+		dot:SetPoint("BOTTOMRIGHT", frame.grip, "BOTTOMRIGHT", -(spot[1] - 2), spot[2] - 2)
+		UI.SetTextureColor(dot, c.muted, 0.7)
+		frame.grip.dots[#frame.grip.dots + 1] = dot
+	end
+	frame.grip:SetScript("OnEnter", function(self)
+		for _, dot in ipairs(self.dots) do UI.SetTextureColor(dot, c.gold, 1) end
+		GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+		GameTooltip:SetText(L["Drag to change how many items are shown"])
+		GameTooltip:Show()
+	end)
+	frame.grip:SetScript("OnLeave", function(self)
+		for _, dot in ipairs(self.dots) do UI.SetTextureColor(dot, c.muted, 0.7) end
+		GameTooltip:Hide()
+	end)
+	frame.grip:SetScript("OnMouseDown", function(self)
+		GameTooltip:Hide()
+		LootWindow:StartResize()
+	end)
+	frame.grip:SetScript("OnMouseUp", function() LootWindow:StopResize() end)
+
 	frame:SetScript("OnMouseWheel", function(_, delta)
 		local count = #ALC.LootDetection:GetItems()
-		offset = max(0, min(offset - delta, max(0, count - MAX_ROWS)))
+		offset = max(0, min(offset - delta, max(0, count - maxRows())))
 		LootWindow:Refresh()
 	end)
 	frame:SetScript("OnShow", function() LootWindow:Refresh() end)
@@ -303,7 +348,8 @@ function LootWindow:Refresh()
 	local LootDetection = ALC.LootDetection
 	local items = LootDetection:GetItems()
 	local count = #items
-	offset = max(0, min(offset, max(0, count - MAX_ROWS)))
+	local rowsAllowed = maxRows()
+	offset = max(0, min(offset, max(0, count - rowsAllowed)))
 
 	local boss = LootDetection:GetBossName()
 	frame.title:SetText(boss and (L["LOOT"] .. " \194\183 " .. strupper(boss)) or L["LOOT"])
@@ -318,8 +364,8 @@ function LootWindow:Refresh()
 	local sessionActive = session ~= nil
 	local isLM = ALC.Council:AmLootMaster()
 
-	local shown = min(count - offset, MAX_ROWS)
-	for i = 1, MAX_ROWS do
+	local shown = min(count - offset, rowsAllowed)
+	for i = 1, POOL do
 		local row = self.rows[i]
 		local entry = items[offset + i]
 		if entry and i <= shown then renderRow(row, entry, sessionActive, isLM) else row.entry, row.entryId = nil, nil; row:Hide() end
@@ -331,6 +377,10 @@ function LootWindow:Refresh()
 
 	local body = max(shown, 1) * (ROW_H + ROW_GAP) - ROW_GAP
 	if count == 0 then body = 64 end
+
+	-- The scrollbar follows the rows and shows itself only when the list is longer.
+	frame.scroll:SetHeight(max(shown, 1) * (ROW_H + ROW_GAP) - ROW_GAP)
+	frame.scroll:Update(count, rowsAllowed, offset)
 
 	-- The chat preview sits under the list once something has been announced.
 	local announcement = ALC.Awards:GetLastAnnouncement()
@@ -350,7 +400,39 @@ function LootWindow:Refresh()
 		frame.chatLabel:Hide()
 		frame.chatBox:Hide()
 	end
+	chatExtra = extra
 	frame:SetHeight(HEADER_H + LABEL_H + body + 14 + extra + FOOTER_H)
+end
+
+--------------------------------------------------------------------------------
+-- Resizing with the grip: the top edge stays put, the window grows downwards, and the
+-- number of rows follows the mouse.
+--------------------------------------------------------------------------------
+local function resizeStep()
+	local _, cursorY = GetCursorPosition()
+	cursorY = cursorY / frame:GetEffectiveScale()
+	local body = (frame:GetTop() - cursorY) - (HEADER_H + LABEL_H + 14 + chatExtra + FOOTER_H)
+	local rows = max(MIN_ROWS, min(POOL, math.floor(body / (ROW_H + ROW_GAP) + 0.5)))
+	if rows ~= maxRows() then
+		ALC.Settings:SetWindowOption("loot", "maxRows", rows)
+		LootWindow:Refresh()
+	end
+end
+
+function LootWindow:StartResize()
+	if not frame then return end
+	local left, top = frame:GetLeft(), frame:GetTop()
+	if left and top then
+		frame:ClearAllPoints()
+		frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, top)
+	end
+	frame.grip:SetScript("OnUpdate", resizeStep)
+end
+
+function LootWindow:StopResize()
+	if not frame then return end
+	frame.grip:SetScript("OnUpdate", nil)
+	savePosition()
 end
 
 --------------------------------------------------------------------------------
