@@ -250,11 +250,16 @@ local function onSessionStarted(_, session)
 	if created then ALC.Events:Fire("ALC_LOOT_ADDED", 1) end
 end
 
+-- An awarded item is "awarded", or "trade" while it still has to be traded to the winner.
+local function awardedStatus(entry)
+	return entry.trade and STATUS.TRADE or STATUS.AWARDED
+end
+
 local function onSessionEnded(_, sid, reason)
 	local entry = findBySid(sid)
 	if not entry then return end
 	entry.starting = nil
-	entry.status = (reason == "awarded") and STATUS.AWARDED or STATUS.PENDING
+	entry.status = (reason == "awarded") and awardedStatus(entry) or STATUS.PENDING
 	changed()
 end
 
@@ -262,8 +267,20 @@ local function onAward(_, _, sid, p)
 	local entry = findBySid(sid)
 	if not entry then return end
 	entry.winner = p.winner
-	entry.status = STATUS.AWARDED
+	entry.status = awardedStatus(entry)
 	changed()
+end
+
+-- The item of this session has to be traded to the winner (Awards calls this when it
+-- could not be handed out through the loot window). Works before or after the AWARD
+-- message is handled.
+function LootDetection:MarkAwaitingTrade(sid)
+	local entry = findBySid(sid)
+	if not entry then return false end
+	entry.trade = true
+	if entry.status == STATUS.AWARDED then entry.status = STATUS.TRADE end
+	changed()
+	return true
 end
 
 --------------------------------------------------------------------------------

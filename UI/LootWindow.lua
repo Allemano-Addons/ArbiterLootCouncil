@@ -14,6 +14,8 @@ local HEADER_H, LABEL_H, FOOTER_H = 52, 34, 64
 local ROW_H, ROW_GAP, MAX_ROWS = 56, 8, 8
 local ICON = 40
 local REMOVE_SIZE = 28
+local CHAT_BOX_H = 44
+local CHAT_COLOR = { 0.98, 0.55, 0.36, 1 } -- raid chat orange
 local UNKNOWN_ICON = "Interface\\Icons\\INV_Misc_QuestionMark"
 
 local LootWindow = {}
@@ -183,6 +185,21 @@ local function build()
 	frame.empty:SetWordWrap(true)
 	frame.empty:SetText(L["No items yet. Loot a boss as loot master, or add one with /alc add [item]."])
 
+	-- The last announcement in raid chat, as a preview under the list.
+	frame.chatLabel = UI.NewText(frame, 11, c.muted)
+	frame.chatLabel:SetText(strupper(L["Raid chat"]))
+	frame.chatBox = CreateFrame("Frame", nil, frame)
+	frame.chatBox:SetHeight(CHAT_BOX_H)
+	frame.chatBox.bg = frame.chatBox:CreateTexture(nil, "BACKGROUND")
+	frame.chatBox.bg:SetAllPoints()
+	UI.SetTextureColor(frame.chatBox.bg, c.panel)
+	UI.AddBorder(frame.chatBox, c.border)
+	frame.chatText = UI.NewText(frame.chatBox, 12, CHAT_COLOR)
+	frame.chatText:SetPoint("LEFT", frame.chatBox, "LEFT", 14, 0)
+	frame.chatText:SetPoint("RIGHT", frame.chatBox, "RIGHT", -14, 0)
+	frame.chatLabel:Hide()
+	frame.chatBox:Hide()
+
 	-- Footer.
 	frame.footerDivider = frame:CreateTexture(nil, "BORDER")
 	frame.footerDivider:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 1, FOOTER_H)
@@ -239,7 +256,7 @@ local function renderRow(row, entry, sessionActive, isLM)
 	row.name:SetText(display.name or L["Loading..."])
 
 	local subtitle = display.subtitle
-	if entry.status == status.AWARDED and entry.winner then
+	if (entry.status == status.AWARDED or entry.status == status.TRADE) and entry.winner then
 		subtitle = (subtitle ~= "" and (subtitle .. " \194\183 ") or "") .. entry.winner
 	end
 	row.sub:SetText(subtitle)
@@ -314,7 +331,26 @@ function LootWindow:Refresh()
 
 	local body = max(shown, 1) * (ROW_H + ROW_GAP) - ROW_GAP
 	if count == 0 then body = 64 end
-	frame:SetHeight(HEADER_H + LABEL_H + body + 14 + FOOTER_H)
+
+	-- The chat preview sits under the list once something has been announced.
+	local announcement = ALC.Awards:GetLastAnnouncement()
+	local extra = 0
+	frame.chatLabel:ClearAllPoints()
+	frame.chatBox:ClearAllPoints()
+	if announcement then
+		local top = HEADER_H + LABEL_H + body + 18
+		frame.chatLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -top)
+		frame.chatBox:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -(top + 20))
+		frame.chatBox:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PAD, -(top + 20))
+		frame.chatText:SetText(announcement)
+		frame.chatLabel:Show()
+		frame.chatBox:Show()
+		extra = 20 + CHAT_BOX_H + 10
+	else
+		frame.chatLabel:Hide()
+		frame.chatBox:Hide()
+	end
+	frame:SetHeight(HEADER_H + LABEL_H + body + 14 + extra + FOOTER_H)
 end
 
 --------------------------------------------------------------------------------
@@ -363,6 +399,7 @@ function LootWindow:Init()
 	register(self, "ALC_SESSION_STARTED", refresh)
 	register(self, "ALC_SESSION_ENDED", refresh)
 	register(self, "ALC_COUNCIL_LM_CHANGED", refresh)
+	register(self, "ALC_AWARDS_ANNOUNCED", refresh)
 	register(self, "ALC_LOOT_ADDED", function()
 		if ALC.Settings:GetAutoOpenLootWindow() then LootWindow:Show() end
 	end)

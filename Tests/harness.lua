@@ -92,7 +92,11 @@ function H.setup()
 	time, date = os.time, os.date
 	H.clock = 1000
 	GetTime = function() return H.clock end
-	C_Timer = { After = function(_, fn) fn() end }
+	-- Timers run at once, unless a test asks to hold them (H.deferTimers) and runs them later (H.runTimers).
+	H.timers, H.deferTimers = {}, false
+	C_Timer = { After = function(_, fn) if H.deferTimers then H.timers[#H.timers + 1] = fn else fn() end end }
+	H.said = {}
+	SendChatMessage = function(text, channel) H.said[#H.said + 1] = { text = text, channel = channel } end
 	H.inRaid, H.inGroup = false, false
 	IsInRaid = function() return H.inRaid end
 	IsInGroup = function(category) if category == 2 then return false end return H.inGroup or H.inRaid end
@@ -146,6 +150,13 @@ function H.loadAddon()
 end
 
 function H.slash(input) SlashCmdList["ALC"](input) end
+
+-- Runs the timers held back while H.deferTimers was on.
+function H.runTimers()
+	local due = H.timers
+	H.timers = {}
+	for _, fn in ipairs(due) do fn() end
+end
 
 local function deepcopy(value)
 	if type(value) ~= "table" then return value end

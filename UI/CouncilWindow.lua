@@ -9,13 +9,13 @@ local L = ALC.L
 local strupper = string.upper
 local min, max = math.min, math.max
 
-local WIDTH, PAD = 780, 20
+local WIDTH, PAD = 840, 20
 local HEADER_H, ITEM_H, TABLE_HEAD_H, FOOTER_H = 60, 92, 34, 52
 local ROW_H, MAX_ROWS = 56, 10
 local ICON = 52
 local BUTTON_W = 92
-local NAME_X, RESPONSE_X, GEAR_X, VOTES_X = 16, 222, 336, 560
-local GEAR_W = 214
+local NAME_X, RESPONSE_X, GEAR_X, VOTES_X = 16, 200, 308, 512
+local GEAR_W = 196
 local UNKNOWN_ICON = "Interface\\Icons\\INV_Misc_QuestionMark"
 
 local CouncilWindow = {}
@@ -97,6 +97,15 @@ local function newRow(index)
 		if not ok and message then ALC:Print(message) end
 	end)
 	row.vote:SetPoint("RIGHT", row, "RIGHT", -12, 0)
+
+	-- Only the loot master hands the item out; the amber frame marks the final step.
+	row.award = UI.NewButton(row, BUTTON_W, 34, L["Award"], function()
+		ALC.AwardDialog:Ask(row.candidate)
+	end)
+	row.award:SetPoint("RIGHT", row, "RIGHT", -12, 0)
+	row.award:SetSelected(true)
+	row.award.label:SetTextColor(c.gold[1], c.gold[2], c.gold[3], 1)
+	row.award:Hide()
 
 	row:SetScript("OnEnter", function(self) UI.SetTextureColor(self.bg, c.panelHover, 0.5) end)
 	row:SetScript("OnLeave", function(self) UI.SetTextureColor(self.bg, c.bg, 0) end)
@@ -282,7 +291,7 @@ end
 --------------------------------------------------------------------------------
 -- Rendering
 --------------------------------------------------------------------------------
-local function renderRow(row, entry, myVote, topVotes)
+local function renderRow(row, entry, myVote, topVotes, isLM)
 	row.candidate = entry.name
 	local classColor = UI.ClassColor(entry.class)
 	row.name:SetTextColor(classColor[1], classColor[2], classColor[3], 1)
@@ -329,6 +338,16 @@ local function renderRow(row, entry, myVote, topVotes)
 	local mine = myVote ~= nil and ALC:SameName(myVote, entry.name)
 	row.vote:SetLabel(mine and L["Voted"] or L["Vote"])
 	row.vote:SetSelected(mine)
+
+	-- The loot master also gets Award; Vote then moves left to make room.
+	row.vote:ClearAllPoints()
+	if isLM then
+		row.vote:SetPoint("RIGHT", row.award, "LEFT", -8, 0)
+		row.award:Show()
+	else
+		row.vote:SetPoint("RIGHT", row, "RIGHT", -12, 0)
+		row.award:Hide()
+	end
 	row:Show()
 end
 
@@ -367,7 +386,7 @@ function CouncilWindow:Refresh()
 		local row = self.rows[i]
 		local entry = list[offset + i]
 		if entry and i <= shown then
-			renderRow(row, entry, myVote, topVotes)
+			renderRow(row, entry, myVote, topVotes, session.isLM)
 		else
 			row.candidate = nil
 			row:Hide()

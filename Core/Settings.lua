@@ -72,6 +72,11 @@ function Settings:GetLootStore()
 	return db.global.lootList
 end
 
+-- The append-only log of every award, kept for the history views (v0.4). Only Awards writes.
+function Settings:GetAwardLog()
+	return db.global.awardLog
+end
+
 -- Saved state that lets the loot master survive a /reload. Each module owns its keys:
 -- Sessions writes `session` and `savedAt`, Candidates writes `candidates`.
 function Settings:GetSessionStore()
