@@ -165,6 +165,54 @@ function UI.SetFont(path)
 	return UI.GetFont()
 end
 
+-- The fonts to choose from: the game's own, and every font LibSharedMedia knows when some
+-- addon has loaded it. Each is { name, path }; the first has no path (the game default).
+local BUILTIN_FONTS = {
+	{ "Friz Quadrata", "Fonts\\FRIZQT__.TTF" },
+	{ "Arial Narrow", "Fonts\\ARIALN.TTF" },
+	{ "Skurri", "Fonts\\skurri.ttf" },
+	{ "Morpheus", "Fonts\\MORPHEUS.ttf" },
+}
+
+function UI.GetFontChoices()
+	local list = { { name = ALC.L["Game default"] } }
+	local seen = {}
+	local function add(name, path)
+		local key = string.lower(path)
+		if seen[key] then return end
+		seen[key] = true
+		list[#list + 1] = { name = name, path = path }
+	end
+	for _, font in ipairs(BUILTIN_FONTS) do add(font[1], font[2]) end
+
+	local lsm = LibStub and LibStub("LibSharedMedia-3.0", true)
+	if lsm then
+		local names = {}
+		local hash = lsm:HashTable("font")
+		for name in pairs(hash) do names[#names + 1] = name end
+		table.sort(names, function(a, b) return string.lower(a) < string.lower(b) end)
+		for _, name in ipairs(names) do add(name, hash[name]) end
+	end
+	return list
+end
+
+-- The name to show for a font path.
+function UI.FontName(path)
+	if not path then return ALC.L["Game default"] end
+	for _, font in ipairs(UI.GetFontChoices()) do
+		if font.path and string.lower(font.path) == string.lower(path) then return font.name end
+	end
+	return (string.match(path, "([^\\/]+)$")) or path
+end
+
+-- Applies the saved font, and follows changes of the setting.
+function UI.Init()
+	UI.SetFont(ALC.Settings:GetFont())
+	ALC.Events.Register(UI, "ALC_SETTINGS_CHANGED", function(_, key)
+		if key == "font" then UI.SetFont(ALC.Settings:GetFont()) end
+	end)
+end
+
 function UI.NewText(parent, size, color, justify)
 	local fs = parent:CreateFontString(nil, "OVERLAY")
 	applyFont(fs, size)

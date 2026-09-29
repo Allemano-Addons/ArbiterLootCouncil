@@ -408,6 +408,15 @@ return function(check, H)
 	Sessions:Cancel("again")
 	check("switched off again, a session end closes it", not Win:IsShown())
 
+	-- The loot master as winner: the item is already in the loot master's bags, so there is nothing to trade.
+	reset()
+	sid = newSession()
+	ALC.Responses:Send("BIS")
+	check("the loot master can award to itself", Awards:Award(ME) == true)
+	local ownEntry
+	for _, e in ipairs(LD:GetItems()) do if e.sid == sid then ownEntry = e end end
+	check("and that is not left to trade", ownEntry ~= nil and ownEntry.status == STATUS.AWARDED and ownEntry.winner == ME)
+
 	----------------------------------------------------------------------------
 	-- Awarding many items in a row, from one window
 	----------------------------------------------------------------------------

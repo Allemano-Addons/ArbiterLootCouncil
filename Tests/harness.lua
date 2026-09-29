@@ -24,7 +24,12 @@ local function newFrame(kind, parent)
 		SetAlpha = function(self, a) self.alpha = a end,
 		GetAlpha = function(self) return self.alpha end,
 		SetTexture = function(self, tex) self.texture = tex end,
-		SetFont = function(self, path, size, flags) self.font = { path, size, flags } return true end,
+		-- A path with BAD in it is a font the game cannot load.
+		SetFont = function(self, path, size, flags)
+			if type(path) == "string" and path:find("BAD", 1, true) then return false end
+			self.font = { path, size, flags }
+			return true
+		end,
 		SetVertexColor = function(self, r, g, b, a) self.vertexColor = { r, g, b, a } end,
 		SetTexCoord = function(self, ...) self.texCoord = { ... } end,
 		SetTextColor = function(self, r, g, b, a) self.textColor = { r, g, b, a } end,

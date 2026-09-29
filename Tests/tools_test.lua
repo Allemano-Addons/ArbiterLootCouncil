@@ -144,8 +144,78 @@ return function(check, H)
 	Settings:SetKeepCouncilOpen(false)
 	check("the window follows a change from elsewhere", frame.keepOpen:IsChecked() == false)
 
+	-- Fonts: the list, and how a change reaches every text.
+	local UI = ALC.UI
+	local choices = UI.GetFontChoices()
+	check("the list starts with the game's own font", choices[1].path == nil and choices[1].name == "Game default")
+	check("then four fonts of the game", #choices == 5 and choices[2].name == "Friz Quadrata" and choices[3].path == "Fonts\\ARIALN.TTF")
+	check("a font name is found from its path", UI.FontName(nil) == "Game default" and UI.FontName("fonts\\arialn.ttf") == "Arial Narrow"
+		and UI.FontName("Interface\\AddOns\\Some\\thing.ttf") == "thing.ttf")
+
+	local lsm = LibStub:NewLibrary("LibSharedMedia-3.0", 1)
+	function lsm:HashTable()
+		return {
+			Zeta = "Interface\\AddOns\\X\\z.ttf", Alpha = "Interface\\AddOns\\X\\a.ttf", Beta = "Interface\\AddOns\\X\\b.ttf",
+			Gamma = "Interface\\AddOns\\X\\g.ttf", Delta = "Interface\\AddOns\\X\\d.ttf", Epsilon = "Interface\\AddOns\\X\\e.ttf",
+			Copy = "FONTS\\frizqt__.ttf", -- the same file as a built-in one
+		}
+	end
+	choices = UI.GetFontChoices()
+	check("fonts from LibSharedMedia are added, sorted by name", #choices == 11 and choices[6].name == "Alpha" and choices[11].name == "Zeta")
+	check("a file that is already in the list is not added twice", (function()
+		for _, choice in ipairs(choices) do if choice.name == "Copy" then return false end end
+		return true
+	end)())
+
+	local sample = UI.NewText(UIParent, 12)
+	check("a text starts in the game's font", sample.font[1] == STANDARD_TEXT_FONT)
+	UI.SetFont("Fonts\\ARIALN.TTF")
+	check("a change of font reaches texts that already exist", sample.font[1] == "Fonts\\ARIALN.TTF" and sample.font[2] == 12)
+	check("and texts made afterwards", UI.NewText(UIParent, 14).font[1] == "Fonts\\ARIALN.TTF")
+	UI.SetFont("Fonts\\BAD.ttf")
+	check("a font the game cannot load falls back to the default", sample.font[1] == STANDARD_TEXT_FONT)
+	UI.SetFont(nil)
+	check("nil goes back to the game's own font", sample.font[1] == STANDARD_TEXT_FONT and UI.GetFont() == STANDARD_TEXT_FONT)
+
+	Settings:SetFont("Fonts\\ARIALN.TTF")
+	check("the setting changes the font everywhere", UI.GetFont() == "Fonts\\ARIALN.TTF" and sample.font[1] == "Fonts\\ARIALN.TTF")
+	Settings:SetFont("")
+	check("an empty setting means the game's font", Settings:GetFont() == nil and sample.font[1] == STANDARD_TEXT_FONT)
+
+	-- The font list in the settings window.
+	check("the button names the font in use", frame.fontButton.label:GetText() == "Game default")
+	frame.fontButton.scripts.OnClick(frame.fontButton)
+	local menu = Win.fontMenu()
+	check("the button opens a list", menu ~= nil and menu:IsShown())
+	check("with eight rows and a scrollbar for the rest", menu.rows[8]:IsShown() and menu.scroll:IsShown())
+	check("each font is listed by name", menu.rows[1].name:GetText() == "Game default" and menu.rows[2].name:GetText() == "Friz Quadrata")
+	check("and shown as itself", menu.rows[3].name.font[1] == "Fonts\\ARIALN.TTF" and menu.rows[1].name.font[1] == STANDARD_TEXT_FONT)
+	check("the one in use is marked", menu.rows[1].selected == true and menu.rows[3].selected == false)
+	menu.rows[3].scripts.OnClick(menu.rows[3])
+	check("choosing a font sets it and closes the list", Settings:GetFont() == "Fonts\\ARIALN.TTF" and not menu:IsShown() and UI.GetFont() == "Fonts\\ARIALN.TTF")
+	check("the button follows", frame.fontButton.label:GetText() == "Arial Narrow")
+	frame.fontButton.scripts.OnClick(frame.fontButton)
+	check("reopened, the chosen font is marked", menu.rows[3].selected == true and menu.rows[1].selected == false)
+	menu.scripts.OnMouseWheel(menu, -1)
+	check("the list scrolls", menu.rows[1].name:GetText() == "Friz Quadrata")
+	for _ = 1, 10 do menu.scripts.OnMouseWheel(menu, -1) end
+	check("to the end", menu.rows[8].name:GetText() == "Zeta")
+	local bar = menu.scroll
+	H.cursor = { 0, bar:GetTop() + 50 }
+	bar.scripts.OnMouseDown(bar)
+	bar.scripts.OnMouseUp(bar)
+	check("the scrollbar goes back to the top", menu.rows[1].name:GetText() == "Game default")
+	menu.rows[1].scripts.OnClick(menu.rows[1])
+	check("the first entry gives the game's font back", Settings:GetFont() == nil and UI.GetFont() == STANDARD_TEXT_FONT)
+	frame.fontButton.scripts.OnClick(frame.fontButton)
+	Win:Hide()
+	check("closing the settings closes the list", not menu:IsShown())
+	Win:Show()
+	LibStub.libs["LibSharedMedia-3.0"], LibStub.minors["LibSharedMedia-3.0"] = nil, nil
+
 	-- Position and being open across a reload.
 	frame.header.scripts.OnDragStop(frame.header)
+
 	check("the position is saved", Settings:GetWindowPosition("settings") ~= nil)
 	Win:Hide()
 	check("closing is remembered", Settings:GetWindowShown("settings") == false)
@@ -303,4 +373,9 @@ return function(check, H)
 	ALC.Settings:SetMinimapHidden(true)
 	H.reload()
 	check("a hidden button stays hidden after a reload", ALC.MinimapButton.button:IsShown() == false)
+
+	-- The chosen font is used again after a reload.
+	ALC.Settings:SetFont("Fonts\\ARIALN.TTF")
+	H.reload()
+	check("the font survives a reload", ALC.UI.GetFont() == "Fonts\\ARIALN.TTF" and ALC.UI.NewText(UIParent, 12).font[1] == "Fonts\\ARIALN.TTF")
 end

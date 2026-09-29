@@ -74,7 +74,17 @@ function Settings:GetLootStore()
 	return db.global.lootList
 end
 
--- Whether the voting window stays open after an award (it then shows the history).
+-- The font of every window: a path, or nil for the game's own.
+function Settings:GetFont()
+	return db.profile.font
+end
+
+function Settings:SetFont(path)
+	db.profile.font = (type(path) == "string" and path ~= "") and path or nil
+	changed("font")
+end
+
+-- Whether the voting window stays open after an award.
 function Settings:GetKeepCouncilOpen()
 	return db.profile.keepCouncilOpen == true
 end

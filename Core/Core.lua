@@ -164,6 +164,7 @@ end
 --------------------------------------------------------------------------------
 function ALC:OnInitialize()
 	self.Settings:Init()
+	self.UI:Init()
 	self.Comm:Init()
 	self.Council:Init()
 	self.Sessions:Init()

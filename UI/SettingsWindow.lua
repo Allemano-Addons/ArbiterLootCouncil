@@ -248,7 +248,16 @@ local function build()
 		ALC.Settings:SetKeepCouncilOpen(checked)
 	end)
 	frame.keepOpen:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
-	y = y + 38
+	y = y + 34
+
+	-- The font of every window; opens a list where each font is shown as itself.
+	local fontLabel = UI.NewText(frame, 12, c.text)
+	fontLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
+	fontLabel:SetText(L["Font"])
+	y = y + 20
+	frame.fontButton = UI.NewButton(frame, WIDTH - 2 * PAD, 30, "", function() SettingsWindow:ToggleFontMenu() end)
+	frame.fontButton:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
+	y = y + 46
 
 	-- Debug -----------------------------------------------------------------
 	divider(y)
@@ -285,6 +294,117 @@ local function build()
 end
 
 --------------------------------------------------------------------------------
+-- The font list
+--------------------------------------------------------------------------------
+local FONT_ROWS, FONT_ROW_H = 8, 30
+local fontMenu, fontCatcher
+local fontChoices, fontOffset = {}, 0
+
+local function refreshFontMenu()
+	if not fontMenu or not fontMenu:IsShown() then return end
+	fontOffset = max(0, min(fontOffset, max(0, #fontChoices - FONT_ROWS)))
+	local current = ALC.Settings:GetFont()
+	for i, row in ipairs(fontMenu.rows) do
+		local choice = fontChoices[fontOffset + i]
+		if choice then
+			row.choice = choice
+			row.name:SetText(choice.name)
+			-- Each font is shown as itself; a font the game cannot load falls back to the default.
+			local ok = row.name:SetFont(choice.path or STANDARD_TEXT_FONT, 13, "")
+			if ok == false then row.name:SetFont(STANDARD_TEXT_FONT, 13, "") end
+			local selected = (choice.path == nil and current == nil)
+				or (choice.path ~= nil and current ~= nil and string.lower(choice.path) == string.lower(current))
+			row.selected = selected
+			UI.SetTextureColor(row.bg, selected and c.goldTint or c.panel, selected and 1 or 0)
+			local color = selected and c.gold or c.text
+			row.name:SetTextColor(color[1], color[2], color[3], 1)
+			row:Show()
+		else
+			row.choice = nil
+			row:Hide()
+		end
+	end
+	fontMenu.scroll:Update(#fontChoices, FONT_ROWS, fontOffset)
+end
+
+local function buildFontMenu()
+	fontCatcher = CreateFrame("Frame", nil, UIParent)
+	fontCatcher:SetAllPoints(UIParent)
+	fontCatcher:SetFrameStrata("DIALOG")
+	fontCatcher:EnableMouse(true)
+	fontCatcher:SetScript("OnMouseDown", function() SettingsWindow:HideFontMenu() end)
+	fontCatcher:Hide()
+
+	fontMenu = CreateFrame("Frame", nil, UIParent)
+	fontMenu:SetFrameStrata("FULLSCREEN_DIALOG")
+	fontMenu:SetClampedToScreen(true)
+	fontMenu:EnableMouseWheel(true)
+	fontMenu:SetSize(WIDTH - 2 * PAD, FONT_ROWS * FONT_ROW_H + 12)
+	fontMenu:Hide()
+	local bg = UI.NewFill(fontMenu, 8)
+	UI.SetTextureColor(bg, c.bg)
+	UI.AddBorder(fontMenu, c.border, 1, 8)
+
+	fontMenu.rows = {}
+	for i = 1, FONT_ROWS do
+		local row = CreateFrame("Button", nil, fontMenu)
+		row:SetHeight(FONT_ROW_H)
+		row:SetPoint("TOPLEFT", fontMenu, "TOPLEFT", 6, -6 - (i - 1) * FONT_ROW_H)
+		row:SetPoint("TOPRIGHT", fontMenu, "TOPRIGHT", -16, -6 - (i - 1) * FONT_ROW_H)
+		row.bg = UI.NewFill(row, 6)
+		UI.SetTextureColor(row.bg, c.panel, 0)
+		-- Not made with UI.NewText: the font of a row is its own, whatever the setting is.
+		row.name = row:CreateFontString(nil, "OVERLAY")
+		row.name:SetPoint("LEFT", row, "LEFT", 12, 0)
+		row.name:SetJustifyH("LEFT")
+		row:SetScript("OnEnter", function(self) UI.SetTextureColor(self.bg, c.panelHover, 1) end)
+		row:SetScript("OnLeave", function(self)
+			UI.SetTextureColor(self.bg, self.selected and c.goldTint or c.panel, self.selected and 1 or 0)
+		end)
+		row:SetScript("OnClick", function(self)
+			if not self.choice then return end
+			ALC.Settings:SetFont(self.choice.path)
+			SettingsWindow:HideFontMenu()
+		end)
+		fontMenu.rows[i] = row
+	end
+	fontMenu.scroll = UI.NewScrollBar(fontMenu, function(newOffset)
+		fontOffset = newOffset
+		refreshFontMenu()
+	end)
+	fontMenu.scroll:SetPoint("TOPRIGHT", fontMenu, "TOPRIGHT", -5, -6)
+	fontMenu.scroll:SetHeight(FONT_ROWS * FONT_ROW_H)
+	fontMenu.scroll:Hide()
+	fontMenu:SetScript("OnMouseWheel", function(_, delta)
+		fontOffset = max(0, min(fontOffset - delta, max(0, #fontChoices - FONT_ROWS)))
+		refreshFontMenu()
+	end)
+end
+
+function SettingsWindow:ShowFontMenu()
+	if not frame then return end
+	if not fontMenu then buildFontMenu() end
+	fontChoices = UI.GetFontChoices()
+	fontOffset = 0
+	fontMenu:ClearAllPoints()
+	fontMenu:SetPoint("TOPLEFT", frame.fontButton, "BOTTOMLEFT", 0, -4)
+	fontCatcher:Show()
+	fontMenu:Show()
+	refreshFontMenu()
+end
+
+function SettingsWindow:HideFontMenu()
+	if fontMenu then fontMenu:Hide() end
+	if fontCatcher then fontCatcher:Hide() end
+end
+
+function SettingsWindow:ToggleFontMenu()
+	if fontMenu and fontMenu:IsShown() then self:HideFontMenu() else self:ShowFontMenu() end
+end
+
+SettingsWindow.fontMenu = function() return fontMenu end
+
+--------------------------------------------------------------------------------
 -- Rendering
 --------------------------------------------------------------------------------
 function SettingsWindow:Refresh()
@@ -317,6 +437,8 @@ function SettingsWindow:Refresh()
 	frame.minimap:SetChecked(not settings:IsMinimapHidden())
 	frame.keepOpen:SetChecked(settings:GetKeepCouncilOpen())
 	frame.debug:SetChecked(settings:IsDebug())
+	frame.fontButton:SetLabel(UI.FontName(settings:GetFont()))
+	refreshFontMenu()
 end
 
 --------------------------------------------------------------------------------
@@ -338,6 +460,7 @@ function SettingsWindow:Show()
 end
 
 function SettingsWindow:Hide()
+	self:HideFontMenu()
 	if frame then frame:Hide() end
 	ALC.Settings:SetWindowShown("settings", false)
 end
