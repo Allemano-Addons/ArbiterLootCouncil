@@ -14,7 +14,7 @@ QUICK START
     /alc council add <First Last>   who is on the council (once, before raid)
     /alc add [item link]            put an item in the loot list (loot from bosses is added by itself)
     Click Start on an item in the loot window, or Start all for one session with every
-    waiting item (up to 20). The council window then shows the items as icons to the left:
+    waiting item (up to 30). The council window then shows the items as icons to the left:
     click one to see its candidates. Each item is awarded on its own; the session ends
     with the last one, or with Stop session / Cancel session.
   Everybody: answer in the "Loot response" window (BiS, Upgrade, Minor, Offspec, Pass), one row per item.

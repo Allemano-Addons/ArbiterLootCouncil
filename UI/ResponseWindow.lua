@@ -8,13 +8,13 @@ local L = ALC.L
 local strupper = string.upper
 local min, max = math.min, math.max
 
-local WIDTH, PAD = 600, 16
-local HEADER_H, FOOTER_H = 52, 64
-local ROW_H, ROW_GAP = 66, 6
-local ICON = 46
-local BUTTON_W, BUTTON_H, GAP = 62, 34, 4
-local NAME_W = 170
-local POOL, MAX_VISIBLE = ALC.Constants.MAX_SESSION_ITEMS, 6
+local WIDTH, PAD = 580, 16
+local HEADER_H, FOOTER_H = 52, 56
+local ROW_H, ROW_GAP = 46, 4
+local ICON = 34
+local BUTTON_W, BUTTON_H, GAP = 60, 30, 4
+local NAME_W = 190
+local POOL, MAX_VISIBLE = ALC.Constants.MAX_SESSION_ITEMS, 10
 local UNKNOWN_ICON = "Interface\\Icons\\INV_Misc_QuestionMark"
 
 local ResponseWindow = {}
@@ -57,7 +57,7 @@ local function newRow(index)
 
 	row.itemBox = CreateFrame("Button", nil, row)
 	row.itemBox:SetSize(ICON, ICON)
-	row.itemBox:SetPoint("LEFT", row, "LEFT", 10, 0)
+	row.itemBox:SetPoint("LEFT", row, "LEFT", 8, 0)
 	row.icon = row.itemBox:CreateTexture(nil, "ARTWORK")
 	row.icon:SetPoint("TOPLEFT", 2, -2)
 	row.icon:SetPoint("BOTTOMRIGHT", -2, 2)
@@ -70,14 +70,14 @@ local function newRow(index)
 	end)
 	row.itemBox:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
-	row.name = UI.NewText(row, 13, c.text)
-	row.name:SetPoint("TOPLEFT", row.itemBox, "TOPRIGHT", 10, -3)
+	row.name = UI.NewText(row, 12, c.text)
+	row.name:SetPoint("TOPLEFT", row.itemBox, "TOPRIGHT", 8, 0)
 	row.name:SetWidth(NAME_W)
-	row.sub = UI.NewText(row, 11, c.muted)
-	row.sub:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -4)
+	row.sub = UI.NewText(row, 10, c.muted)
+	row.sub:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -2)
 	row.sub:SetWidth(NAME_W)
 
-	local left = 10 + ICON + 10 + NAME_W + 10
+	local left = 8 + ICON + 8 + NAME_W + 8
 	row.buttons = {}
 	for i, response in ipairs(ALC.Responses.LIST) do
 		local button = UI.NewButton(row, BUTTON_W, BUTTON_H, response.label, function()
@@ -226,9 +226,17 @@ function ResponseWindow:Refresh()
 	local count = #session.items
 	local visible = min(count, MAX_VISIBLE)
 	offset = max(0, min(offset, max(0, count - visible)))
+	-- Items that still wait for an answer first, the awarded ones after them.
+	local order = {}
+	for index, item in ipairs(session.items) do
+		if not item.winner then order[#order + 1] = index end
+	end
+	for index, item in ipairs(session.items) do
+		if item.winner then order[#order + 1] = index end
+	end
 	for i = 1, POOL do
-		local item = session.items[offset + i]
-		if item and i <= visible then renderRow(self.rows[i], offset + i, item) else self.rows[i]:Hide() end
+		local index = order[offset + i]
+		if index and i <= visible then renderRow(self.rows[i], index, session.items[index]) else self.rows[i]:Hide() end
 	end
 	frame.scroll:SetHeight(visible * (ROW_H + ROW_GAP) - ROW_GAP)
 	frame.scroll:Update(count, visible, offset)

@@ -423,11 +423,8 @@ local STRIP_BUTTON, STRIP_GAP, STRIP_COLUMN = 44, 6, 8
 local function buildStrip()
 	CouncilWindow.strip = {}
 	for i = 1, ALC.Constants.MAX_SESSION_ITEMS do
-		local column, row = math.floor((i - 1) / STRIP_COLUMN), (i - 1) % STRIP_COLUMN
 		local button = CreateFrame("Button", nil, frame)
-		button:SetSize(STRIP_BUTTON, STRIP_BUTTON)
-		button:SetPoint("TOPRIGHT", frame, "TOPLEFT",
-			-(STRIP_GAP + column * (STRIP_BUTTON + STRIP_GAP)), -(HEADER_H + row * (STRIP_BUTTON + STRIP_GAP)))
+		button:SetSize(STRIP_BUTTON, STRIP_BUTTON) -- placed by updateStrip
 		button.selected = button:CreateTexture(nil, "BACKGROUND")
 		button.selected:SetPoint("TOPLEFT", -3, 3)
 		button.selected:SetPoint("BOTTOMRIGHT", 3, -3)
@@ -436,9 +433,11 @@ local function buildStrip()
 		button.icon:SetPoint("TOPLEFT", 2, -2)
 		button.icon:SetPoint("BOTTOMRIGHT", -2, 2)
 		button.ring = UI.AddBorder(button, c.border, 2, 8, "OVERLAY")
-		button.check = UI.NewText(button, 12, c.gold, "CENTER") -- "Won" over the dimmed icon of an awarded item
-		button.check:SetPoint("CENTER", 0, 0)
-		button.check:SetText(strupper(L["Won"]))
+		-- A small gold mark on an awarded item.
+		button.check = button:CreateTexture(nil, "OVERLAY")
+		button.check:SetSize(10, 10)
+		button.check:SetPoint("TOPRIGHT", button, "TOPRIGHT", -3, -3)
+		UI.SetTextureColor(button.check, c.gold)
 		button.badge = CreateFrame("Frame", nil, button)
 		button.badge:SetSize(18, 16)
 		button.badge:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", 3, -3)
@@ -628,7 +627,17 @@ local function build()
 		CouncilWindow:Refresh()
 	end)
 	frame.compact:SetSize(150, 24)
-	frame.compact:SetPoint("BOTTOM", frame, "BOTTOM", 0, 16)
+	frame.compact:SetPoint("BOTTOM", frame, "BOTTOM", 60, 16)
+
+	-- Players who passed are hidden unless asked for: nothing to vote on, but they can be
+	-- taken back by the loot master (right-click).
+	frame.showPassed = UI.NewCheckbox(frame, L["Show passed"], function(checked)
+		ALC.Settings:SetWindowOption("council", "showPassed", checked)
+		offset = 0
+		CouncilWindow:Refresh()
+	end)
+	frame.showPassed:SetSize(130, 24)
+	frame.showPassed:SetPoint("RIGHT", frame.compact, "LEFT", -6, 0)
 
 	-- Sorting: one button that steps through the orders.
 	frame.sort = UI.NewButton(frame, 150, 24, "", function() CouncilWindow:CycleSortMode() end)
@@ -640,7 +649,7 @@ local function build()
 
 	councilStatic = { itemBox, frame.name, frame.sub, frame.progress, frame.barBg, frame.barFill, itemDivider, tableDivider,
 		headings[1], headings[2], headings[3], headings[4], frame.empty, frame.footerLine, frame.lootMaster,
-		frame.tally, frame.compact, frame.sort, frame.stop }
+		frame.tally, frame.compact, frame.showPassed, frame.sort, frame.stop }
 
 	-- Shown instead of the Council tab while no session runs.
 	frame.idle = centred(HEADER_H + 46, L["No running session. Start one from the loot window."])
@@ -793,11 +802,16 @@ function CouncilWindow:CycleSortMode()
 	end
 end
 
--- The candidates the table lists (not the ones who passed), in the chosen order.
+function CouncilWindow:ShowsPassed()
+	return ALC.Settings:GetWindowOption("council", "showPassed", false) == true
+end
+
+-- The candidates the table lists, in the chosen order; those who passed only when asked for.
 function CouncilWindow:GetVisible()
 	local list = {}
+	local showPassed = self:ShowsPassed()
 	for _, entry in ipairs(ALC.Candidates:GetList(focus)) do
-		if entry.response ~= "PASS" then
+		if entry.response ~= "PASS" or showPassed then
 			entry.votes = ALC.Voting:GetVotes(entry.name, focus)
 			list[#list + 1] = entry
 		end
@@ -876,12 +890,12 @@ local function renderRow(row, entry, myVote, topVotes, isLM, compact, open)
 	row.vote:ClearAllPoints()
 	if isLM then
 		row.vote:SetPoint("RIGHT", row.award, "LEFT", -8, 0)
-		row.award:SetShown(open)
+		row.award:SetShown(open and entry.response ~= "PASS")
 	else
 		row.vote:SetPoint("RIGHT", row, "RIGHT", -12, 0)
 		row.award:Hide()
 	end
-	row.vote:SetShown(open)
+	row.vote:SetShown(open and entry.response ~= "PASS") -- nothing to vote on for a player who passed
 	row:Show()
 end
 
@@ -917,6 +931,7 @@ local function updateStrip(self, session)
 	-- The strip hangs outside the window: keep it on the screen too.
 	local columns = count > 1 and math.ceil(count / STRIP_COLUMN) or 0
 	frame:SetClampRectInsets(columns > 0 and (columns * (STRIP_BUTTON + STRIP_GAP) + STRIP_GAP) or 0, 0, 0, 0)
+	columns = max(columns, 1)
 	for i, button in ipairs(self.strip) do
 		local item = session.items[i]
 		if item and count > 1 then
@@ -925,13 +940,21 @@ local function updateStrip(self, session)
 			button.itemString = item.itemString
 			button.winner = item.winner
 			button.icon:SetTexture(display.icon or UNKNOWN_ICON)
-			button.icon:SetVertexColor(1, 1, 1, item.winner and 0.35 or 1)
+			button.icon:SetDesaturated(item.winner ~= nil)
+			button.icon:SetVertexColor(1, 1, 1, item.winner and 0.55 or 1)
 			local qc = UI.QualityColor(display.quality)
-			button.ring:SetColor(i == focus and c.gold or qc)
+			button.ring:SetColor(i == focus and c.gold or (item.winner and c.border or qc))
 			button.check:SetShown(item.winner ~= nil)
+			-- Open items: how many want it (grey zero when everybody who answered passed).
 			local counts = ALC.Candidates:GetCounts(i)
 			button.badge.text:SetText(tostring(counts.wanting))
-			button.badge:SetShown(item.winner == nil and counts.wanting > 0)
+			button.badge.bg:SetColor(counts.wanting > 0 and c.gold or c.muted)
+			button.badge:SetShown(item.winner == nil and counts.responded > 0)
+			-- Items read left to right, row by row; the first column is next to the window.
+			local column, row = (i - 1) % columns, math.floor((i - 1) / columns)
+			button:ClearAllPoints()
+			button:SetPoint("TOPRIGHT", frame, "TOPLEFT",
+				-(STRIP_GAP + (columns - 1 - column) * (STRIP_BUTTON + STRIP_GAP)), -(HEADER_H + row * (STRIP_BUTTON + STRIP_GAP)))
 			button.selected:SetShown(i == focus)
 			button:Show()
 		else
@@ -1003,6 +1026,12 @@ local function renderCouncil(self, session)
 		end
 	end
 	frame.empty:SetShown(count == 0)
+	frame.showPassed:SetChecked(self:ShowsPassed())
+	if count == 0 then
+		local passed = counts.passed
+		frame.empty:SetText(passed > 0 and string.format(L["Everybody who answered passed (%d). Tick Show passed to see them."], passed)
+			or L["Waiting for responses..."])
+	end
 	frame.scroll:SetHeight(max(shown, 1) * rowH)
 	frame.scroll:Update(count, rowsAllowed, offset)
 	frame.grip:Show()
@@ -1279,6 +1308,24 @@ function CouncilWindow:GetRowMenu(name)
 	if not ALC.Sessions:IsItemOpen(focus) then return {} end -- awarded: nothing left to do
 
 	local items = {}
+	local function changeResponse()
+		items[#items + 1] = { label = L["Change response"], header = true }
+		for _, response in ipairs(ALC.Responses.LIST) do
+			items[#items + 1] = {
+				label = response.label, color = response.color,
+				enabled = response.id ~= candidate.response,
+				onClick = function()
+					local ok, message = ALC.Candidates:SetResponse(candidate.name, response.id, focus)
+					if not ok and message then ALC:Print(message) end
+				end,
+			}
+		end
+	end
+	-- Somebody who passed can only be taken back by the loot master.
+	if candidate.response == "PASS" then
+		if session.isLM then changeResponse() end
+		return items
+	end
 	local myVote = ALC.Voting:GetMyVote(focus)
 	local mine = myVote ~= nil and ALC:SameName(myVote, candidate.name)
 	items[#items + 1] = {
@@ -1294,17 +1341,7 @@ function CouncilWindow:GetRowMenu(name)
 		label = L["Award"], color = c.gold,
 		onClick = function() ALC.AwardDialog:Ask(candidate.name, focus) end,
 	}
-	items[#items + 1] = { label = L["Change response"], header = true }
-	for _, response in ipairs(ALC.Responses.LIST) do
-		items[#items + 1] = {
-			label = response.label, color = response.color,
-			enabled = response.id ~= candidate.response,
-			onClick = function()
-				local ok, message = ALC.Candidates:SetResponse(candidate.name, response.id, focus)
-				if not ok and message then ALC:Print(message) end
-			end,
-		}
-	end
+	changeResponse()
 	items[#items + 1] = {
 		label = L["Remove from consideration"],
 		onClick = function()

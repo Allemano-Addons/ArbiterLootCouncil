@@ -108,8 +108,10 @@ end
 local function load(flat)
 	lists = {}
 	for _, entry in ipairs(flat or {}) do
-		local list = listOf(entry.item)
-		list[#list + 1] = copyEntry(entry)
+		-- Lists saved by version 0.1 have no item number: they are for the only item.
+		local item = entry.item or 1
+		local list = listOf(item)
+		list[#list + 1] = copyEntry(entry, item)
 	end
 end
 

@@ -78,9 +78,9 @@ return function(check, H)
 	check("a session needs an item", spec.validate(startBase({}), ME) == false)
 	check("no items list is refused", spec.validate({ council = { ME }, lm = ME }, ME) == false)
 	local many = {}
-	for i = 1, 21 do many[i] = one end
-	check("21 items are too many", spec.validate(startBase(many), ME) == false)
-	check("20 are the most", (function() many[21] = nil return spec.validate(startBase(many), ME) end)() == true)
+	for i = 1, 31 do many[i] = one end
+	check("31 items are too many", spec.validate(startBase(many), ME) == false)
+	check("30 are the most", (function() many[31] = nil return spec.validate(startBase(many), ME) end)() == true)
 	check("an item must match its itemString", spec.validate(startBase({ { itemID = 201, itemString = "item:200" } }), ME) == false)
 	check("an item cannot be a number", spec.validate(startBase({ 200 }), ME) == false)
 	check("the old single-item form is refused", spec.validate({ itemID = 200, itemString = "item:200", council = { ME }, lm = ME }, ME) == false)
@@ -90,7 +90,7 @@ return function(check, H)
 	check("an answer names its item", resp.validate({ item = 2, response = "BIS", gear = {} }) == true)
 	check("an answer without an item is refused", resp.validate({ response = "BIS", gear = {} }) == false)
 	check("item 0 is refused", resp.validate({ item = 0, response = "BIS", gear = {} }) == false)
-	check("item 21 is refused", resp.validate({ item = 21, response = "BIS", gear = {} }) == false)
+	check("item 31 is refused", resp.validate({ item = 31, response = "BIS", gear = {} }) == false)
 	check("item 1.5 is refused", resp.validate({ item = 1.5, response = "BIS", gear = {} }) == false)
 	check("votes name their item", ALC.Protocol.specs.VOTE.validate({ item = 1, candidate = "Veyra Moo" }) == true
 		and ALC.Protocol.specs.VOTE.validate({ candidate = "Veyra Moo" }) == false)
@@ -103,9 +103,9 @@ return function(check, H)
 	local okNone, msgNone = Sessions:StartItems({})
 	check("no items, no session", okNone == false and msgNone ~= nil and not Sessions:IsActive())
 	local tooMany = {}
-	for i = 1, 21 do tooMany[i] = 200 end
+	for i = 1, 31 do tooMany[i] = 200 end
 	local okMany, msgMany = Sessions:StartItems(tooMany)
-	check("more than 20 items is refused with the limit named", okMany == false and msgMany:find("20", 1, true) ~= nil)
+	check("more than 30 items is refused with the limit named", okMany == false and msgMany:find("30", 1, true) ~= nil)
 	local okBad, msgBad = Sessions:StartItems({ 200, "junk" })
 	check("one bad item refuses the whole start", okBad == false and msgBad ~= nil and not Sessions:IsActive())
 
@@ -290,8 +290,39 @@ return function(check, H)
 	Awards:Award("Veyra Moo", 1)
 	check("after an award the table moves to the next open item", Win:GetFocus() == 3 and Win.rows[1].parent.name:GetText() == "Ring of Focus")
 	check("the session is still running with one item open", Sessions:IsActive() and Sessions:IsItemOpen(3))
-	check("the response window shows the results", Resp.rows[1].result:IsShown() and Resp.rows[1].result:GetText() == "Awarded to Veyra Moo"
-		and not Resp.rows[1].buttons[1]:IsShown() and Resp.rows[3].buttons[1]:IsShown())
+	check("the response window lists open items first, awarded ones after", Resp.rows[1].name:GetText() == "Ring of Focus" and Resp.rows[1].buttons[1]:IsShown()
+		and Resp.rows[2].name:GetText() == "Crown of Destruction" and Resp.rows[3].name:GetText() == "Belt of Might")
+	check("an awarded row shows the winner instead of the buttons", Resp.rows[2].result:IsShown() and Resp.rows[2].result:GetText() == "Awarded to Veyra Moo"
+		and not Resp.rows[2].buttons[1]:IsShown() and Resp.rows[3].result:GetText() == "Awarded to Kaelis Moo")
+	check("a click in a moved row answers that row's item", (function()
+		Resp.rows[1].buttons[2].scripts.OnClick(Resp.rows[1].buttons[2])
+		return Responses:GetMyResponse(3) == "UPGRADE"
+	end)())
+
+	-- Everybody passing: the item stays in the table's reach.
+	Win:SetFocus(3)
+	Candidates:SetResponse(ME, "PASS", 3)
+	Candidates:SetResponse("Veyra Moo", "PASS", 3) -- not a candidate here: refused
+	Comm:Process(env("RESPONSE", sid, nil, { item = 3, response = "PASS", gear = {} }), "WHISPER", "Jonatan Moo")
+	check("nobody left who wants it", #Win:GetVisible() == 0 and Candidates:GetCounts(3).wanting == 0 and Candidates:GetCounts(3).passed == 2)
+	check("the table says everybody passed, and how to see them", Win.rows[1].parent.empty:IsShown() and Win.rows[1].parent.empty:GetText():find("passed (2)", 1, true) ~= nil)
+	check("the strip shows a grey zero for it", Win.strip[3].badge:IsShown() and Win.strip[3].badge.text:GetText() == "0")
+	check("Show passed lists them", (function()
+		Win.rows[1].parent.showPassed.scripts.OnClick(Win.rows[1].parent.showPassed)
+		return Win:ShowsPassed() and #Win:GetVisible() == 2 and Win.rows[1]:IsShown() and Win.rows[2]:IsShown()
+	end)())
+	check("a passed player has no Vote or Award button", not Win.rows[1].vote:IsShown() and not Win.rows[1].award:IsShown())
+	local passMenu = Win:GetRowMenu("Jonatan Moo")
+	local passLabels = {}
+	for _, item in ipairs(passMenu) do passLabels[#passLabels + 1] = item.label end
+	check("the loot master can take a passed player back from the menu", table.concat(passLabels, "|") == "Change response|BiS|Upgrade|Minor|Offspec|Pass")
+	for _, item in ipairs(passMenu) do
+		if item.label == "Upgrade" then item.onClick() end
+	end
+	check("and then they are a candidate again", Candidates:Get("Jonatan Moo", 3).response == "UPGRADE" and Win.strip[3].badge.text:GetText() == "1")
+	Win.rows[1].parent.showPassed.scripts.OnClick(Win.rows[1].parent.showPassed)
+	check("Show passed switches off again", not Win:ShowsPassed())
+	Candidates:SetResponse(ME, "MINOR", 3)
 
 	-- A snapshot now: winners are in the item list.
 	H.clock = H.clock + 100
@@ -436,6 +467,35 @@ return function(check, H)
 	Comm:Process(env("SESSION_CANCEL", "sidR", 2, { reason = "done" }), "PARTY", "Veyra Moo")
 	Sessions:RequestState()
 	check("a snapshot whose answers do not name an item is refused", Comm:Process(env("STATE_SNAPSHOT", "sidS", 1, malformed), "WHISPER", "Veyra Moo") == false)
+
+	----------------------------------------------------------------------------
+	-- A session saved by version 0.1 (no item numbers) still comes back
+	----------------------------------------------------------------------------
+	H.reload("fresh")
+	leader = ME
+	world()
+	ALC.Settings:AddCouncilMember("Veyra Moo")
+	ALC.Sessions:Start(200)
+	local legacySid = ALC.Sessions:GetActiveSid()
+	ALC.Responses:Send("BIS")
+	ALC.Comm:Process(env("RESPONSE", legacySid, nil, { item = 1, response = "UPGRADE", gear = {} }), "WHISPER", "Veyra Moo")
+	ALC.Voting:Cast("Veyra Moo")
+	local old = H.snapshotDB()
+	local s = old.global.sessionStore
+	s.session.itemID, s.session.itemString = s.session.items[1].itemID, s.session.items[1].itemString
+	s.session.items = nil
+	for _, entry in ipairs(s.candidates) do entry.item = nil end
+	for _, vote in ipairs(s.votes) do vote.item = nil end
+	H.reload(old)
+	leader = ME
+	world()
+	ALC.Council:Refresh()
+	local okLegacy = pcall(ALC.Sessions.OnEnteringWorld, ALC.Sessions, false, true)
+	check("an old saved session restores without an error", okLegacy and ALC.Sessions:IsActive() and ALC.Sessions:GetItemCount() == 1)
+	check("as a one-item session", ALC.Sessions:GetItem(1).itemID == 200 and ALC.Sessions:IsItemOpen(1))
+	check("its candidates, votes and our answer land on item 1", #ALC.Candidates:GetList(1) == 2 and ALC.Voting:GetVotes("Veyra Moo", 1) == 1
+		and ALC.Voting:GetMyVote(1) == "Veyra Moo" and ALC.Responses:GetMyResponse(1) == "BIS")
+	ALC.Sessions:Cancel("done")
 
 	-- Put the environment back.
 	UnitIsConnected = nil

@@ -29,7 +29,7 @@ ALC.Comm = Comm
 LibStub("AceComm-3.0"):Embed(Comm)
 LibStub("AceEvent-3.0"):Embed(Comm)
 
-local MAX_MESSAGE_LENGTH = 16384
+local MAX_MESSAGE_LENGTH = 65536 -- a snapshot of a session with many items and candidates is large
 local LOG_INTERVAL = 10     -- seconds between identical rejection log lines
 local VERSION_WAIT = 3      -- seconds to wait for version replies
 
