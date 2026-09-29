@@ -1,4 +1,4 @@
-﻿## Interface: 16001
+## Interface: 16001
 ## Title: Arbiter Loot Council
 ## Notes: Loot council for WoW Forever. Part of Allemano Addons.
 ## Author: Patrick
@@ -13,6 +13,9 @@ Core\Locale.lua
 Core\Debug.lua
 Core\Settings.lua
 Core\Constants.lua
+Core\Commands.lua
 Comm\Protocol.lua
 Comm\Comm.lua
-Core\Commands.lua
+Council\Council.lua
+Sessions\Sessions.lua
+Sessions\TestMode.lua

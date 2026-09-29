@@ -4,7 +4,9 @@ return function(check, H)
 	local Comm, Protocol = ALC.Comm, ALC.Protocol
 	local AceSerializer = LibStub("AceSerializer-3.0")
 
-	-- Stand-ins for the Council and Sessions modules (built in later steps).
+	-- These tests isolate Comm: the real Council and Sessions are replaced by stand-ins
+	-- and the real Sessions stops listening. Run this file after the Sessions tests.
+	ALC.Events.UnregisterAll(ALC.Sessions)
 	local lmName, activeSid = "Ashvane", "sid1"
 	local council = { ashvane = true, veyra = true, ["allemano moo"] = true }
 	ALC.Council = {

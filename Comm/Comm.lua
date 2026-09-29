@@ -404,6 +404,8 @@ function Comm:RequestVersions()
 	C_Timer.After(VERSION_WAIT, function() Comm:PrintVersions() end)
 end
 
+ALC.Commands:RegisterDebug("versions", function() Comm:RequestVersions() end)
+
 function Comm:PrintVersions()
 	local L = ALC.L
 	ALC:Print(L["ALC versions (protocol v%d):"], Protocol.VERSION)

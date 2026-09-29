@@ -78,6 +78,7 @@ check("quality by name", ALC.Settings:GetQualityThreshold() == 5)
 H.slash("council add Kaelis")
 check("council via slash", ALC.Settings:GetCouncil()[2] == "Kaelis" or ALC.Settings:GetCouncil()[1] == "Kaelis")
 
+dofile("Tests/sessions_test.lua")(check, H)
 dofile("Tests/comm_test.lua")(check, H)
 
 print(string.format("%d passed, %d failed", passed, failed))

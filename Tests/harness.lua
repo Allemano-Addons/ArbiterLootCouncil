@@ -22,6 +22,7 @@ function H.setup()
 	GetAddOnMetadata = function() return "test" end
 	geterrorhandler = function() return print end
 	UnitName = function(unit) if unit == "player" then return "Tester", "Moo" end end
+	GetItemInfo = function() end
 	UnitClass = function() return "Rogue", "ROGUE" end
 	UnitRace = function() return "Human", "Human" end
 	time, date = os.time, os.date
@@ -71,16 +72,13 @@ function H.loadAddon()
 		"Libs/AceDB-3.0/AceDB-3.0.lua",
 	})
 	stubAceComm()
-	loadAll({
-		"Core/Core.lua",
-		"Core/Locale.lua",
-		"Core/Debug.lua",
-		"Core/Settings.lua",
-		"Core/Constants.lua",
-		"Comm/Protocol.lua",
-		"Comm/Comm.lua",
-		"Core/Commands.lua",
-	})
+	-- Addon files in the same order as the game loads them.
+	local files = {}
+	for line in io.lines("ArbiterLootCouncil.toc") do
+		line = line:gsub("\r", "")
+		if line:match("%.lua$") then files[#files + 1] = (line:gsub("\\", "/")) end
+	end
+	loadAll(files)
 end
 
 function H.slash(input) SlashCmdList["ALC"](input) end

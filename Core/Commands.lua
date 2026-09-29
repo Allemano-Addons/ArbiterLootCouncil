@@ -49,31 +49,52 @@ end
 -- Built-in commands
 --------------------------------------------------------------------------------
 
+-- Modules add diagnostics under /alc debug <name> via Commands:RegisterDebug.
+local debugHandlers = {}
+
+function Commands:RegisterDebug(name, handler)
+	debugHandlers[strlower(name)] = handler
+end
+
+local function debugUsage()
+	local names = { "on", "off", "log", "clear" }
+	local extra = {}
+	for name in pairs(debugHandlers) do tinsert(extra, name) end
+	sort(extra)
+	for _, name in ipairs(extra) do tinsert(names, name) end
+	return table.concat(names, "|")
+end
+
 Commands:Register("debug", function(arg)
-	arg = strlower(arg)
+	local sub, rest = strmatch(arg, "^(%S*)%s*(.-)$")
+	sub = strlower(sub)
 	local settings = ALC.Settings
-	if arg == "" then
+	if sub == "" then
 		settings:SetDebug(not settings:IsDebug())
-	elseif arg == "on" then
+	elseif sub == "on" then
 		settings:SetDebug(true)
-	elseif arg == "off" then
+	elseif sub == "off" then
 		settings:SetDebug(false)
-	elseif arg == "log" then
+	elseif sub == "log" then
 		ALC.Debug:Dump(30)
 		return
-	elseif arg == "clear" then
+	elseif sub == "clear" then
 		ALC.Debug:Clear()
 		ALC:Print(L["Debug log cleared."])
 		return
-	elseif arg == "versions" then
-		ALC.Comm:RequestVersions()
+	elseif debugHandlers[sub] then
+		debugHandlers[sub](rest)
 		return
 	else
-		ALC:Print(L["Usage: /alc debug [on|off|log|clear|versions]"])
+		ALC:Print(L["Usage: /alc debug [%s]"], debugUsage())
 		return
 	end
 	ALC:Print(settings:IsDebug() and L["Debug output on."] or L["Debug output off."])
-end, L["toggle debug output (on|off|log|clear|versions)"])
+end, L["toggle debug output, diagnostics (/alc debug help)"])
+
+Commands:RegisterDebug("help", function()
+	ALC:Print(L["Usage: /alc debug [%s]"], debugUsage())
+end)
 
 Commands:Register("council", function(arg)
 	local settings = ALC.Settings
