@@ -319,6 +319,32 @@ return function(check, H)
 	for _ = 1, 10 do frame.scripts.OnMouseWheel(frame, 1) end
 	check("and at the top", rows[1].entryId == LD:GetItems()[1].id)
 
+	-- Reloading: an open window comes back, a closed one stays closed.
+	Win:Show()
+	frame:Hide() -- what a reload does to the frame; the saved flag stays
+	Win:OnEnteringWorld(false, true)
+	check("a window that was open comes back after a reload", Win:IsShown())
+	Win:Hide() -- the player closes it
+	Win:OnEnteringWorld(false, true)
+	check("a window the player closed stays closed", not Win:IsShown())
+	Win:Show()
+	frame:Hide()
+	Win:OnEnteringWorld(false, false)
+	check("a zone change does not reopen it", not Win:IsShown())
+	Win:OnEnteringWorld(true, false)
+	check("logging in reopens it", Win:IsShown())
+	frame:Hide()
+	LD:Clear()
+	Win:OnEnteringWorld(false, true)
+	check("nothing to show: it stays closed", not Win:IsShown())
+	local settings = ALC.Settings
+	settings:SetWindowPosition("probe", "TOP", "TOP", 1, 2)
+	settings:SetWindowShown("probe", true)
+	check("shown flag keeps the position", settings:GetWindowPosition("probe").x == 1 and settings:GetWindowShown("probe") == true)
+	settings:SetWindowPosition("probe", "TOP", "TOP", 3, 4)
+	check("moving keeps the shown flag", settings:GetWindowPosition("probe").x == 3 and settings:GetWindowShown("probe") == true)
+	check("an unknown window is not shown", settings:GetWindowShown("nothing") == false)
+
 	-- Moving the window is remembered.
 	frame.header.scripts.OnDragStart(frame.header)
 	check("dragging the header moves the window", frame.moving == true)

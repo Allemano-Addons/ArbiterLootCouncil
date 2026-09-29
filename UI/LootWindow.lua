@@ -18,6 +18,7 @@ local UNKNOWN_ICON = "Interface\\Icons\\INV_Misc_QuestionMark"
 
 local LootWindow = {}
 ALC.LootWindow = LootWindow
+LibStub("AceEvent-3.0"):Embed(LootWindow)
 LootWindow.rows = {}
 
 local frame, offset = nil, 0
@@ -319,14 +320,25 @@ end
 --------------------------------------------------------------------------------
 -- Public
 --------------------------------------------------------------------------------
+-- Whether the window is open is remembered, so it comes back after a /reload.
 function LootWindow:Show()
 	if not frame then build() end
 	frame:Show()
+	ALC.Settings:SetWindowShown("loot", true)
 	self:Refresh()
 end
 
 function LootWindow:Hide()
 	if frame then frame:Hide() end
+	ALC.Settings:SetWindowShown("loot", false)
+end
+
+-- After a reload or login: reopen the window if it was open and there are items to show.
+function LootWindow:OnEnteringWorld(isInitialLogin, isReloadingUi)
+	if not (isInitialLogin or isReloadingUi) then return end
+	if ALC.Settings:GetWindowShown("loot") and #ALC.LootDetection:GetItems() > 0 then
+		self:Show()
+	end
 end
 
 function LootWindow:Toggle()
@@ -346,6 +358,9 @@ function LootWindow:Init()
 	register(self, "ALC_COUNCIL_LM_CHANGED", refresh)
 	register(self, "ALC_LOOT_ADDED", function()
 		if ALC.Settings:GetAutoOpenLootWindow() then LootWindow:Show() end
+	end)
+	self:RegisterEvent("PLAYER_ENTERING_WORLD", function(_, isInitialLogin, isReloadingUi)
+		LootWindow:OnEnteringWorld(isInitialLogin, isReloadingUi)
 	end)
 end
 

@@ -137,8 +137,10 @@ local function build()
 	end
 
 	frame.status = UI.NewText(frame, 12, c.muted)
-	frame.status:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", PAD, 18)
+	frame.status:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", PAD, 16)
 	frame.status:SetPoint("RIGHT", frame, "RIGHT", -PAD, 0)
+	frame.status:SetWordWrap(true) -- the longer messages take two lines
+	frame.status:SetJustifyV("BOTTOM")
 
 	frame:SetScript("OnShow", function() ResponseWindow:Refresh() end)
 	restorePosition()

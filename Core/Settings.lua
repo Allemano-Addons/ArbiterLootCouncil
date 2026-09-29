@@ -75,7 +75,21 @@ function Settings:GetWindowPosition(key)
 end
 
 function Settings:SetWindowPosition(key, point, relPoint, x, y)
-	db.profile.windows[key] = { point = point, relPoint = relPoint, x = x, y = y }
+	local window = db.profile.windows[key] or {}
+	window.point, window.relPoint, window.x, window.y = point, relPoint, x, y
+	db.profile.windows[key] = window
+end
+
+-- Whether a window was open when it was last shown or hidden by the player.
+function Settings:GetWindowShown(key)
+	local window = db.profile.windows[key]
+	return window ~= nil and window.shown == true
+end
+
+function Settings:SetWindowShown(key, shown)
+	local window = db.profile.windows[key] or {}
+	window.shown = shown and true or false
+	db.profile.windows[key] = window
 end
 
 -- Loot quality threshold ------------------------------------------------------
