@@ -11,6 +11,12 @@
 --       loot master side: modules add their own fields to a STATE_SNAPSHOT payload
 --   ALC_SESSION_SNAPSHOT (payload, session)
 --       client side: a snapshot was applied; modules restore their state from it
+--   ALC_SESSION_RESTORED (session)
+--       loot master side: our own saved session came back after a reload. Fired after
+--       ALC_SESSION_STARTED, so modules that restored their data on STARTED can be read.
+--
+-- The loot master saves the running session (Settings:GetSessionStore) so a /reload does
+-- not lose it. Clients do not save; they ask the loot master for a snapshot.
 
 local ALC = ALC
 local LibStub = LibStub
@@ -28,6 +34,8 @@ LibStub("AceEvent-3.0"):Embed(Sessions)
 local SNAPSHOT_WAIT = 15      -- seconds a snapshot is accepted after asking for it
 local SNAPSHOT_COOLDOWN = 2   -- seconds between snapshots to the same player
 local RELOAD_SYNC_DELAY = 5   -- seconds after a reload before asking for state
+local RESTORE_DELAY = 3       -- seconds after a reload before the loot master restores its session
+local MAX_SAVED_AGE = 6 * 3600 -- a saved session older than this is dropped
 
 local session               -- the active session, or nil
 local starting = false      -- we sent SESSION_START and are waiting for our own copy
@@ -74,13 +82,29 @@ local function endSession(reason)
 	if not session then return end
 	local ended = session
 	session, starting, awaitingUntil = nil, false, 0
+	ALC.Settings:GetSessionStore().session = nil
 	Debug:Log("Sessions", "session %s ended: %s", ended.sid, tostring(reason))
 	ALC.Events:Fire("ALC_SESSION_ENDED", ended.sid, reason, ended)
+end
+
+-- The loot master keeps the running session so it survives a /reload.
+local function saveSession()
+	if not session or not session.isLM then return end
+	local store = ALC.Settings:GetSessionStore()
+	store.session = {
+		sid = session.sid,
+		itemID = session.itemID,
+		itemString = session.itemString,
+		council = copyList(session.council),
+		lm = session.lm,
+	}
+	store.savedAt = time()
 end
 
 local function beginSession(sid, p, restored)
 	if session then endSession("superseded") end
 	session, starting = makeSession(sid, p, restored), false
+	saveSession()
 	Debug:Log("Sessions", "session %s started for item %d (lm %s, council %d, restored=%s)",
 		sid, p.itemID, session.lm, #session.council, tostring(session.restored))
 	ALC.Events:Fire("ALC_SESSION_STARTED", session, session.restored)
@@ -223,6 +247,40 @@ local function onLootMasterChanged(_, newLootMaster)
 end
 
 --------------------------------------------------------------------------------
+-- Recovery: the loot master's own session after a /reload
+--------------------------------------------------------------------------------
+
+-- Brings back the saved session when we are still the loot master. Nothing is
+-- broadcast: the other players never lost it. Returns true when it was restored.
+function Sessions:RestoreSaved()
+	if session then return false end
+	local store = ALC.Settings:GetSessionStore()
+	local saved = store.session
+	if not saved then return false end
+	if time() - (store.savedAt or 0) > MAX_SAVED_AGE then
+		store.session, store.candidates = nil, nil
+		Debug:Log("Sessions", "dropped a saved session that was too old")
+		return false
+	end
+	local name = me()
+	if not name or not ALC:SameName(saved.lm, name) or not ALC.Council:IsLootMaster(name) then
+		Debug:Log("Sessions", "kept the saved session %s: we are not its loot master now", tostring(saved.sid))
+		return false
+	end
+	beginSession(saved.sid, saved, true)
+	ALC.Events:Fire("ALC_SESSION_RESTORED", session)
+	return true
+end
+
+-- After a login or reload: the loot master gets its session back, everybody else asks
+-- the loot master for a snapshot.
+function Sessions:OnEnteringWorld(isInitialLogin, isReloadingUi)
+	if not (isInitialLogin or isReloadingUi) then return end
+	C_Timer.After(RESTORE_DELAY, function() Sessions:RestoreSaved() end)
+	C_Timer.After(RELOAD_SYNC_DELAY, function() Sessions:RequestState() end)
+end
+
+--------------------------------------------------------------------------------
 -- Init
 --------------------------------------------------------------------------------
 function Sessions:Init()
@@ -235,9 +293,7 @@ function Sessions:Init()
 	register(self, "ALC_COUNCIL_LM_CHANGED", onLootMasterChanged)
 
 	self:RegisterEvent("PLAYER_ENTERING_WORLD", function(_, isInitialLogin, isReloadingUi)
-		if isInitialLogin or isReloadingUi then
-			C_Timer.After(RELOAD_SYNC_DELAY, function() Sessions:RequestState() end)
-		end
+		Sessions:OnEnteringWorld(isInitialLogin, isReloadingUi)
 	end)
 end
 

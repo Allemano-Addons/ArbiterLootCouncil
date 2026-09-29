@@ -151,9 +151,9 @@ local function build()
 		savePosition()
 	end)
 
-	local logo = UI.NewText(header, 24, c.gold, "CENTER")
+	local logo = UI.NewLogo(header, 28)
 	logo:SetPoint("LEFT", header, "LEFT", PAD, 0)
-	logo:SetText("A")
+	frame.logo = logo
 
 	frame.title = UI.NewText(header, 15, c.text)
 	frame.title:SetPoint("LEFT", logo, "RIGHT", 10, 0)

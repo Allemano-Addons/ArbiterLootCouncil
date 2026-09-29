@@ -18,6 +18,19 @@ UI.color = {
 	danger = { 0.85, 0.32, 0.30, 1 },
 }
 
+-- Textures shipped with the addon (Media/). Paths take no file extension.
+UI.MEDIA = "Interface\\AddOns\\ArbiterLootCouncil\\Media\\"
+UI.LOGO = UI.MEDIA .. "Logo\\alc_mark_64"
+UI.ICONS = UI.MEDIA .. "Icons\\" -- + name, white on transparent: tint with SetVertexColor
+
+-- The ALC mark as a square texture of `size` pixels.
+function UI.NewLogo(parent, size)
+	local logo = parent:CreateTexture(nil, "ARTWORK")
+	logo:SetSize(size, size)
+	logo:SetTexture(UI.LOGO)
+	return logo
+end
+
 -- Item quality colours, indexed by quality id (0 poor ... 7 heirloom).
 UI.qualityColor = {
 	[0] = { 0.62, 0.62, 0.62 }, [1] = { 1, 1, 1 }, [2] = { 0.12, 1, 0 }, [3] = { 0, 0.44, 0.87 },

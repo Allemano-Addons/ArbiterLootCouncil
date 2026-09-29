@@ -66,9 +66,9 @@ local function build()
 		savePosition()
 	end)
 
-	local logo = UI.NewText(header, 24, c.gold, "CENTER")
+	local logo = UI.NewLogo(header, 28)
 	logo:SetPoint("LEFT", header, "LEFT", PAD, 0)
-	logo:SetText("A")
+	frame.logo = logo
 	local title = UI.NewText(header, 15, c.text)
 	title:SetPoint("LEFT", logo, "RIGHT", 10, 0)
 	title:SetText(strupper(L["Loot response"]))
@@ -216,6 +216,10 @@ function ResponseWindow:Init()
 	-- After a reload the window only comes back if there is still something to answer.
 	register(self, "ALC_SESSION_SNAPSHOT", function(_, p)
 		if p.yourResponse == nil then ResponseWindow:Show() else refresh() end
+	end)
+	-- The loot master's own session came back: ask again only if we had not answered.
+	register(self, "ALC_SESSION_RESTORED", function()
+		if ALC.Candidates:Get(ALC:PlayerName()) then refresh() else ResponseWindow:Show() end
 	end)
 	register(self, "ALC_SESSION_ENDED", function() ResponseWindow:Hide() end)
 end

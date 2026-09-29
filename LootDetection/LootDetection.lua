@@ -221,6 +221,14 @@ end
 -- item of the same kind, else a new entry (a session started by /alc start or /alc test).
 local function onSessionStarted(_, session)
 	if not session.isLM then return end
+	-- A session restored after a reload belongs to the entry that started it.
+	local restored = findBySid(session.sid)
+	if restored then
+		restored.starting = nil
+		restored.status = STATUS.SESSION
+		changed()
+		return
+	end
 	local target
 	for _, entry in ipairs(store.items) do
 		if entry.starting then target = entry break end

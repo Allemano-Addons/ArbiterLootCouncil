@@ -5,6 +5,7 @@
 ## Version: 0.1.0
 ## SavedVariables: ALC_DB
 ## Category: Loot
+## IconTexture: Interface\AddOns\ArbiterLootCouncil\Media\Logo\alc_mark_64
 
 embeds.xml
 

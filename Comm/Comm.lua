@@ -337,8 +337,27 @@ local function prepare(t, sid, p, channel)
 	return env
 end
 
+-- Remembers the seq we stamped, also on disk: after a /reload the loot master must keep
+-- counting up, or the other players would reject its messages as old.
+local MAX_SAVED_SEQS = 8
+
+local function persistSeq(sid, seq)
+	local store = ALC.Settings:GetSeqStore()
+	if store[sid] == nil then
+		local count = 0
+		for _ in pairs(store) do count = count + 1 end
+		if count >= MAX_SAVED_SEQS then
+			for key in pairs(store) do store[key] = nil end
+		end
+	end
+	store[sid] = seq
+end
+
 local function commit(env)
-	if env.seq then nextSeq:set(env.sid, env.seq) end
+	if env.seq then
+		nextSeq:set(env.sid, env.seq)
+		persistSeq(env.sid, env.seq)
+	end
 end
 
 -- Broadcast to the group (RAID, or PARTY in a party). Always delivered locally too.
@@ -431,6 +450,7 @@ end
 -- Init
 --------------------------------------------------------------------------------
 function Comm:Init()
+	for sid, seq in pairs(ALC.Settings:GetSeqStore()) do nextSeq:set(sid, seq) end
 	self:RegisterComm(ALC.PREFIX, "OnCommReceived")
 	self:RegisterEvent("GROUP_ROSTER_UPDATE", "InvalidateRoster")
 

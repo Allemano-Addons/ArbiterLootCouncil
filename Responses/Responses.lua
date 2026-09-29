@@ -71,6 +71,11 @@ function Responses:Init()
 	register(self, "ALC_SESSION_SNAPSHOT", function(_, p)
 		setMine(BY_ID[p.yourResponse] and p.yourResponse or nil)
 	end)
+	-- The loot master got its own session back: our answer is in the restored list.
+	register(self, "ALC_SESSION_RESTORED", function()
+		local mine = ALC.Candidates:Get(ALC:PlayerName())
+		setMine(mine and BY_ID[mine.response] and mine.response or nil)
+	end)
 end
 
 ALC.Commands:Register("respond", function(arg)

@@ -81,7 +81,9 @@ check("council via slash", ALC.Settings:GetCouncil()[2] == "Kaelis" or ALC.Setti
 dofile("Tests/sessions_test.lua")(check, H)
 dofile("Tests/loot_test.lua")(check, H)
 dofile("Tests/responses_test.lua")(check, H)
+dofile("Tests/media_test.lua")(check, H)
 dofile("Tests/comm_test.lua")(check, H)
+dofile("Tests/recovery_test.lua")(check, H)
 
 print(string.format("%d passed, %d failed", passed, failed))
 os.exit(failed == 0 and 0 or 1)

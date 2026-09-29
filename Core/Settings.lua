@@ -27,6 +27,8 @@ local defaults = {
 		lootList = {          -- the loot master's item list, owned by LootDetection
 			items = {}, seen = {}, seenCount = 0, nextId = 0, hidden = 0,
 		},
+		sessionStore = {},    -- the loot master's running session (Sessions) and candidates (Candidates)
+		seqState = {},        -- sid -> last seq we stamped as loot master (Comm)
 	},
 }
 
@@ -68,6 +70,17 @@ end
 -- The saved loot list. LootDetection owns its contents; Settings only hands it over.
 function Settings:GetLootStore()
 	return db.global.lootList
+end
+
+-- Saved state that lets the loot master survive a /reload. Each module owns its keys:
+-- Sessions writes `session` and `savedAt`, Candidates writes `candidates`.
+function Settings:GetSessionStore()
+	return db.global.sessionStore
+end
+
+-- Comm keeps the sequence numbers it stamped, so they keep rising after a reload.
+function Settings:GetSeqStore()
+	return db.global.seqState
 end
 
 function Settings:GetWindowPosition(key)

@@ -44,7 +44,18 @@ local function findIndex(name)
 	end
 end
 
+-- The loot master keeps the list so it survives a /reload (see Sessions).
+local function persist()
+	local session = ALC.Sessions:GetSession()
+	if session and session.isLM then
+		local saved = {}
+		for i, entry in ipairs(list) do saved[i] = copyEntry(entry) end
+		ALC.Settings:GetSessionStore().candidates = saved
+	end
+end
+
 local function changed()
+	persist()
 	ALC.Events:Fire("ALC_CANDIDATES_CHANGED")
 end
 
@@ -65,6 +76,7 @@ local function upsert(entry)
 end
 
 local function clear()
+	ALC.Settings:GetSessionStore().candidates = nil
 	if #list == 0 then return end
 	for i = #list, 1, -1 do list[i] = nil end
 	changed()
@@ -168,8 +180,17 @@ function Candidates:Init()
 	register(self, "ALC_COMM_CANDIDATE_UPDATE", onUpdate)
 	register(self, "ALC_SESSION_SNAPSHOT_BUILD", onSnapshotBuild)
 	register(self, "ALC_SESSION_SNAPSHOT", onSnapshot)
-	register(self, "ALC_SESSION_STARTED", function(_, _, restored)
-		if not restored then clear() end
+	register(self, "ALC_SESSION_STARTED", function(_, session, restored)
+		if not restored then
+			clear()
+		elseif session.isLM then
+			-- Our own session came back after a reload: so does its list.
+			for i = #list, 1, -1 do list[i] = nil end
+			for _, entry in ipairs(ALC.Settings:GetSessionStore().candidates or {}) do
+				list[#list + 1] = copyEntry(entry)
+			end
+			changed()
+		end
 	end)
 	register(self, "ALC_SESSION_ENDED", clear)
 end

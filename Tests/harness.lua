@@ -75,6 +75,7 @@ function H.setup()
 	-- The client has no global GetItemInfo; it lives in C_Item.
 	GetItemInfo = nil
 	C_Item = { GetItemInfo = function() end }
+	GetInventoryItemLink = function() end
 	UnitClass = function() return "Rogue", "ROGUE" end
 	UnitRace = function() return "Human", "Human" end
 	time, date = os.time, os.date
@@ -134,5 +135,29 @@ function H.loadAddon()
 end
 
 function H.slash(input) SlashCmdList["ALC"](input) end
+
+local function deepcopy(value)
+	if type(value) ~= "table" then return value end
+	local copy = {}
+	for k, v in pairs(value) do copy[deepcopy(k)] = deepcopy(v) end
+	return copy
+end
+H.deepcopy = deepcopy
+
+-- What is saved to disk: a copy of the SavedVariables table.
+function H.snapshotDB() return deepcopy(ALC_DB) end
+
+-- Simulates a /reload: every module is loaded from scratch and only the saved
+-- variables survive. `source` is nil (the current saved data), "fresh" (nothing
+-- saved) or a table from H.snapshotDB().
+function H.reload(source)
+	local saved
+	if source == "fresh" then saved = nil elseif source then saved = deepcopy(source) else saved = deepcopy(ALC_DB) end
+	LibStub, ALC = nil, nil
+	H.setup()
+	ALC_DB = saved
+	H.loadAddon()
+	ALC:OnInitialize()
+end
 
 return H
