@@ -65,12 +65,17 @@ local function isMasterLoot(method)
 	return type(method) == "number" and enum ~= nil and method == enum.Masterlooter
 end
 
--- The unit whose first name matches a roster name (roster names carry no surname).
-local function unitByFirstName(first)
-	if UnitName("player") == first then return "player" end
-	for i = 1, 4 do
-		local unit = "party" .. i
-		if UnitName(unit) == first then return unit end
+-- The party unit for a roster name. On Forever the roster reports the full
+-- "First Last"; a bare first name is accepted as a fallback.
+local function unitByRosterName(rosterName)
+	if type(rosterName) ~= "string" then return nil end
+	local units = { "player", "party1", "party2", "party3", "party4" }
+	for _, unit in ipairs(units) do
+		local full = ALC:UnitFullName(unit)
+		if full and ALC:SameName(full, rosterName) then return unit end
+	end
+	for _, unit in ipairs(units) do
+		if UnitName(unit) == rosterName then return unit end
 	end
 end
 
@@ -110,7 +115,7 @@ function Council:FindMasterLooter(partyMaster, raidMaster)
 
 	local index, rosterName = self.FindRosterMasterLooter()
 	if index then
-		unit = IsInRaid() and ("raid" .. index) or unitByFirstName(rosterName)
+		unit = IsInRaid() and ("raid" .. index) or unitByRosterName(rosterName)
 		name = unit and ALC:UnitFullName(unit)
 		if name then return ALC:NormalizeName(name) end
 	end

@@ -79,9 +79,15 @@ local function findCouncil(name)
 	end
 end
 
+-- Character names are always "First Last": each word capitalized, the rest lower case.
+local function properName(name)
+	return (string.gsub(name, "(%S)(%S*)", function(first, rest) return string.upper(first) .. strlower(rest) end))
+end
+
 function Settings:AddCouncilMember(name)
 	name = ALC:NormalizeName(name)
 	if not name then return false end
+	name = properName(name)
 	if findCouncil(name) then return false end
 	tinsert(db.profile.council, name)
 	changed("council")

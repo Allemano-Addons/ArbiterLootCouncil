@@ -90,6 +90,20 @@ return function(check, H)
 	Council.FindRosterMasterLooter = function() return nil end
 	Council.GetLootMethodInfo = realMethodInfo
 
+	-- The roster reports "First Last" (as seen on Forever): matched against the party.
+	setGroup({ "Ashvane Moo", "Veyra Moo" }, "Ashvane Moo", "group")
+	Council.GetLootMethodInfo = function() return 2 end
+	Council.FindRosterMasterLooter = function() return 3, "Veyra Moo" end
+	check("roster name with a surname finds the party unit", Council:GetLootMaster() == "Veyra Moo")
+	Council.FindRosterMasterLooter = function() return nil end
+	Council.GetLootMethodInfo = realMethodInfo
+
+	-- Council names are stored as "First Last".
+	ALC.Settings:GetDB().profile.council = {}
+	check("lower case name is stored capitalized", ALC.Settings:AddCouncilMember("allemano moo") == true and ALC.Settings:GetCouncil()[1] == "Allemano Moo")
+	check("the same name in another case is a duplicate", ALC.Settings:AddCouncilMember("ALLEMANO MOO") == false)
+	check("removal ignores case", ALC.Settings:RemoveCouncilMember("allemano moo") == true and #ALC.Settings:GetCouncil() == 0)
+
 	-- A leader function that returns no value at all must not break the diagnostics.
 	setGroup({}, nil)
 	local realLeader = Council.GetLeaderName
