@@ -8,12 +8,12 @@ local L = ALC.L
 local strupper = string.upper
 local min, max = math.min, math.max
 
-local WIDTH, PAD = 580, 16
+local WIDTH, PAD = 600, 16
 local HEADER_H, FOOTER_H = 52, 56
 local ROW_H, ROW_GAP = 46, 4
 local ICON = 34
-local BUTTON_W, BUTTON_H, GAP = 60, 30, 4
-local NAME_W = 190
+local BUTTON_W, BUTTON_H, GAP = 58, 30, 4
+local NAME_W = 170
 local POOL, MAX_VISIBLE = ALC.Constants.MAX_SESSION_ITEMS, 10
 local UNKNOWN_ICON = "Interface\\Icons\\INV_Misc_QuestionMark"
 

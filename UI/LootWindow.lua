@@ -381,7 +381,7 @@ function LootWindow:Refresh()
 	end
 
 	frame.empty:SetShown(count == 0)
-	frame.hint:SetText(sessionActive and L["Session in progress"] or L["Start one item, or all at once"])
+	frame.hint:SetText(sessionActive and L["In session"] or "")
 	frame.cancel:SetAvailable(sessionActive and session.isLM)
 	local waiting = #LootDetection:GetPending()
 	frame.startAll:SetLabel(waiting > 1 and string.format("%s (%d)", L["Start all"], waiting) or L["Start all"])

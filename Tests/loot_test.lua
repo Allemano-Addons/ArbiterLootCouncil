@@ -284,7 +284,7 @@ return function(check, H)
 	check("Start starts a session for that row", Sessions:IsActive() and Sessions:GetSession().items[1].itemID == 19019)
 	check("the row shows In session", not rows[1].start:IsShown() and rows[1].status:GetText() == "In session" and rows[1].border ~= nil)
 	check("the other rows cannot start", rows[2].start:IsShown() and rows[2].start.available == false)
-	check("cancel is available for the loot master", frame.cancel.available == true and frame.hint:GetText() == "Session in progress")
+	check("cancel is available for the loot master", frame.cancel.available == true and frame.hint:GetText() == "In session")
 	local sessionFrames = rows[2].start
 	sessionFrames.scripts.OnClick(sessionFrames)
 	check("a disabled Start does nothing", LD:GetEntry(rows[2].entryId).status == STATUS.PENDING)
@@ -292,7 +292,7 @@ return function(check, H)
 	frame.cancel.scripts.OnClick(frame.cancel)
 	check("Cancel ends the session", not Sessions:IsActive())
 	check("the row is back to pending", rows[1].start:IsShown() and rows[1].start.available == true)
-	check("hint is back", frame.hint:GetText() == "Start one item, or all at once")
+	check("hint is back", frame.hint:GetText() == "")
 
 	Comm:SendRaid("AWARD", (function() rows[1].start.scripts.OnClick(rows[1].start) return Sessions:GetActiveSid() end)(),
 		{ item = 1, winner = "Veyra Moo", itemID = 19019, response = "BIS" })

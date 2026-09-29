@@ -422,8 +422,16 @@ local STRIP_BUTTON, STRIP_GAP, STRIP_COLUMN = 44, 6, 8
 -- The item strip is part of the window but hangs outside its left edge, like RCLC's.
 local function buildStrip()
 	CouncilWindow.strip = {}
+	-- A small panel of its own, attached to the window's left edge.
+	frame.stripPanel = CreateFrame("Frame", nil, frame)
+	frame.stripPanel:SetPoint("TOPRIGHT", frame, "TOPLEFT", -4, 0)
+	frame.stripPanel:SetSize(STRIP_BUTTON + 2 * STRIP_GAP, STRIP_BUTTON + 2 * STRIP_GAP)
+	frame.stripPanel.bg = UI.NewFill(frame.stripPanel, 10)
+	UI.SetTextureColor(frame.stripPanel.bg, c.bg)
+	UI.AddBorder(frame.stripPanel, c.border, 1, 10)
+	frame.stripPanel:Hide()
 	for i = 1, ALC.Constants.MAX_SESSION_ITEMS do
-		local button = CreateFrame("Button", nil, frame)
+		local button = CreateFrame("Button", nil, frame.stripPanel)
 		button:SetSize(STRIP_BUTTON, STRIP_BUTTON) -- placed by updateStrip
 		button.selected = button:CreateTexture(nil, "BACKGROUND")
 		button.selected:SetPoint("TOPLEFT", -3, 3)
@@ -902,6 +910,7 @@ end
 local function hideCouncilRows(self)
 	for _, row in ipairs(self.rows) do row:Hide() end
 	for _, button in ipairs(self.strip) do button:Hide() end
+	frame.stripPanel:Hide()
 	frame.scroll:Hide()
 	frame.grip:Hide()
 end
@@ -930,7 +939,11 @@ local function updateStrip(self, session)
 	local count = #session.items
 	-- The strip hangs outside the window: keep it on the screen too.
 	local columns = count > 1 and math.ceil(count / STRIP_COLUMN) or 0
-	frame:SetClampRectInsets(columns > 0 and (columns * (STRIP_BUTTON + STRIP_GAP) + STRIP_GAP) or 0, 0, 0, 0)
+	local rows = count > 1 and math.ceil(count / math.max(columns, 1)) or 0
+	local panelWidth = columns * (STRIP_BUTTON + STRIP_GAP) + STRIP_GAP
+	frame.stripPanel:SetShown(count > 1)
+	frame.stripPanel:SetSize(panelWidth, rows * (STRIP_BUTTON + STRIP_GAP) + STRIP_GAP)
+	frame:SetClampRectInsets(count > 1 and (panelWidth + 4) or 0, 0, 0, 0)
 	columns = max(columns, 1)
 	for i, button in ipairs(self.strip) do
 		local item = session.items[i]
@@ -943,7 +956,7 @@ local function updateStrip(self, session)
 			button.icon:SetDesaturated(item.winner ~= nil)
 			button.icon:SetVertexColor(1, 1, 1, item.winner and 0.55 or 1)
 			local qc = UI.QualityColor(display.quality)
-			button.ring:SetColor(i == focus and c.gold or (item.winner and c.border or qc))
+			button.ring:SetColor(i == focus and c.gold or c.border)
 			button.check:SetShown(item.winner ~= nil)
 			-- Open items: how many want it (grey zero when everybody who answered passed).
 			local counts = ALC.Candidates:GetCounts(i)
@@ -953,8 +966,8 @@ local function updateStrip(self, session)
 			-- Items read left to right, row by row; the first column is next to the window.
 			local column, row = (i - 1) % columns, math.floor((i - 1) / columns)
 			button:ClearAllPoints()
-			button:SetPoint("TOPRIGHT", frame, "TOPLEFT",
-				-(STRIP_GAP + (columns - 1 - column) * (STRIP_BUTTON + STRIP_GAP)), -(HEADER_H + row * (STRIP_BUTTON + STRIP_GAP)))
+			button:SetPoint("TOPLEFT", frame.stripPanel, "TOPLEFT",
+				STRIP_GAP + column * (STRIP_BUTTON + STRIP_GAP), -(STRIP_GAP + row * (STRIP_BUTTON + STRIP_GAP)))
 			button.selected:SetShown(i == focus)
 			button:Show()
 		else
