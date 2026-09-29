@@ -147,7 +147,10 @@ local function newRow(index)
 	end)
 	row.note:SetMaxLetters(ALC.Constants.MAX_NOTE_LENGTH)
 	row.note:SetSize(NOTE_W, BUTTON_H)
-	row.note:HookScript("OnEditFocusLost", function(self) ALC.Responses:SetDraftNote(row.item, self:GetText()) end)
+	-- Leaving the field sends the note too, so it can be written after the answer was clicked.
+	row.note:HookScript("OnEditFocusLost", function(self)
+		if ALC.Responses:SetNote(row.item, self:GetText()) then ResponseWindow:Refresh() end
+	end)
 
 	-- Instead of the buttons once the item is awarded.
 	row.result = UI.NewText(row, 13, c.gold, "RIGHT")

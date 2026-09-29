@@ -175,7 +175,20 @@ return function(check, H)
 	Responses:SetNote(1, "Note one, changed")
 	Resp.rows[1].note:SetText("written but not sent")
 	Resp.rows[1].note.scripts.OnEditFocusLost(Resp.rows[1].note)
-	check("leaving the field keeps what was written for the next answer", Responses:GetNote(1) == "written but not sent" and Candidates:Get(ME, 1).note == "Note one, changed")
+	check("answer first, write the note after: leaving the field sends it", Responses:GetNote(1) == "written but not sent" and Candidates:Get(ME, 1).note == "written but not sent")
+	local realSend, sends = Comm.SendWhisper, 0
+	Comm.SendWhisper = function(...) sends = sends + 1 return realSend(...) end
+	Resp.rows[1].note.scripts.OnEditFocusLost(Resp.rows[1].note)
+	check("leaving the field again with the same text sends nothing", sends == 0 and Candidates:Get(ME, 1).note == "written but not sent")
+	Resp.rows[1].note:SetText("after Enter")
+	Resp.rows[1].note.scripts.OnEnterPressed(Resp.rows[1].note)
+	Resp.rows[1].note.scripts.OnEditFocusLost(Resp.rows[1].note) -- Enter also takes the focus away
+	check("Enter and the focus loss that follow send it once", Candidates:Get(ME, 1).note == "after Enter" and sends == 1)
+	Comm.SendWhisper = realSend
+	check("a note written before any answer waits for it", (function()
+		Responses:SetDraftNote(2, "")
+		return Candidates:Get(ME, 2) ~= nil
+	end)())
 	Responses:SetNote(1, "Note one, changed")
 
 	-- The council window shows them.

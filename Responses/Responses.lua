@@ -212,13 +212,14 @@ function Responses:Send(id, item)
 	return true
 end
 
--- Changes the note of an item and, when we have already answered it, sends the answer
--- again with the new note. Returns true when that was done.
+-- Changes the note of an item and, when we have already answered it and the note is new,
+-- sends the answer again with it. Returns true when that was done.
 function Responses:SetNote(item, text)
 	item = item or 1
+	local unchanged = Responses.CleanNote(text) == (myNotes[item] or "")
 	self:SetDraftNote(item, text)
 	local id = myResponses[item]
-	if not id then return false end
+	if not id or unchanged then return false end
 	return self:Send(id, item) == true
 end
 
