@@ -1,0 +1,74 @@
+package.path = "./Tests/?.lua;" .. package.path
+local H = require("harness")
+
+local passed, failed = 0, 0
+local function check(name, cond)
+	if cond then passed = passed + 1 else failed = failed + 1 print("FAIL: " .. name) end
+end
+
+H.setup()
+H.loadAddon()
+
+-- Debug entries logged before init are buffered, then flushed into the DB.
+ALC.Debug:Log("Test", "early %d", 1)
+ALC:OnInitialize()
+local log = ALC_DB and ALC.Settings:GetDB().global.debugLog
+check("db created", log ~= nil)
+check("early entry flushed", log[1] and log[1].msg == "early 1")
+check("init logged", log[#log].msg:find("loaded", 1, true) ~= nil)
+
+-- Ring buffer caps at 500.
+for i = 1, 600 do ALC.Debug:Log("Test", "line %d", i) end
+check("ring buffer capped", #log == 500)
+check("oldest dropped", log[#log].msg == "line 600" and log[1].msg == "line 101")
+
+-- Debug toggle prints only when enabled; errors always print.
+local before = #H.chat
+ALC.Debug:Log("Test", "quiet")
+check("info silent when debug off", #H.chat == before)
+ALC.Debug:Error("Test", "boom")
+check("error always printed", #H.chat == before + 1)
+H.slash("debug on")
+check("debug on", ALC.Settings:IsDebug() == true)
+before = #H.chat
+ALC.Debug:Log("Test", "loud")
+check("info printed when debug on", #H.chat == before + 1)
+H.slash("debug off")
+check("debug off", ALC.Settings:IsDebug() == false)
+
+-- Council list: normalization, dedupe (case-insensitive), removal.
+check("add member", ALC.Settings:AddCouncilMember("Ashvane-Realm") == true)
+check("duplicate rejected", ALC.Settings:AddCouncilMember("ashvane") == false)
+check("second member", ALC.Settings:AddCouncilMember("Veyra") == true)
+local council = ALC.Settings:GetCouncil()
+check("stored without realm", council[1] == "Ashvane" and #council == 2)
+council[1] = "Mutated"
+check("GetCouncil returns a copy", ALC.Settings:GetCouncil()[1] == "Ashvane")
+check("remove member", ALC.Settings:RemoveCouncilMember("ASHVANE") == true)
+check("remove missing", ALC.Settings:RemoveCouncilMember("Nobody") == false)
+check("invalid name rejected", ALC.Settings:AddCouncilMember("") == false)
+
+-- Quality threshold validation.
+check("default epic", ALC.Settings:GetQualityThreshold() == 4)
+check("set rare", ALC.Settings:SetQualityThreshold(3) == true)
+check("reject 9", ALC.Settings:SetQualityThreshold(9) == false)
+check("reject string", ALC.Settings:SetQualityThreshold("epic") == false)
+check("unchanged after reject", ALC.Settings:GetQualityThreshold() == 3)
+
+-- Events fire on settings changes.
+local fired
+ALC.Events.Register({}, "ALC_SETTINGS_CHANGED", function(_, key) fired = key end)
+ALC.Settings:SetQualityThreshold(4)
+check("settings event fired", fired == "qualityThreshold")
+
+-- Slash dispatcher.
+before = #H.chat
+H.slash("bogus")
+check("unknown command reported", #H.chat == before + 1)
+H.slash("quality legendary")
+check("quality by name", ALC.Settings:GetQualityThreshold() == 5)
+H.slash("council add Kaelis")
+check("council via slash", ALC.Settings:GetCouncil()[2] == "Kaelis" or ALC.Settings:GetCouncil()[1] == "Kaelis")
+
+print(string.format("%d passed, %d failed", passed, failed))
+os.exit(failed == 0 and 0 or 1)

@@ -1,0 +1,98 @@
+-- Settings: SavedVariables (ALC_DB via AceDB), defaults and typed accessors.
+-- Other modules read/change settings only through these functions.
+
+local ALC = ALC
+local LibStub = LibStub
+
+local strlower = string.lower
+local tinsert, tremove = table.insert, table.remove
+
+local Settings = {}
+ALC.Settings = Settings
+
+-- Item quality ids: 0 poor, 1 common, 2 uncommon, 3 rare, 4 epic, 5 legendary.
+local QUALITY_MIN, QUALITY_MAX = 0, 5
+
+local defaults = {
+	profile = {
+		council = {},         -- array of character names, set before raid
+		qualityThreshold = 4, -- epic
+		debug = false,
+	},
+	global = {
+		awardLog = {},        -- append-only, written by Awards
+		debugLog = {},        -- ring buffer, owned by Debug
+	},
+}
+
+local db
+
+function Settings:Init()
+	db = LibStub("AceDB-3.0"):New("ALC_DB", defaults, true)
+	ALC.Events:Fire("ALC_SETTINGS_READY")
+end
+
+function Settings:GetDB()
+	return db
+end
+
+local function changed(key)
+	ALC.Events:Fire("ALC_SETTINGS_CHANGED", key)
+end
+
+-- Debug -----------------------------------------------------------------------
+function Settings:IsDebug()
+	return db ~= nil and db.profile.debug
+end
+
+function Settings:SetDebug(enabled)
+	db.profile.debug = enabled and true or false
+	changed("debug")
+end
+
+-- Loot quality threshold ------------------------------------------------------
+function Settings:GetQualityThreshold()
+	return db.profile.qualityThreshold
+end
+
+function Settings:SetQualityThreshold(quality)
+	if type(quality) ~= "number" or quality < QUALITY_MIN or quality > QUALITY_MAX then
+		return false
+	end
+	db.profile.qualityThreshold = quality
+	changed("qualityThreshold")
+	return true
+end
+
+-- Council list ----------------------------------------------------------------
+-- Returns a copy so callers cannot mutate saved state.
+function Settings:GetCouncil()
+	local copy = {}
+	for i, name in ipairs(db.profile.council) do copy[i] = name end
+	return copy
+end
+
+local function findCouncil(name)
+	local lower = strlower(name)
+	for i, existing in ipairs(db.profile.council) do
+		if strlower(existing) == lower then return i end
+	end
+end
+
+function Settings:AddCouncilMember(name)
+	name = ALC:NormalizeName(name)
+	if not name then return false end
+	if findCouncil(name) then return false end
+	tinsert(db.profile.council, name)
+	changed("council")
+	return true
+end
+
+function Settings:RemoveCouncilMember(name)
+	name = ALC:NormalizeName(name)
+	local index = name and findCouncil(name)
+	if not index then return false end
+	tremove(db.profile.council, index)
+	changed("council")
+	return true
+end

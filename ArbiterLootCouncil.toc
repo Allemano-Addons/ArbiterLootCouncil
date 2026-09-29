@@ -1,0 +1,15 @@
+## Interface: 11509, 20506, 50504
+## Title: Arbiter Loot Council
+## Notes: Loot council for WoW Forever. Part of Allemano Addons.
+## Author: Patrick
+## Version: 0.1.0
+## SavedVariables: ALC_DB
+## Category: Loot
+
+embeds.xml
+
+Core\Core.lua
+Core\Locale.lua
+Core\Debug.lua
+Core\Settings.lua
+Core\Commands.lua
