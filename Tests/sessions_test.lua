@@ -328,6 +328,7 @@ return function(check, H)
 	H.slash("debug help")
 
 	-- Put the environment back for the following tests.
+	ALC.Events.UnregisterAll(listener)
 	UnitName, IsInGroup = realUnitName, realIsInGroup
 	H.inGroup = false
 	setGroup({}, nil)

@@ -20,5 +20,9 @@ Council\Council.lua
 Sessions\Sessions.lua
 Sessions\TestMode.lua
 LootDetection\LootDetection.lua
+Gear\Gear.lua
+Responses\Responses.lua
+Candidates\Candidates.lua
 UI\Widgets.lua
 UI\LootWindow.lua
+UI\ResponseWindow.lua

@@ -327,6 +327,7 @@ return function(check, H)
 	check("the position is saved when the window stops moving", frame.moving == false and pos ~= nil and pos.point == "CENTER")
 
 	-- Leave things as the next tests expect.
+	ALC.Events.UnregisterAll(listener)
 	Win:Hide()
 	reset()
 	H.inGroup = false

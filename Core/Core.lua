@@ -60,6 +60,29 @@ function ALC:PlayerName()
 	return self:UnitFullName("player")
 end
 
+-- Unit ids of everyone in the group, ourselves included ("player" alone when ungrouped).
+function ALC:GroupUnits()
+	local units = {}
+	if IsInRaid() then
+		for i = 1, GetNumGroupMembers() do units[#units + 1] = "raid" .. i end
+	else
+		units[1] = "player"
+		if IsInGroup() then
+			for i = 1, 4 do units[#units + 1] = "party" .. i end
+		end
+	end
+	return units
+end
+
+-- The group unit of a character name, nil when they are not in the group.
+function ALC:FindUnitByName(name)
+	for _, unit in ipairs(self:GroupUnits()) do
+		local full = self:UnitFullName(unit)
+		if full and self:SameName(full, name) then return unit end
+	end
+	return nil
+end
+
 -- Strips a "-Realm" suffix and returns the character name ("First Last").
 function ALC:NormalizeName(name)
 	if type(name) ~= "string" or name == "" then return nil end
@@ -146,5 +169,8 @@ function ALC:OnInitialize()
 	self.Sessions:Init()
 	self.LootDetection:Init()
 	self.LootWindow:Init()
+	self.Responses:Init()
+	self.Candidates:Init()
+	self.ResponseWindow:Init()
 	self.Debug:Log("Core", "Arbiter Loot Council %s loaded (protocol v%d)", self.version, self.PROTOCOL_VERSION)
 end

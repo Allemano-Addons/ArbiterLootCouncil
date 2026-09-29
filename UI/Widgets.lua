@@ -85,19 +85,34 @@ function UI.NewButton(parent, width, height, label, onClick)
 	button.label:SetText(label)
 
 	button.available = true
+	button.selected = false
+
+	-- The resting look: selected buttons keep the amber frame.
+	local function restingLook(self)
+		if self.selected then
+			UI.SetTextureColor(self.bg, UI.color.goldTint)
+			self.border:SetColor(UI.color.gold)
+		else
+			UI.SetTextureColor(self.bg, UI.color.panel)
+			self.border:SetColor(UI.color.border)
+		end
+	end
+
 	button:SetScript("OnEnter", function(self)
 		if self.available then
 			UI.SetTextureColor(self.bg, UI.color.panelHover)
 			self.border:SetColor(UI.color.gold)
 		end
 	end)
-	button:SetScript("OnLeave", function(self)
-		UI.SetTextureColor(self.bg, UI.color.panel)
-		self.border:SetColor(UI.color.border)
-	end)
+	button:SetScript("OnLeave", restingLook)
 	button:SetScript("OnClick", function(self)
 		if self.available and onClick then onClick(self) end
 	end)
+
+	function button:SetSelected(selected)
+		self.selected = selected and true or false
+		restingLook(self)
+	end
 
 	function button:SetAvailable(available)
 		self.available = available and true or false
