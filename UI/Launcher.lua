@@ -50,6 +50,11 @@ Launcher.entries = {
 		open = function() ALC.CouncilWindow:ToggleHistory() end,
 	},
 	{
+		icon = "trade", label = L["Trade queue"],
+		available = function() return true end,
+		open = function() ALC.CouncilWindow:ToggleTrades() end,
+	},
+	{
 		icon = "settings", label = L["Settings"],
 		available = function() return true end,
 		open = function() ALC.SettingsWindow:Toggle() end,

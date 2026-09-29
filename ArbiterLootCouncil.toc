@@ -26,6 +26,7 @@ Responses\Responses.lua
 Candidates\Candidates.lua
 Voting\Voting.lua
 Awards\Awards.lua
+Trades\Trades.lua
 UI\Widgets.lua
 UI\LootWindow.lua
 UI\ResponseWindow.lua

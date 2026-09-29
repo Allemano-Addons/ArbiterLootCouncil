@@ -187,7 +187,7 @@ return function(check, H)
 	Win:Hide()
 	Win:Show()
 	local frame = rows[1].parent
-	check("the window is open", Win:IsShown() and #rows == 10)
+	check("the window is open, with a pool of rows to scroll through", Win:IsShown() and #rows == 30)
 	check("a short list needs no scrollbar", not frame.scroll:IsShown())
 	local visible = Win:GetVisible()
 	check("those who passed are not listed", #visible == 3)

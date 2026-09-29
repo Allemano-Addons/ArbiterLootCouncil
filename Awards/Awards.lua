@@ -133,7 +133,10 @@ function Awards:Award(name)
 
 	local votes = ALC.Voting:GetVotes(entry.name)
 	local slot, index = self:FindGiveTarget(session.itemID, entry.name)
-	if not slot then ALC.LootDetection:MarkAwaitingTrade(session.sid) end
+	-- An item that is awarded to the loot master is already in the loot master's bags.
+	if not slot and not ALC:SameName(entry.name, ALC:PlayerName()) then
+		ALC.LootDetection:MarkAwaitingTrade(session.sid)
+	end
 
 	local sent = ALC.Comm:SendRaid("AWARD", session.sid,
 		{ winner = entry.name, itemID = session.itemID, response = entry.response })

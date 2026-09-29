@@ -267,6 +267,7 @@ local function onAward(_, _, sid, p)
 	local entry = findBySid(sid)
 	if not entry then return end
 	entry.winner = p.winner
+	entry.awardedAt = time()
 	entry.status = awardedStatus(entry)
 	changed()
 end

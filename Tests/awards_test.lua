@@ -394,17 +394,241 @@ return function(check, H)
 	newSession()
 	check("with the option on the window opens as usual", Win:IsShown() and Win:GetTab() == "council")
 	Awards:Award("Jonatan Moo")
-	check("an award leaves it open, on the history", Win:IsShown() and Win:GetTab() == "history")
-	check("with the new award at the top", Win.historyRows[1].winner:GetText() == "Jonatan Moo")
+	check("an award leaves it open, on the same tab", Win:IsShown() and Win:GetTab() == "council")
+	Win:SetTab("history")
+	check("and the new award is in the history", Win.historyRows[1].winner:GetText() == "Jonatan Moo")
+	Win:SetTab("council")
 	reset()
 	newSession()
 	Sessions:Cancel("changed my mind")
-	check("a cancelled session leaves it open on the hint", Win:IsShown() and Win:GetTab() == "council" and hframe.idle:IsShown())
+	check("a cancelled session leaves it open on the next items", Win:IsShown() and Win:GetTab() == "council" and Win.queueRows[1]:IsShown())
 	ALC.Settings:SetKeepCouncilOpen(false)
 	reset()
 	newSession()
 	Sessions:Cancel("again")
 	check("switched off again, a session end closes it", not Win:IsShown())
+
+	----------------------------------------------------------------------------
+	-- Awarding many items in a row, from one window
+	----------------------------------------------------------------------------
+	ALC.Settings:SetKeepCouncilOpen(true)
+	reset()
+	if Sessions:IsActive() then Sessions:Cancel("test reset") end
+	LD:Clear()
+	Win:Hide()
+	LD:AddFromText("200 200 200")
+	local ids = {}
+	for i, e in ipairs(LD:GetItems()) do ids[i] = e.id end
+	local function answer(sessionId, name, response, gear)
+		Comm:Process(env("RESPONSE", sessionId, nil, { response = response, gear = gear or {} }), "WHISPER", name)
+	end
+
+	LD:StartSession(ids[1])
+	local firstSid = Sessions:GetActiveSid()
+	answer(firstSid, "Veyra Moo", "BIS")
+	answer(firstSid, "Jonatan Moo", "UPGRADE")
+	check("the voting window opens with the first session", Win:IsShown() and Win:GetTab() == "council")
+	Awards:Award("Veyra Moo")
+	check("after the award the window is still there", Win:IsShown() and Win:GetTab() == "council")
+	check("it offers the next two items", Win.queueRows[1]:IsShown() and Win.queueRows[2]:IsShown() and not Win.queueRows[3]:IsShown())
+	check("the list replaces the hint", not hframe.idle:IsShown() and hframe.queueLabel:IsShown())
+	check("a queue row names the item", Win.queueRows[1].name:GetText() == "Crown of Destruction")
+	local nextStart = Win.queueRows[1].start
+	nextStart.scripts.OnClick(nextStart)
+	check("Start there starts the next session", Sessions:IsActive() and Sessions:GetActiveSid() ~= firstSid)
+	check("in the same window, on the same tab", Win:IsShown() and Win:GetTab() == "council" and hframe.name:IsShown() and not Win.queueRows[1]:IsShown())
+	answer(Sessions:GetActiveSid(), "Jonatan Moo", "UPGRADE")
+	Awards:Award("Jonatan Moo")
+	check("and again: the last item is offered", Win:IsShown() and Win.queueRows[1]:IsShown() and not Win.queueRows[2]:IsShown())
+	Win.queueRows[1].start.scripts.OnClick(Win.queueRows[1].start)
+	answer(Sessions:GetActiveSid(), "Veyra Moo", "MINOR")
+	Awards:Award("Veyra Moo")
+	check("with nothing left the hint returns", Win:IsShown() and hframe.idle:IsShown() and not Win.queueRows[1]:IsShown())
+	check("three awards were made without the window ever closing", LD:GetItems()[3].status ~= LD.STATUS.PENDING)
+
+	----------------------------------------------------------------------------
+	-- The trade queue
+	----------------------------------------------------------------------------
+	local Trades = ALC.Trades
+	local traded, inRange = {}, true
+	InitiateTrade = function(unit) traded[#traded + 1] = unit end
+	CheckInteractDistance = function() return inRange end
+	local realConnected = UnitIsConnected
+
+	local pending = Trades:GetPending()
+	check("the three awards wait for a trade, oldest first", #pending == 3 and pending[1].winner == "Veyra Moo"
+		and pending[2].winner == "Jonatan Moo" and pending[3].winner == "Veyra Moo" and pending[1].id < pending[3].id)
+	check("the tab counts them in a badge", Win.tabs.trades.badge:IsShown() and Win.tabs.trades.badge.text:GetText() == "3")
+	Win:SetTab("trades")
+	local trows = Win.tradeRows
+	check("the tab lists them", Win:GetTab() == "trades" and trows[3]:IsShown() and not trows[4]:IsShown() and trows[1].winner:GetText() == "Veyra Moo"
+		and trows[1].item.text:GetText() == "Crown of Destruction" and trows[2].winner:GetText() == "Jonatan Moo")
+	check("with how long ago", trows[1].when:GetText() == "just now")
+	check("the tab is marked and the others are hidden", Win.tabs.trades.underline:IsShown() and not hframe.name:IsShown() and hframe.tradeCount:GetText() == "3 waiting")
+	check("the Trade button is offered for players in the group", trows[1].trade.available == true and trows[2].trade.available == true)
+
+	trows[1].trade.scripts.OnClick(trows[1].trade)
+	check("Trade opens a trade with the winner", #traded == 1 and traded[1] == "party1")
+	check("and leaves the item in the queue", Trades:GetPendingCount() == 3)
+	inRange = false
+	local chatBefore = #H.chat
+	trows[1].trade.scripts.OnClick(trows[1].trade)
+	check("out of range is explained, no trade is opened", #traded == 1 and H.chat[#H.chat]:find("too far", 1, true) ~= nil and #H.chat > chatBefore)
+	inRange = true
+	UnitIsConnected = function() return false end
+	trows[1].trade.scripts.OnClick(trows[1].trade)
+	check("offline is explained", #traded == 1 and H.chat[#H.chat]:find("offline", 1, true) ~= nil)
+	UnitIsConnected = realConnected
+	local savedParty1 = units.party1
+	units.party1 = nil
+	Win:Refresh()
+	check("a winner who left the group cannot be traded with", trows[1].trade.available == false and trows[1].note:GetText():find("Not in the group", 1, true) ~= nil)
+	local ok3, msg3 = Trades:StartTrade(pending[1].id)
+	check("and says so", ok3 == false and msg3:find("not in your group", 1, true) ~= nil)
+	units.party1 = savedParty1
+	Win:Refresh()
+
+	-- The loot master as winner has nothing to trade.
+	local store = ALC.Settings:GetLootStore()
+	LD:AddFromText("200")
+	local self = store.items[#store.items]
+	self.winner, self.status = ME, LD.STATUS.TRADE
+	local ok4, msg4 = Trades:StartTrade(self.id)
+	check("no trade with yourself", ok4 == false and msg4:find("yourself", 1, true) ~= nil)
+	LD:Remove(self.id)
+	check("an item that is not waiting cannot be traded", Trades:StartTrade(999999) == false and Trades:MarkDone(999999) == false)
+
+	-- Done by hand.
+	trows[1].done.scripts.OnClick(trows[1].done)
+	check("Done takes the item out of the queue", Trades:GetPendingCount() == 2 and trows[3]:IsShown() == false)
+	check("it counts as awarded", LD:GetEntry(pending[1].id).status == LD.STATUS.AWARDED and LD:GetEntry(pending[1].id).winner == "Veyra Moo")
+	check("the badge follows", Win.tabs.trades.badge.text:GetText() == "2")
+	check("Done twice does nothing", Trades:MarkDone(pending[1].id) == false)
+
+	-- A trade that goes through delivers the item on its own.
+	GetTradePlayerItemLink = function(slot) if slot == 1 then return "|Hitem:200|h[Crown]|h" end end
+	units.NPC = { "Veyra", "Moo", "WARRIOR" }
+	Trades:OnTradeAcceptUpdate(1, 0)
+	check("a trade only we accepted is not counted", Trades:OnTradeComplete() == 0 and Trades:GetPendingCount() == 2)
+	Trades:OnTradeAcceptUpdate(1, 1)
+	local chatCount = #H.chat
+	check("a completed trade delivers the item", Trades:OnTradeComplete() == 1 and Trades:GetPendingCount() == 1)
+	check("to the right winner: Jonatan's item is still waiting", Trades:GetPending()[1].winner == "Jonatan Moo")
+	check("and says so", H.chat[#H.chat]:find("delivered to Veyra Moo", 1, true) ~= nil and #H.chat > chatCount)
+	check("the same trade cannot count twice", Trades:OnTradeComplete() == 0)
+
+	units.NPC = { "Kaelis", "Moo", "HUNTER" }
+	Trades:OnTradeAcceptUpdate(1, 1)
+	check("an item given to somebody else's is not delivered", Trades:OnTradeComplete() == 0 and Trades:GetPendingCount() == 1)
+	units.NPC = { "Jonatan", "Moo", "PRIEST" }
+	GetTradePlayerItemLink = function(slot) if slot == 1 then return "|Hitem:999|h[Other]|h" end end
+	Trades:OnTradeAcceptUpdate(true, true)
+	check("another item to the winner is not delivered either", Trades:OnTradeComplete() == 0 and Trades:GetPendingCount() == 1)
+
+	GetTradePlayerItemLink = function(slot) if slot == 1 then return "|Hitem:200|h[Crown]|h" end end
+	H.deferTimers = true -- the game keeps the note a few seconds after the window closes
+	Trades:OnTradeAcceptUpdate(true, true)
+	Trades:OnTradeClosed()
+	check("the note survives the window closing: the message may come after", Trades:OnTradeComplete() == 1 and Trades:GetPendingCount() == 0)
+	H.runTimers()
+	H.deferTimers = false
+	check("the queue is empty", Win.tabs.trades.badge:IsShown() == false and hframe.tradeEmpty:IsShown() and hframe.tradeCount:GetText() == "0 waiting")
+
+	LD:AddFromText("200")
+	local late = LD:GetItems()[#LD:GetItems()]
+	local lateEntry = store.items[#store.items]
+	lateEntry.winner, lateEntry.status = "Jonatan Moo", LD.STATUS.TRADE
+	H.deferTimers = true
+	Trades:OnTradeAcceptUpdate(1, 1)
+	Trades:OnTradeClosed()
+	H.runTimers()
+	check("an old note is dropped after a moment", Trades:OnTradeComplete() == 0 and Trades:GetPendingCount() == 1)
+	H.deferTimers = false
+
+	-- More items than fit: the list says how many are left.
+	Win:SetTab("council")
+	LD:Clear()
+	LD:AddFromText("200 200 200 200 200 200 200 200")
+	Win:Refresh()
+	check("only six are offered, the rest are counted", Win.queueRows[6]:IsShown() and hframe.queueMore:IsShown() and hframe.queueMore:GetText():find("2 more", 1, true) ~= nil)
+	LD:Clear()
+
+	-- A session without a loot master's list: only a hint for a player who is not the loot master.
+	Council.GetLeaderName = function() return "Ashvane Moo" end
+	Council:Refresh()
+	LD:AddFromText("200")
+	Win:Refresh()
+	check("a player who is not the loot master only gets the hint", hframe.idle:IsShown() and not Win.queueRows[1]:IsShown())
+	Council.GetLeaderName = function() return ME end
+	Council:Refresh()
+	LD:Clear()
+
+	----------------------------------------------------------------------------
+	-- Compact rows and the grip
+	----------------------------------------------------------------------------
+	LD:AddFromText("200")
+	LD:StartSession(LD:GetItems()[1].id)
+	local sidC = Sessions:GetActiveSid()
+	answer(sidC, "Veyra Moo", "BIS", { "item:151", "item:152" })
+	answer(sidC, "Jonatan Moo", "UPGRADE")
+	answer(sidC, "Kaelis Moo", "MINOR")
+	ALC.Responses:Send("OFFSPEC")
+	Win:Show()
+	local tall = hframe:GetHeight()
+	local crows = Win.rows
+	check("rows are tall by default", crows[1].h == 56 and crows[1].class:IsShown() and hframe.compact.checked == false)
+	hframe.compact.scripts.OnClick(hframe.compact)
+	check("the compact option is remembered", ALC.Settings:GetWindowOption("council", "compact", false) == true)
+	check("compact rows are lower, with the class left out", crows[1].h == 40 and not crows[1].class:IsShown() and hframe:GetHeight() < tall)
+	check("only the first item of gear shows, the rest is counted", crows[1].gear[1]:IsShown() and not crows[1].gear[2]:IsShown() and crows[1].more:GetText() == "+1")
+	check("a row with one item of gear counts nothing extra", crows[2].more:GetText() == "")
+	check("the buttons are lower too", crows[1].vote.h == 26 and crows[1].award.h == 26)
+	hframe.compact.scripts.OnClick(hframe.compact)
+	check("switching back gives tall rows again", crows[1].h == 56 and crows[1].class:IsShown() and crows[1].more:GetText() == "" and hframe:GetHeight() == tall)
+
+	check("the grip is offered on the voting tab", hframe.grip:IsShown())
+	hframe.grip.scripts.OnMouseDown(hframe.grip)
+	check("dragging anchors the window by its top edge", hframe.point[1] == "TOPLEFT" and hframe.point[3] == "BOTTOMLEFT")
+	local fixed = 60 + 92 + 34 + 52 -- header, item, headings and footer
+	H.cursor = { 0, hframe:GetTop() - fixed - 4 * 56 }
+	hframe.grip.scripts.OnUpdate(hframe.grip)
+	check("the mouse decides how many rows: four", ALC.Settings:GetWindowOption("council", "maxRows", 10) == 4)
+	H.cursor = { 0, -9999 }
+	hframe.grip.scripts.OnUpdate(hframe.grip)
+	check("never more than 30", ALC.Settings:GetWindowOption("council", "maxRows", 10) == 30)
+	H.cursor = { 0, 99999 }
+	hframe.grip.scripts.OnUpdate(hframe.grip)
+	check("never fewer than 3", ALC.Settings:GetWindowOption("council", "maxRows", 10) == 3)
+	hframe.grip.scripts.OnMouseUp(hframe.grip)
+	check("letting go stops it and saves the position", hframe.grip.scripts.OnUpdate == nil and ALC.Settings:GetWindowPosition("council").point == "TOPLEFT")
+	hframe.grip.scripts.OnEnter(hframe.grip)
+	hframe.grip.scripts.OnLeave(hframe.grip)
+	ALC.Settings:SetWindowOption("council", "maxRows", 0) -- a damaged saved value
+	Win:Refresh()
+	check("a broken saved row count still shows three rows", crows[3]:IsShown() and not crows[4]:IsShown())
+	ALC.Settings:SetWindowOption("council", "maxRows", 10)
+	Win:SetTab("history")
+	check("the grip only belongs to the voting tab", not hframe.grip:IsShown())
+	Win:SetTab("council")
+	Sessions:Cancel("done")
+
+	----------------------------------------------------------------------------
+	-- The tabs
+	----------------------------------------------------------------------------
+	local icons = ALC.UI.ICONS
+	check("every tab has its icon", Win.tabs.council.icon.texture == icons .. "council" and Win.tabs.history.icon.texture == icons .. "history"
+		and Win.tabs.trades.icon.texture == icons .. "trade" and Win.tabs.settings.icon.texture == icons .. "settings")
+	check("the active tab is marked in amber", Win.tabs.council.underline:IsShown() and Win.tabs.council.label.textColor[1] == ALC.UI.color.gold[1]
+		and Win.tabs.history.label.textColor[1] == ALC.UI.color.muted[1])
+	Win.tabs.settings.scripts.OnClick(Win.tabs.settings)
+	check("the Settings tab opens the settings window and does not change the tab", ALC.SettingsWindow:IsShown() and Win:GetTab() == "council")
+	check("and is never marked", not Win.tabs.settings.underline:IsShown())
+	ALC.SettingsWindow:Hide()
+
+	-- Done with the window options: back to the defaults.
+	LD:Clear()
+	Win:Hide()
+	ALC.Settings:SetKeepCouncilOpen(false)
 
 	----------------------------------------------------------------------------
 	-- /alc award
