@@ -38,7 +38,10 @@ local function copyGear(gear)
 end
 
 local function copyEntry(entry, item)
-	return { item = item or entry.item, name = entry.name, class = entry.class, response = entry.response, gear = copyGear(entry.gear) }
+	return {
+		item = item or entry.item, name = entry.name, class = entry.class, response = entry.response, gear = copyGear(entry.gear),
+		note = entry.note, rank = entry.rank, rankIndex = entry.rankIndex,
+	}
 end
 
 local function sameGear(a, b)
@@ -86,7 +89,8 @@ local function upsert(item, entry)
 	local index = findIndex(list, entry.name)
 	if index then
 		local old = list[index]
-		if old.response == entry.response and old.class == entry.class and sameGear(old.gear, entry.gear) then
+		if old.response == entry.response and old.class == entry.class and sameGear(old.gear, entry.gear)
+			and old.note == entry.note and old.rank == entry.rank and old.rankIndex == entry.rankIndex then
 			return false
 		end
 		list[index] = copyEntry(entry, item)
@@ -176,7 +180,8 @@ local function onResponse(_, sender, _, p)
 		return
 	end
 
-	local entry = { name = sender, class = class, response = p.response, gear = p.gear }
+	local rank, rankIndex = ALC:GetGuildRank(unit)
+	local entry = { name = sender, class = class, response = p.response, gear = p.gear, note = p.note, rank = rank, rankIndex = rankIndex }
 	if not upsert(p.item, entry) then return end -- nothing new: council already knows
 	Debug:Log("Candidates", "item %d, %s: %s", p.item, sender, p.response)
 	send(session, p.item, entry)

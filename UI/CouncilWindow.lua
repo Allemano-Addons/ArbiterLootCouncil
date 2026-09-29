@@ -13,25 +13,25 @@ local L = ALC.L
 local strupper = string.upper
 local min, max = math.min, math.max
 
-local WIDTH, PAD = 840, 20
+local WIDTH, PAD = 1010, 20
 local HEADER_H, ITEM_H, TABLE_HEAD_H, FOOTER_H = 60, 92, 34, 52
 local ROW_H, COMPACT_ROW_H = 56, 40
 local POOL, DEFAULT_ROWS, MIN_ROWS = 30, 10, 3
 local ICON = 52
 local BUTTON_W = 92
-local NAME_X, RESPONSE_X, GEAR_X, VOTES_X = 16, 200, 308, 512
-local GEAR_W = 196
+local NAME_X, RANK_X, RESPONSE_X, GEAR_X, NOTE_X, VOTES_X = 16, 172, 268, 376, 552, 712
+local GEAR_W, NOTE_W, RANK_W = 166, 150, 90
 local UNKNOWN_ICON = "Interface\\Icons\\INV_Misc_QuestionMark"
 
 -- The History tab: one row per award in the award log, newest first.
 local HISTORY_ROW_H, HISTORY_ROWS = 48, 12
-local TIME_X, HITEM_X, WINNER_X, HRESPONSE_X, HVOTES_X = 16, 150, 470, 656, 756
-local HITEM_W = 300
+local TIME_X, HITEM_X, WINNER_X, HRESPONSE_X, HVOTES_X = 16, 150, 560, 790, 900
+local HITEM_W = 380
 
 -- The Trade Queue tab: one row per item still to be traded.
 local TRADE_ROW_H, TRADE_ROWS = 52, 10
-local TITEM_X, TWINNER_X, TWHEN_X = 16, 370, 590
-local TITEM_W = 330
+local TITEM_X, TWINNER_X, TWHEN_X = 16, 430, 700
+local TITEM_W = 390
 
 -- The list of next items shown on the Council tab between two sessions (loot master).
 local QUEUE_ROW_H, QUEUE_ROWS = 46, 6
@@ -148,9 +148,28 @@ local function newRow(index)
 	UI.SetTextureColor(row.line, c.border, 0.6)
 
 	row.name = UI.NewText(row, 15, c.text)
-	row.name:SetWidth(RESPONSE_X - NAME_X - 8)
+	row.name:SetWidth(RANK_X - NAME_X - 8)
 	row.class = UI.NewText(row, 11, c.muted)
 	row.class:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -3)
+
+	-- The player's guild rank, and the note they wrote (the full note shows on hover).
+	row.rank = UI.NewText(row, 12, c.text)
+	row.rank:SetPoint("LEFT", row, "LEFT", RANK_X, 0)
+	row.rank:SetWidth(RANK_W)
+	row.noteButton = CreateFrame("Button", nil, row)
+	row.noteButton:SetSize(NOTE_W, 30)
+	row.noteButton:SetPoint("LEFT", row, "LEFT", NOTE_X, 0)
+	row.note = UI.NewText(row.noteButton, 12, c.muted)
+	row.note:SetPoint("LEFT", row.noteButton, "LEFT", 0, 0)
+	row.note:SetWidth(NOTE_W)
+	row.noteButton:SetScript("OnEnter", function(self)
+		if not self.fullNote or self.fullNote == "" then return end
+		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+		GameTooltip:SetText(L["Note"])
+		GameTooltip:AddLine(self.fullNote, 1, 1, 1, true)
+		GameTooltip:Show()
+	end)
+	row.noteButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
 	row.chip = newChip(row, 96, 26, 13)
 	row.chip:SetPoint("LEFT", row, "LEFT", RESPONSE_X, 0)
@@ -617,8 +636,10 @@ local function build()
 	local itemDivider = divider(-(HEADER_H + ITEM_H))
 	local headings = {
 		heading(L["Player"], NAME_X),
+		heading(L["Rank"], RANK_X),
 		heading(L["Response"], RESPONSE_X),
 		heading(L["Current gear"], GEAR_X),
+		heading(L["Note"], NOTE_X),
 		heading(L["Votes"], VOTES_X, "CENTER", 60),
 	}
 	local tableDivider = divider(-(HEADER_H + ITEM_H + TABLE_HEAD_H))
@@ -656,7 +677,7 @@ local function build()
 	frame.stop:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -(PAD + 240), -(HEADER_H + 22))
 
 	councilStatic = { itemBox, frame.name, frame.sub, frame.progress, frame.barBg, frame.barFill, itemDivider, tableDivider,
-		headings[1], headings[2], headings[3], headings[4], frame.empty, frame.footerLine, frame.lootMaster,
+		headings[1], headings[2], headings[3], headings[4], headings[5], headings[6], frame.empty, frame.footerLine, frame.lootMaster,
 		frame.tally, frame.compact, frame.showPassed, frame.sort, frame.stop }
 
 	-- Shown instead of the Council tab while no session runs.
@@ -770,6 +791,7 @@ for i, response in ipairs(ALC.Responses.LIST) do ORDER[response.id] = i end
 CouncilWindow.SORT_MODES = {
 	{ key = "response", label = L["By response"] },
 	{ key = "votes", label = L["By votes"] },
+	{ key = "rank", label = L["By rank"] },
 	{ key = "name", label = L["By name"] },
 }
 
@@ -782,6 +804,14 @@ local COMPARE = {
 	votes = function(a, b)
 		if a.votes ~= b.votes then return a.votes > b.votes end
 		if ORDER[a.response] ~= ORDER[b.response] then return ORDER[a.response] < ORDER[b.response] end
+		return a.name < b.name
+	end,
+	-- Highest guild rank first (rank 0 is the guild master); players without a rank last.
+	rank = function(a, b)
+		local ra, rb = a.rankIndex or 99, b.rankIndex or 99
+		if ra ~= rb then return ra < rb end
+		if ORDER[a.response] ~= ORDER[b.response] then return ORDER[a.response] < ORDER[b.response] end
+		if a.votes ~= b.votes then return a.votes > b.votes end
 		return a.name < b.name
 	end,
 	name = function(a, b) return a.name < b.name end,
@@ -849,6 +879,9 @@ local function renderRow(row, entry, myVote, topVotes, isLM, compact, open)
 	row.name:SetTextColor(classColor[1], classColor[2], classColor[3], 1)
 	row.name:SetText(entry.name)
 	row.class:SetText(localizedClass(entry.class))
+	row.rank:SetText(entry.rank or "")
+	row.note:SetText(entry.note or "")
+	row.noteButton.fullNote = entry.note
 
 	local response = ALC.Responses:Get(entry.response)
 	local rc = response and response.color or c.muted

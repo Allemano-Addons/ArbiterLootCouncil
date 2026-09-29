@@ -29,6 +29,7 @@ local BY_ID = {}
 for _, response in ipairs(Responses.LIST) do BY_ID[response.id] = response end
 
 local myResponses = {} -- item -> our response id
+local draftNote = ""   -- the note that goes with our next answers (and is sent again when it changes)
 
 function Responses:Get(id)
 	return BY_ID[id]
@@ -56,12 +57,31 @@ local function setMine(item, id)
 end
 
 local function clearMine()
+	draftNote = ""
 	if next(myResponses) == nil then return end
 	myResponses = {}
 	ALC.Events:Fire("ALC_RESPONSES_CHANGED")
 end
 
--- Sends (or changes) our response to an item. Returns true, or false and a message.
+-- A note as it may be sent: no control characters or `|`, trimmed, at most 100 letters.
+function Responses.CleanNote(text)
+	text = string.gsub(text or "", "[%c|]", "")
+	text = string.gsub(text, "^%s+", "")
+	text = string.gsub(text, "%s+$", "")
+	return string.sub(text, 1, ALC.Constants.MAX_NOTE_LENGTH)
+end
+
+function Responses:GetNote()
+	return draftNote
+end
+
+-- Sets the note that goes with the next answers, without sending anything.
+function Responses:SetDraftNote(text)
+	draftNote = Responses.CleanNote(text)
+end
+
+-- Sends (or changes) our response to an item, with the current note. Returns true, or
+-- false and a message.
 function Responses:Send(id, item)
 	item = item or 1
 	if not BY_ID[id] then return false, L["Unknown response."] end
@@ -70,15 +90,26 @@ function Responses:Send(id, item)
 	local target = session.items[item]
 	if not target then return false, L["That item is not in the session."] end
 	if target.winner then return false, L["That item has already been awarded."] end
-	local sent = ALC.Comm:SendWhisper(session.lm, "RESPONSE", session.sid, {
-		item = item,
-		response = id,
-		gear = ALC.Gear:GetEquipped(target.itemString),
-	})
+	local payload = { item = item, response = id, gear = ALC.Gear:GetEquipped(target.itemString) }
+	if draftNote ~= "" then payload.note = draftNote end
+	local sent = ALC.Comm:SendWhisper(session.lm, "RESPONSE", session.sid, payload)
 	if not sent then return false, L["Could not send your response. See /alc debug log."] end
 	Debug:Log("Responses", "item %d: sent %s to %s", item, id, session.lm)
 	setMine(item, id)
 	return true
+end
+
+-- Changes the note and sends it again with every answer we have given to an open item.
+-- Returns how many answers were sent.
+function Responses:SetNote(text)
+	draftNote = Responses.CleanNote(text)
+	local session = ALC.Sessions:GetSession()
+	if not session then return 0 end
+	local resent = 0
+	for item, id in pairs(myResponses) do
+		if session.items[item] and not session.items[item].winner and self:Send(id, item) then resent = resent + 1 end
+	end
+	return resent
 end
 
 function Responses:Init()

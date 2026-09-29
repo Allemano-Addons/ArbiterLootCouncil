@@ -9,7 +9,7 @@ local strupper = string.upper
 local min, max = math.min, math.max
 
 local WIDTH, PAD = 600, 16
-local HEADER_H, FOOTER_H = 52, 56
+local HEADER_H, FOOTER_H = 52, 92
 local ROW_H, ROW_GAP = 46, 4
 local ICON = 34
 local BUTTON_W, BUTTON_H, GAP = 58, 30, 4
@@ -81,6 +81,7 @@ local function newRow(index)
 	row.buttons = {}
 	for i, response in ipairs(ALC.Responses.LIST) do
 		local button = UI.NewButton(row, BUTTON_W, BUTTON_H, response.label, function()
+			ALC.Responses:SetDraftNote(frame.note:GetText()) -- what is written goes with the answer
 			local ok, message = ALC.Responses:Send(response.id, row.item)
 			feedback = not ok and message or nil
 			ResponseWindow:Refresh()
@@ -169,6 +170,17 @@ local function build()
 	frame.footerLine:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -1, FOOTER_H)
 	frame.footerLine:SetHeight(1)
 	UI.SetTextureColor(frame.footerLine, c.border)
+
+	-- A note for the council, sent with every answer (Enter sends it again with the ones already given).
+	frame.note = UI.NewEditBox(frame, WIDTH - 2 * PAD, 28, L["Note for the council (optional). Press Enter to send it with your answers."], function(text)
+		local resent = ALC.Responses:SetNote(text)
+		feedback = nil
+		if resent > 0 then ALC:Print(L["Note sent with %d answer(s)."], resent) end
+		ResponseWindow:Refresh()
+	end)
+	frame.note:SetMaxLetters(ALC.Constants.MAX_NOTE_LENGTH)
+	frame.note:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", PAD, 52)
+	frame.note:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -PAD, 52)
 
 	frame.status = UI.NewText(frame, 12, c.muted)
 	frame.status:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", PAD, 14)
@@ -315,6 +327,7 @@ function ResponseWindow:Init()
 	register(self, "ALC_SESSION_ITEM_AWARDED", refresh)
 	register(self, "ALC_SESSION_STARTED", function(_, _, restored)
 		if not restored then ResponseWindow:Show() end
+		if frame then frame.note:SetText("") end -- a new session, a new note
 	end)
 	register(self, "ALC_SESSION_SNAPSHOT", function(_, p)
 		reopen(p.yourResponses ~= nil)

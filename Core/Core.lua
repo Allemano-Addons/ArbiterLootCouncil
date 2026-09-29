@@ -95,6 +95,18 @@ function ALC:SameName(a, b)
 	return a ~= nil and b ~= nil and strlower(a) == strlower(b)
 end
 
+-- The guild rank of a unit, when it is in the same guild as we are: its name and number
+-- (0 is the guild master). Nil otherwise, and when the game has no guild data for it.
+function ALC:GetGuildRank(unit)
+	if not unit or not GetGuildInfo then return nil end
+	local guild, rank, index = GetGuildInfo(unit)
+	local ownGuild = GetGuildInfo("player")
+	if not guild or not ownGuild or guild ~= ownGuild then return nil end
+	if type(rank) ~= "string" or rank == "" or #rank > 32 or rank:find("[%c|]") then return nil end
+	if type(index) ~= "number" or index < 0 or index > 20 or index ~= math.floor(index) then return nil end
+	return rank, index
+end
+
 -- GetItemInfo moved into C_Item on newer clients (the global is gone on WoW Forever).
 function ALC:GetItemInfo(item)
 	local fn = (C_Item and C_Item.GetItemInfo) or GetItemInfo

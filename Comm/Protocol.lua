@@ -109,6 +109,19 @@ local function checkNameList(list, max, field)
 	return true
 end
 
+-- A note from a player (optional): plain text, no escape sequences.
+local function checkNote(p)
+	if p.note ~= nil and not isText(p.note, 1, C.MAX_NOTE_LENGTH) then return fail("bad note") end
+	return true
+end
+
+-- The guild rank the loot master found for a candidate (optional): its name and number.
+local function checkRank(c)
+	if c.rank == nil and c.rankIndex == nil then return true end
+	if not isText(c.rank, 1, 32) or not isInt(c.rankIndex, 0, 20) then return fail("bad rank") end
+	return true
+end
+
 local function checkCandidate(c)
 	if type(c) ~= "table" then return fail("bad candidate") end
 	local ok, reason = checkItemIndex(c)
@@ -118,6 +131,10 @@ local function checkCandidate(c)
 		return fail("bad candidate class")
 	end
 	if not isResponse(c.response) then return fail("bad candidate response") end
+	ok, reason = checkNote(c)
+	if not ok then return fail(reason) end
+	ok, reason = checkRank(c)
+	if not ok then return fail(reason) end
 	return checkGear(c.gear)
 end
 
@@ -157,6 +174,8 @@ specs.RESPONSE = {
 		local ok, reason = checkItemIndex(p)
 		if not ok then return fail(reason) end
 		if not isResponse(p.response) then return fail("bad response") end
+		ok, reason = checkNote(p)
+		if not ok then return fail(reason) end
 		return checkGear(p.gear)
 	end,
 }

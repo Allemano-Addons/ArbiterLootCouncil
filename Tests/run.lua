@@ -87,6 +87,7 @@ dofile("Tests/media_test.lua")(check, H)
 dofile("Tests/comm_test.lua")(check, H)
 dofile("Tests/recovery_test.lua")(check, H)
 dofile("Tests/multi_test.lua")(check, H)
+dofile("Tests/details_test.lua")(check, H)
 dofile("Tests/tools_test.lua")(check, H)
 
 print(string.format("%d passed, %d failed", passed, failed))
