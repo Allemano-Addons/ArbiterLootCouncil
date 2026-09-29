@@ -55,10 +55,9 @@ local function build()
 	button:RegisterForDrag("LeftButton")
 
 	-- A dark square with a thin frame, like the other minimap buttons.
-	button.bg = button:CreateTexture(nil, "BACKGROUND")
-	button.bg:SetAllPoints()
+	button.bg = UI.NewFill(button, 8)
 	UI.SetTextureColor(button.bg, c.bg)
-	button.border = UI.AddBorder(button, c.border)
+	button.border = UI.AddBorder(button, c.border, 1, 8)
 
 	button.icon = button:CreateTexture(nil, "ARTWORK")
 	button.icon:SetPoint("TOPLEFT", 5, -5)

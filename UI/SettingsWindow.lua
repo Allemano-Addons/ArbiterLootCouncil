@@ -85,16 +85,17 @@ local function build()
 	frame = CreateFrame("Frame", nil, UIParent)
 	frame:SetSize(WIDTH, 700)
 	frame:SetFrameStrata("HIGH")
+	frame:SetFrameLevel(80)   -- each window has its own band of levels, so windows never mix
+	frame:SetToplevel(true) -- and the one you click comes to the front
 	frame:SetClampedToScreen(true)
 	frame:SetMovable(true)
 	frame:EnableMouse(true)
 	frame:EnableMouseWheel(true)
 	frame:Hide()
 
-	local bg = frame:CreateTexture(nil, "BACKGROUND")
-	bg:SetAllPoints()
+	local bg = UI.NewFill(frame, 10)
 	UI.SetTextureColor(bg, c.bg)
-	UI.AddBorder(frame, c.border)
+	UI.AddBorder(frame, c.border, 1, 10)
 
 	-- Header, also the drag handle.
 	local header = CreateFrame("Frame", nil, frame)
@@ -170,10 +171,9 @@ local function build()
 	frame.listBox = CreateFrame("Frame", nil, frame)
 	frame.listBox:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
 	frame.listBox:SetSize(WIDTH - 2 * PAD, LIST_ROWS * LIST_ROW_H + 4)
-	frame.listBox.bg = frame.listBox:CreateTexture(nil, "BACKGROUND")
-	frame.listBox.bg:SetAllPoints()
+	frame.listBox.bg = UI.NewFill(frame.listBox, 8)
 	UI.SetTextureColor(frame.listBox.bg, c.panel)
-	UI.AddBorder(frame.listBox, c.border)
+	UI.AddBorder(frame.listBox, c.border, 1, 8)
 
 	frame.empty = UI.NewText(frame.listBox, 12, c.muted, "CENTER")
 	frame.empty:SetPoint("CENTER", frame.listBox, "CENTER", 0, 0)

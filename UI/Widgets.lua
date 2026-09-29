@@ -63,33 +63,112 @@ function UI.SetTextureColor(texture, c, alpha)
 	texture:SetColorTexture(unpackColor(c, alpha))
 end
 
--- A 1px (or `size`) border made of four textures. Returns an object with :SetColor(c).
-function UI.AddBorder(frame, c, size)
-	size = size or 1
-	local edges = {}
-	local function edge(p1, p2, w, h)
-		local t = frame:CreateTexture(nil, "BORDER")
-		t:SetPoint(p1, frame, p1, 0, 0)
-		t:SetPoint(p2, frame, p2, 0, 0)
-		if w then t:SetWidth(w) end
-		if h then t:SetHeight(h) end
-		edges[#edges + 1] = t
+--------------------------------------------------------------------------------
+-- Rounded shapes. The game has no rounded rectangles, so the windows are drawn from
+-- small white shape textures (Media/Shapes, made by Tools/make_shapes.lua). A shape is cut
+-- into nine pieces: four corners that keep their size, four edges and a centre that
+-- stretch. Colour is applied as a vertex colour.
+--------------------------------------------------------------------------------
+UI.SHAPES = UI.MEDIA .. "Shapes\\"
+local SHAPE_SIZE = 32
+local RADII = { 4, 6, 8, 10 } -- the radii there are textures for
+
+local function nearestRadius(radius)
+	local best = RADII[1]
+	for _, r in ipairs(RADII) do
+		if math.abs(r - radius) < math.abs(best - radius) then best = r end
 	end
-	edge("TOPLEFT", "TOPRIGHT", nil, size)
-	edge("BOTTOMLEFT", "BOTTOMRIGHT", nil, size)
-	edge("TOPLEFT", "BOTTOMLEFT", size, nil)
-	edge("TOPRIGHT", "BOTTOMRIGHT", size, nil)
-	local border = {}
-	function border:SetColor(color, alpha)
-		for _, t in ipairs(edges) do t:SetColorTexture(unpackColor(color, alpha)) end
+	return best
+end
+
+-- Lays the pieces of one shape texture around `frame`. Returns the list of textures.
+local function slice(frame, texturePath, corner, layer, withCentre)
+	local pieces = {}
+	local lo = corner / SHAPE_SIZE
+	local hi = 1 - lo
+	local c = corner
+	local function piece(u1, u2, v1, v2, anchors, width, height)
+		local t = frame:CreateTexture(nil, layer)
+		t:SetTexture(texturePath)
+		t:SetTexCoord(u1, u2, v1, v2)
+		for _, a in ipairs(anchors) do t:SetPoint(a[1], frame, a[2], a[3], a[4]) end
+		if width then t:SetWidth(width) end
+		if height then t:SetHeight(height) end
+		pieces[#pieces + 1] = t
 	end
+	piece(0, lo, 0, lo, { { "TOPLEFT", "TOPLEFT", 0, 0 } }, c, c)
+	piece(hi, 1, 0, lo, { { "TOPRIGHT", "TOPRIGHT", 0, 0 } }, c, c)
+	piece(0, lo, hi, 1, { { "BOTTOMLEFT", "BOTTOMLEFT", 0, 0 } }, c, c)
+	piece(hi, 1, hi, 1, { { "BOTTOMRIGHT", "BOTTOMRIGHT", 0, 0 } }, c, c)
+	piece(lo, hi, 0, lo, { { "TOPLEFT", "TOPLEFT", c, 0 }, { "TOPRIGHT", "TOPRIGHT", -c, 0 } }, nil, c)
+	piece(lo, hi, hi, 1, { { "BOTTOMLEFT", "BOTTOMLEFT", c, 0 }, { "BOTTOMRIGHT", "BOTTOMRIGHT", -c, 0 } }, nil, c)
+	piece(0, lo, lo, hi, { { "TOPLEFT", "TOPLEFT", 0, -c }, { "BOTTOMLEFT", "BOTTOMLEFT", 0, c } }, c, nil)
+	piece(hi, 1, lo, hi, { { "TOPRIGHT", "TOPRIGHT", 0, -c }, { "BOTTOMRIGHT", "BOTTOMRIGHT", 0, c } }, c, nil)
+	if withCentre then
+		piece(lo, hi, lo, hi, { { "TOPLEFT", "TOPLEFT", c, -c }, { "BOTTOMRIGHT", "BOTTOMRIGHT", -c, c } })
+	end
+	return pieces
+end
+
+-- What NewFill and AddBorder return: colour and visibility for all the pieces at once.
+local function shapeObject(pieces)
+	local shape = { pieces = pieces }
+	function shape:SetColorTexture(r, g, b, a)
+		for _, t in ipairs(self.pieces) do t:SetVertexColor(r, g, b, a) end
+	end
+	function shape:SetColor(color, alpha)
+		self:SetColorTexture(unpackColor(color, alpha))
+	end
+	function shape:SetShown(shown)
+		for _, t in ipairs(self.pieces) do t:SetShown(shown) end
+	end
+	function shape:Show() self:SetShown(true) end
+	function shape:Hide() self:SetShown(false) end
+	return shape
+end
+
+-- A rounded background filling `frame`. Colour it with UI.SetTextureColor(fill, colour).
+function UI.NewFill(frame, radius)
+	radius = nearestRadius(radius or 6)
+	return shapeObject(slice(frame, UI.SHAPES .. "fill_r" .. radius, radius + 2, "BACKGROUND", true))
+end
+
+-- A rounded border round `frame`: `thickness` 1 or 2 px. `layer` is BORDER (behind the
+-- frame's contents); an icon's frame uses OVERLAY, so the ring also rounds the icon's corners.
+function UI.AddBorder(frame, c, thickness, radius, layer)
+	thickness = thickness == 2 and 2 or 1
+	radius = nearestRadius(radius or 6)
+	local border = shapeObject(slice(frame, UI.SHAPES .. "ring_r" .. radius .. "_t" .. thickness, radius + 2, layer or "BORDER", false))
 	border:SetColor(c)
 	return border
 end
 
+--------------------------------------------------------------------------------
+-- Text and fonts
+--------------------------------------------------------------------------------
+local texts = {} -- every text made by NewText or NewEditBox, so a change of font reaches all
+
+function UI.GetFont()
+	return UI.fontPath or STANDARD_TEXT_FONT
+end
+
+local function applyFont(fs, size)
+	local ok = fs:SetFont(UI.GetFont(), size, "")
+	if ok == false then fs:SetFont(STANDARD_TEXT_FONT, size, "") end -- a font the game cannot load
+end
+
+-- Uses another font everywhere (nil goes back to the game's own). Returns the path in use.
+function UI.SetFont(path)
+	if type(path) ~= "string" or path == "" then path = nil end
+	UI.fontPath = path
+	for _, entry in ipairs(texts) do applyFont(entry.fs, entry.size) end
+	return UI.GetFont()
+end
+
 function UI.NewText(parent, size, color, justify)
 	local fs = parent:CreateFontString(nil, "OVERLAY")
-	fs:SetFont(STANDARD_TEXT_FONT, size, "")
+	applyFont(fs, size)
+	texts[#texts + 1] = { fs = fs, size = size }
 	fs:SetTextColor(unpackColor(color or UI.color.text))
 	fs:SetJustifyH(justify or "LEFT")
 	fs:SetWordWrap(false)
@@ -102,10 +181,9 @@ function UI.NewButton(parent, width, height, label, onClick)
 	button:SetSize(width, height)
 	button:RegisterForClicks("LeftButtonUp")
 
-	button.bg = button:CreateTexture(nil, "BACKGROUND")
-	button.bg:SetAllPoints()
+	button.bg = UI.NewFill(button, 6)
 	UI.SetTextureColor(button.bg, UI.color.panel)
-	button.border = UI.AddBorder(button, UI.color.border)
+	button.border = UI.AddBorder(button, UI.color.border, 1, 6)
 
 	button.label = UI.NewText(button, 13, UI.color.text, "CENTER")
 	button.label:SetPoint("CENTER", 0, 0)
@@ -219,15 +297,16 @@ function UI.NewCheckbox(parent, label, onToggle)
 	box.square = CreateFrame("Frame", nil, box)
 	box.square:SetSize(18, 18)
 	box.square:SetPoint("LEFT", box, "LEFT", 0, 0)
-	box.square.bg = box.square:CreateTexture(nil, "BACKGROUND")
-	box.square.bg:SetAllPoints()
+	box.square.bg = UI.NewFill(box.square, 4)
 	UI.SetTextureColor(box.square.bg, UI.color.panel)
-	box.square.border = UI.AddBorder(box.square, UI.color.border)
-	box.mark = box.square:CreateTexture(nil, "ARTWORK")
-	box.mark:SetPoint("TOPLEFT", 4, -4)
-	box.mark:SetPoint("BOTTOMRIGHT", -4, 4)
+	box.square.border = UI.AddBorder(box.square, UI.color.border, 1, 4)
+	-- The tick is a small rounded square in the amber colour.
+	box.markFrame = CreateFrame("Frame", nil, box.square)
+	box.markFrame:SetPoint("TOPLEFT", 4, -4)
+	box.markFrame:SetPoint("BOTTOMRIGHT", -4, 4)
+	box.mark = UI.NewFill(box.markFrame, 4)
 	UI.SetTextureColor(box.mark, UI.color.gold)
-	box.mark:Hide()
+	box.markFrame:Hide()
 
 	box.label = UI.NewText(box, 13, UI.color.text)
 	box.label:SetPoint("LEFT", box.square, "RIGHT", 10, 0)
@@ -244,7 +323,7 @@ function UI.NewCheckbox(parent, label, onToggle)
 
 	function box:SetChecked(checked)
 		self.checked = checked and true or false
-		self.mark:SetShown(self.checked)
+		self.markFrame:SetShown(self.checked)
 	end
 	function box:IsChecked() return self.checked end
 
@@ -255,16 +334,16 @@ end
 function UI.NewEditBox(parent, width, height, placeholder, onEnter)
 	local edit = CreateFrame("EditBox", nil, parent)
 	edit:SetSize(width, height)
-	edit:SetFont(STANDARD_TEXT_FONT, 13, "")
+	applyFont(edit, 13)
+	texts[#texts + 1] = { fs = edit, size = 13 }
 	edit:SetTextColor(unpackColor(UI.color.text))
 	edit:SetTextInsets(10, 10, 0, 0)
 	edit:SetAutoFocus(false)
 	edit:SetMaxLetters(48)
 
-	edit.bg = edit:CreateTexture(nil, "BACKGROUND")
-	edit.bg:SetAllPoints()
+	edit.bg = UI.NewFill(edit, 6)
 	UI.SetTextureColor(edit.bg, UI.color.panel)
-	edit.border = UI.AddBorder(edit, UI.color.border)
+	edit.border = UI.AddBorder(edit, UI.color.border, 1, 6)
 
 	edit.placeholder = UI.NewText(edit, 13, UI.color.muted)
 	edit.placeholder:SetPoint("LEFT", edit, "LEFT", 10, 0)

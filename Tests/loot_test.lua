@@ -263,6 +263,7 @@ return function(check, H)
 	check("cancel is not available without a session", frame.cancel.available == false)
 	check("title without a boss", frame.title:GetText() == "LOOT")
 	check("filter label", frame.label:GetText():find("AND ABOVE", 1, true) ~= nil)
+	check("the list counts its items", frame.count:GetText() == "3 items")
 	local tall = frame:GetHeight()
 
 	Win:Hide()
