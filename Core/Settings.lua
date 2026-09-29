@@ -19,7 +19,7 @@ local defaults = {
 		qualityThreshold = 4, -- epic
 		debug = false,
 		autoOpenLootWindow = true,
-		minimap = { angle = 215, hidden = false }, -- position (degrees around the minimap) of the button
+		minimap = { hidden = false }, -- the launcher button; its position is saved once it has been moved
 		windows = {},         -- window key -> { point, relPoint, x, y }
 	},
 	global = {
@@ -73,14 +73,16 @@ function Settings:GetLootStore()
 	return db.global.lootList
 end
 
--- Minimap button ----------------------------------------------------------------
-function Settings:GetMinimapAngle()
-	return db.profile.minimap.angle
+-- Launcher button (the "minimap button") ----------------------------------------
+-- Where the player dropped it on the screen, or nil while it is at its default place.
+function Settings:GetButtonPosition()
+	local position = db.profile.minimap.position
+	if position and position.point then return position end
+	return nil
 end
 
-function Settings:SetMinimapAngle(angle)
-	if type(angle) ~= "number" then return end
-	db.profile.minimap.angle = angle % 360
+function Settings:SetButtonPosition(point, relPoint, x, y)
+	db.profile.minimap.position = { point = point, relPoint = relPoint, x = x, y = y }
 end
 
 function Settings:IsMinimapHidden()

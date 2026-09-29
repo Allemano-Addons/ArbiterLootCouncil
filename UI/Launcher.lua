@@ -135,7 +135,16 @@ function Launcher:Show(anchor)
 	refresh()
 	menu:ClearAllPoints()
 	if anchor then
-		menu:SetPoint("TOPRIGHT", anchor, "BOTTOMRIGHT", 0, -6)
+		-- Open away from the screen edge the button is near, so the menu always fits.
+		local x, y = anchor:GetCenter()
+		local left = x ~= nil and x < UIParent:GetWidth() / 2
+		local below = y ~= nil and y >= UIParent:GetHeight() / 2
+		local side = left and "LEFT" or "RIGHT"
+		if below then
+			menu:SetPoint("TOP" .. side, anchor, "BOTTOM" .. side, 0, -6)
+		else
+			menu:SetPoint("BOTTOM" .. side, anchor, "TOP" .. side, 0, 6)
+		end
 	else
 		menu:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
 	end

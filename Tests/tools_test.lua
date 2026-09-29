@@ -38,11 +38,13 @@ return function(check, H)
 	end
 	check("back to one name", #Settings:GetCouncil() == 1)
 
-	check("the minimap button starts shown at the default angle", Settings:IsMinimapHidden() == false and Settings:GetMinimapAngle() == 215)
-	Settings:SetMinimapAngle(-90)
-	check("an angle is kept between 0 and 360", Settings:GetMinimapAngle() == 270)
-	Settings:SetMinimapAngle("north")
-	check("a bad angle is ignored", Settings:GetMinimapAngle() == 270)
+	check("the button starts shown, at its default place", Settings:IsMinimapHidden() == false and Settings:GetButtonPosition() == nil)
+	Settings:SetButtonPosition("TOPLEFT", "TOPLEFT", 120, -80)
+	local saved = Settings:GetButtonPosition()
+	check("a dropped position is kept", saved.point == "TOPLEFT" and saved.relPoint == "TOPLEFT" and saved.x == 120 and saved.y == -80)
+	Settings:GetDB().profile.minimap.position = { x = 5 }
+	check("a position without an anchor point counts as none", Settings:GetButtonPosition() == nil)
+	Settings:GetDB().profile.minimap.position = nil
 
 	----------------------------------------------------------------------------
 	-- The settings window
@@ -202,34 +204,39 @@ return function(check, H)
 	----------------------------------------------------------------------------
 	-- The minimap button
 	----------------------------------------------------------------------------
-	local x, y = Button.OffsetFor(0, 70, 70, false)
-	check("angle 0 puts the button on the right edge", math.abs(x - 75) < 0.001 and math.abs(y) < 0.001)
-	x, y = Button.OffsetFor(90, 70, 70, false)
-	check("angle 90 puts it at the top", math.abs(x) < 0.001 and math.abs(y - 75) < 0.001)
-	x, y = Button.OffsetFor(45, 70, 70, true)
-	check("on a square minimap it sits on the corner", math.abs(x - 75) < 0.001 and math.abs(y - 75) < 0.001)
-	x, y = Button.OffsetFor(45, 70, 70, false)
-	check("on a round one it stays on the circle", math.abs(math.sqrt(x * x + y * y) - 75) < 0.001)
+	check("it is a free button, not a child of the minimap", button.parent == UIParent)
+	check("a small square, like the other minimap buttons", button.w == 34 and button.h == 34 and button.bg ~= nil and button.border ~= nil)
+	check("with the ALC mark in it", button.icon.texture == ALC.UI.LOGO)
+	check("it can be dragged with the left button and stays on screen", button.movable == true)
+	check("until moved it sits just left of the minimap",
+		button.point[1] == "TOPRIGHT" and button.point[2] == Minimap and button.point[3] == "TOPLEFT")
 
-	Settings:SetMinimapAngle(0)
-	Button:Refresh()
-	check("the button sits where the setting says", button.point[1] == "CENTER" and math.abs(button.point[4] - 75) < 0.001)
-
-	-- Dragging: the button follows the mouse around the centre (500, 300).
+	-- Dragging: it moves with the mouse and stays where it is dropped.
 	button.scripts.OnDragStart(button)
-	check("dragging follows the mouse only while it lasts", button.scripts.OnUpdate ~= nil)
-	H.cursor = { 500, 400 } -- straight above the centre
-	button.scripts.OnUpdate(button)
-	check("above the centre is 90 degrees", math.abs(Settings:GetMinimapAngle() - 90) < 0.01)
-	check("and the button moved there", math.abs(button.point[4]) < 0.001 and math.abs(button.point[5] - 75) < 0.001)
-	H.cursor = { 400, 300 } -- left of the centre
-	button.scripts.OnUpdate(button)
-	check("left of the centre is 180 degrees", math.abs(Settings:GetMinimapAngle() - 180) < 0.01)
-	H.cursor = { 500, 200 } -- below
-	button.scripts.OnUpdate(button)
-	check("below the centre is 270 degrees, never negative", math.abs(Settings:GetMinimapAngle() - 270) < 0.01)
+	check("dragging starts the move", button.moving == true)
+	button:ClearAllPoints()
+	button:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", 300, 200) -- where the player let go
 	button.scripts.OnDragStop(button)
-	check("letting go stops the following", button.scripts.OnUpdate == nil)
+	check("letting go stops the move", button.moving == false)
+	saved = Settings:GetButtonPosition()
+	check("and the drop place is saved", saved ~= nil and saved.point == "BOTTOMLEFT" and saved.relPoint == "BOTTOMLEFT" and saved.x == 300 and saved.y == 200)
+	Button:Refresh()
+	check("it is placed there again", button.point[1] == "BOTTOMLEFT" and button.point[2] == UIParent and button.point[4] == 300 and button.point[5] == 200)
+
+	-- The menu opens away from the screen edge the button is near.
+	UIParent:SetSize(1920, 1080)
+	button:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 50, -50)
+	button.centerY, button.centerX = 1000, 60 -- near the top left
+	Launcher:Show(button)
+	local menuFrame = Launcher.rows[1].parent
+	check("near the top left the menu opens down and to the right", menuFrame.point[1] == "TOPLEFT" and menuFrame.point[3] == "BOTTOMLEFT")
+	Launcher:Hide()
+	button.centerY, button.centerX = 100, 1800 -- near the bottom right
+	Launcher:Show(button)
+	check("near the bottom right it opens up and to the left", menuFrame.point[1] == "BOTTOMRIGHT" and menuFrame.point[3] == "TOPRIGHT")
+	Launcher:Hide()
+	button.centerY, button.centerX = nil, nil
+	UIParent:SetSize(100, 20)
 
 	-- Clicking.
 	button.scripts.OnClick(button, "LeftButton")
@@ -263,11 +270,12 @@ return function(check, H)
 	Win:Hide()
 
 	-- The position is remembered across a reload.
-	Settings:SetMinimapAngle(123)
+	Settings:SetButtonPosition("CENTER", "CENTER", -40, 75)
 	H.reload()
-	check("the angle survives a reload", ALC.Settings:GetMinimapAngle() == 123)
-	check("and the button is placed from it", ALC.MinimapButton.button ~= nil
-		and math.abs(ALC.MinimapButton.button.point[4] - math.cos(math.rad(123)) * 75) < 0.001)
+	local reloaded = ALC.MinimapButton.button
+	check("the drop place survives a reload", ALC.Settings:GetButtonPosition().x == -40)
+	check("and the button is placed there", reloaded ~= nil and reloaded.point[1] == "CENTER" and reloaded.point[2] == UIParent
+		and reloaded.point[4] == -40 and reloaded.point[5] == 75)
 	ALC.Settings:SetMinimapHidden(true)
 	H.reload()
 	check("a hidden button stays hidden after a reload", ALC.MinimapButton.button:IsShown() == false)

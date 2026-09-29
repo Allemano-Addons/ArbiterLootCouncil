@@ -46,7 +46,12 @@ local function newFrame(kind, parent)
 			assert(x == nil or type(x) == "number", "SetPoint: bad offsetX")
 			self.point = { point, relativeTo, relativePoint, x, y }
 		end,
-		GetPoint = function(self) return "CENTER", nil, "CENTER", 0, 0 end,
+		-- The anchor last set (SetPoint), or the middle of the screen.
+		GetPoint = function(self)
+			local p = self.point
+			if p then return p[1], p[2], p[3] or p[1], p[4] or 0, p[5] or 0 end
+			return "CENTER", nil, "CENTER", 0, 0
+		end,
 		IsMouseOver = function() return false end,
 		GetCenter = function(self) return self.centerX or 500, self.centerY or 300 end,
 		GetEffectiveScale = function() return 1 end,
