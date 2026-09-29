@@ -114,23 +114,6 @@ end
 --------------------------------------------------------------------------------
 -- Loot master: RESPONSE in, CANDIDATE_UPDATE out
 --------------------------------------------------------------------------------
-local function isConnected(name)
-	local unit = ALC:FindUnitByName(name)
-	return unit ~= nil and UnitIsConnected(unit) ~= false
-end
-
--- Council members who can receive an update: us, and the ones in the group and online.
-local function recipients(session)
-	local names = {}
-	local me = ALC:PlayerName()
-	for _, name in ipairs(session.council) do
-		if ALC:SameName(name, me) or (ALC.Comm:IsGroupMember(name) and isConnected(name)) then
-			names[#names + 1] = name
-		end
-	end
-	return names
-end
-
 local function onResponse(_, sender, _, p)
 	local session = ALC.Sessions:GetSession()
 	if not session or not session.isLM then return end
@@ -145,7 +128,7 @@ local function onResponse(_, sender, _, p)
 	local entry = { name = sender, class = class, response = p.response, gear = p.gear }
 	if not upsert(entry) then return end -- nothing new: council already knows
 	Debug:Log("Candidates", "%s: %s", sender, p.response)
-	ALC.Comm:SendCouncil(recipients(session), "CANDIDATE_UPDATE", session.sid, copyEntry(entry))
+	ALC.Comm:SendCouncil(ALC.Council:GetReachableCouncil(), "CANDIDATE_UPDATE", session.sid, copyEntry(entry))
 end
 
 --------------------------------------------------------------------------------

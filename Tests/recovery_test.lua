@@ -33,6 +33,22 @@ return function(check, H)
 	-- Before the reload: a session with answers
 	----------------------------------------------------------------------------
 	H.reload("fresh")
+
+	-- A window whose build fails half way must not stay half built: the next try starts over.
+	local realCreateFrame, created = CreateFrame, 0
+	CreateFrame = function(...)
+		created = created + 1
+		if created == 3 then error("build broke") end
+		return realCreateFrame(...)
+	end
+	local built = pcall(ALC.LootWindow.Show, ALC.LootWindow)
+	CreateFrame = realCreateFrame
+	check("a failing build raises its error", built == false)
+	check("and leaves no window open", not ALC.LootWindow:IsShown())
+	ALC.LootWindow:Show()
+	check("the next try builds the whole window", ALC.LootWindow:IsShown() and #ALC.LootWindow.rows == 8)
+	ALC.LootWindow:Hide()
+
 	leader = ME
 	world()
 	local LD, Sessions, Candidates, Responses, Comm = ALC.LootDetection, ALC.Sessions, ALC.Candidates, ALC.Responses, ALC.Comm

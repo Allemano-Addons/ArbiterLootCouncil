@@ -171,6 +171,8 @@ function ALC:OnInitialize()
 	self.LootWindow:Init()
 	self.Responses:Init()
 	self.Candidates:Init()
+	self.Voting:Init()
 	self.ResponseWindow:Init()
+	self.CouncilWindow:Init()
 	self.Debug:Log("Core", "Arbiter Loot Council %s loaded (protocol v%d)", self.version, self.PROTOCOL_VERSION)
 end

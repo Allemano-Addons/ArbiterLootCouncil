@@ -83,8 +83,12 @@ function Settings:GetSeqStore()
 	return db.global.seqState
 end
 
+-- The saved position of a window, or nil when it was never moved. (A window can have a
+-- saved open/closed flag without a position.)
 function Settings:GetWindowPosition(key)
-	return db.profile.windows[key]
+	local window = db.profile.windows[key]
+	if window and window.point then return window end
+	return nil
 end
 
 function Settings:SetWindowPosition(key, point, relPoint, x, y)

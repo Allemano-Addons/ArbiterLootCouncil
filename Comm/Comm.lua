@@ -281,21 +281,30 @@ end
 --------------------------------------------------------------------------------
 -- Sending
 --------------------------------------------------------------------------------
-local loopbackQueue, loopbackScheduled = {}, false
+-- A queue with explicit head and tail. (Not `#queue`: once the first entries are cleared
+-- the length is unreliable, and a message sent while we are handling another one would
+-- land behind the read position and wait for the next drain.)
+local loopbackQueue, loopbackHead, loopbackTail, loopbackScheduled = {}, 1, 0, false
 
 local function drainLoopback()
-	local i = 1
-	while loopbackQueue[i] do
-		local entry = loopbackQueue[i]
-		loopbackQueue[i] = nil
-		i = i + 1
-		Comm:HandleMessage(entry.message, entry.distribution, me())
+	while loopbackHead <= loopbackTail do
+		local entry = loopbackQueue[loopbackHead]
+		loopbackQueue[loopbackHead] = nil
+		loopbackHead = loopbackHead + 1
+		-- One broken listener must not stop the loot master's own messages: report the
+		-- error like any other and go on with the next message.
+		local ok, err = pcall(Comm.HandleMessage, Comm, entry.message, entry.distribution, me())
+		if not ok then
+			Debug:Error("Comm", "error while handling a message: %s", tostring(err))
+			geterrorhandler()(err)
+		end
 	end
-	loopbackScheduled = false
+	loopbackHead, loopbackTail, loopbackScheduled = 1, 0, false
 end
 
 local function enqueueLoopback(message, distribution)
-	loopbackQueue[#loopbackQueue + 1] = { message = message, distribution = distribution }
+	loopbackTail = loopbackTail + 1
+	loopbackQueue[loopbackTail] = { message = message, distribution = distribution }
 	if not loopbackScheduled then
 		loopbackScheduled = true
 		C_Timer.After(0, drainLoopback)

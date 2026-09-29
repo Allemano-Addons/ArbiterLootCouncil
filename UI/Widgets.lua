@@ -41,6 +41,20 @@ function UI.QualityColor(quality)
 	return UI.qualityColor[quality] or UI.color.muted
 end
 
+-- Class colours by class token, used when the game's RAID_CLASS_COLORS is not there.
+local CLASS_FALLBACK = {
+	WARRIOR = { 0.78, 0.61, 0.43 }, PALADIN = { 0.96, 0.55, 0.73 }, HUNTER = { 0.67, 0.83, 0.45 },
+	ROGUE = { 1, 0.96, 0.41 }, PRIEST = { 1, 1, 1 }, DEATHKNIGHT = { 0.77, 0.12, 0.23 },
+	SHAMAN = { 0, 0.44, 0.87 }, MAGE = { 0.25, 0.78, 0.92 }, WARLOCK = { 0.53, 0.53, 0.93 },
+	MONK = { 0, 1, 0.6 }, DRUID = { 1, 0.49, 0.04 },
+}
+
+function UI.ClassColor(class)
+	local game = RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
+	if game then return { game.r, game.g, game.b } end
+	return CLASS_FALLBACK[class] or UI.color.text
+end
+
 local function unpackColor(c, alpha)
 	return c[1], c[2], c[3], alpha or c[4] or 1
 end

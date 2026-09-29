@@ -118,7 +118,7 @@ local function restorePosition()
 	if pos then
 		frame:SetPoint(pos.point, UIParent, pos.relPoint, pos.x, pos.y)
 	else
-		frame:SetPoint("CENTER", UIParent, "CENTER", 0, 80)
+		frame:SetPoint("CENTER", UIParent, "CENTER", -580, 100)
 	end
 end
 
@@ -322,7 +322,14 @@ end
 --------------------------------------------------------------------------------
 -- Whether the window is open is remembered, so it comes back after a /reload.
 function LootWindow:Show()
-	if not frame then build() end
+	if not frame then
+		-- A build that fails half way must not leave a broken frame behind.
+		local ok, err = pcall(build)
+		if not ok then
+			frame = nil
+			error(err, 0)
+		end
+	end
 	frame:Show()
 	ALC.Settings:SetWindowShown("loot", true)
 	self:Refresh()

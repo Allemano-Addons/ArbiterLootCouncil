@@ -35,7 +35,7 @@ local function restorePosition()
 	if pos then
 		frame:SetPoint(pos.point, UIParent, pos.relPoint, pos.x, pos.y)
 	else
-		frame:SetPoint("CENTER", UIParent, "CENTER", 0, 120)
+		frame:SetPoint("CENTER", UIParent, "CENTER", -170, 100)
 	end
 end
 
@@ -192,7 +192,14 @@ function ResponseWindow:Show()
 		ALC:Print(L["There is no active session."])
 		return
 	end
-	if not frame then build() end
+	if not frame then
+		-- A build that fails half way must not leave a broken frame behind.
+		local ok, err = pcall(build)
+		if not ok then
+			frame = nil
+			error(err, 0)
+		end
+	end
 	feedback = nil
 	frame:Show()
 	ALC.Settings:SetWindowShown("response", true)

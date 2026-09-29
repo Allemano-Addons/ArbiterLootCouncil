@@ -24,6 +24,8 @@ LootDetection\LootDetection.lua
 Gear\Gear.lua
 Responses\Responses.lua
 Candidates\Candidates.lua
+Voting\Voting.lua
 UI\Widgets.lua
 UI\LootWindow.lua
 UI\ResponseWindow.lua
+UI\CouncilWindow.lua

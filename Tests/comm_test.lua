@@ -6,7 +6,7 @@ return function(check, H)
 
 	-- These tests isolate Comm: the real Council and Sessions are replaced by stand-ins
 	-- and the real Sessions stops listening. Run this file after the Sessions tests.
-	for _, module in ipairs({ ALC.Sessions, ALC.LootDetection, ALC.LootWindow, ALC.Responses, ALC.Candidates, ALC.ResponseWindow }) do
+	for _, module in ipairs({ ALC.Sessions, ALC.LootDetection, ALC.LootWindow, ALC.Responses, ALC.Candidates, ALC.ResponseWindow, ALC.Voting, ALC.CouncilWindow }) do
 		ALC.Events.UnregisterAll(module)
 	end
 	local lmName, activeSid = "Ashvane", "sid1"
@@ -239,6 +239,31 @@ return function(check, H)
 	local chatBefore = #H.chat
 	Comm:RequestVersions()
 	check("version report printed", #H.chat > chatBefore)
+
+	----------------------------------------------------------------------------
+	-- The loopback queue
+	----------------------------------------------------------------------------
+	-- A message sent while another one is being handled is handled in the same go:
+	-- our VERSION_REQUEST makes our own handler whisper a VERSION back to ourselves.
+	local versions = Comm:GetVersions()
+	local meKey = string.lower("Tester Moo")
+	versions[meKey] = nil
+	Comm:SendRaid("VERSION_REQUEST", nil, {})
+	check("a reply sent while handling a message is handled at once", versions[meKey] ~= nil and versions[meKey].addon == ALC.version)
+
+	-- A listener that fails must not stop later messages.
+	local reported
+	local realHandler = geterrorhandler
+	geterrorhandler = function() return function(err) reported = err end end
+	local broken = {}
+	ALC.Events.Register(broken, "ALC_COMM_SESSION_CANCEL", function() error("listener broke") end)
+	Comm:SendRaid("SESSION_CANCEL", "sidLM", { reason = "one" })
+	check("the error is reported", reported ~= nil and tostring(reported):find("listener broke", 1, true) ~= nil)
+	ALC.Events.UnregisterAll(broken)
+	versions[meKey] = nil
+	Comm:SendRaid("VERSION_REQUEST", nil, {})
+	check("and the queue keeps working afterwards", versions[meKey] ~= nil)
+	geterrorhandler = realHandler
 
 	----------------------------------------------------------------------------
 	-- Rejection log is rate limited

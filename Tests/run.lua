@@ -81,6 +81,7 @@ check("council via slash", ALC.Settings:GetCouncil()[2] == "Kaelis" or ALC.Setti
 dofile("Tests/sessions_test.lua")(check, H)
 dofile("Tests/loot_test.lua")(check, H)
 dofile("Tests/responses_test.lua")(check, H)
+dofile("Tests/voting_test.lua")(check, H)
 dofile("Tests/media_test.lua")(check, H)
 dofile("Tests/comm_test.lua")(check, H)
 dofile("Tests/recovery_test.lua")(check, H)

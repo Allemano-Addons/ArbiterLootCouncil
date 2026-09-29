@@ -34,7 +34,18 @@ local function newFrame(kind, parent)
 		GetStringWidth = function(self) return #(self.text or "") * 6 end,
 		GetStringHeight = function() return 12 end,
 		GetParent = function(self) return self.parent end,
-		SetPoint = function(self, ...) self.point = { ... } end,
+		-- Like the game: SetPoint("point" [, relativeTo] [, "relativePoint"] [, x, y]),
+		-- where SetPoint("point", x, y) is also allowed.
+		SetPoint = function(self, point, relativeTo, relativePoint, x, y)
+			assert(type(point) == "string", "Frame:SetPoint(): Usage: (\"point\" [, region or nil] [, \"relativePoint\"] [, offsetX, offsetY]")
+			if type(relativeTo) == "number" then
+				x, y, relativeTo, relativePoint = relativeTo, relativePoint, nil, nil
+			end
+			assert(relativeTo == nil or type(relativeTo) == "table" or type(relativeTo) == "string", "SetPoint: bad relativeTo")
+			assert(relativePoint == nil or type(relativePoint) == "string", "SetPoint: bad relativePoint")
+			assert(x == nil or type(x) == "number", "SetPoint: bad offsetX")
+			self.point = { point, relativeTo, relativePoint, x, y }
+		end,
 		GetPoint = function(self) return "CENTER", nil, "CENTER", 0, 0 end,
 		IsMouseOver = function() return false end,
 		CreateTexture = function(self) return newFrame("Texture", self) end,

@@ -169,6 +169,26 @@ function Council:AmCouncil()
 	return self:IsCouncil(ALC:PlayerName())
 end
 
+local function isConnected(name)
+	local unit = ALC:FindUnitByName(name)
+	return unit ~= nil and UnitIsConnected(unit) ~= false
+end
+
+-- Council members of the running session who can be sent an update: ourselves, and
+-- the ones who are in the group and online (an offline whisper only adds error spam).
+function Council:GetReachableCouncil()
+	local names = {}
+	local session = ALC.Sessions:GetSession()
+	if not session then return names end
+	local me = ALC:PlayerName()
+	for _, name in ipairs(session.council) do
+		if ALC:SameName(name, me) or (ALC.Comm:IsGroupMember(name) and isConnected(name)) then
+			names[#names + 1] = name
+		end
+	end
+	return names
+end
+
 -- What the loot master sends in SESSION_START: itself first (it must see the votes),
 -- then the configured council, without duplicates, capped at the protocol limit.
 function Council:BuildSessionList(lootMaster)
