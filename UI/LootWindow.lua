@@ -13,6 +13,7 @@ local WIDTH, PAD = 400, 16
 local HEADER_H, LABEL_H, FOOTER_H = 52, 34, 64
 local ROW_H, ROW_GAP, MAX_ROWS = 56, 8, 8
 local ICON = 40
+local REMOVE_SIZE = 28
 local UNKNOWN_ICON = "Interface\\Icons\\INV_Misc_QuestionMark"
 
 local LootWindow = {}
@@ -58,30 +59,47 @@ local function newRow(index)
 	row.status = UI.NewText(row, 13, c.muted, "RIGHT")
 	row.status:SetPoint("RIGHT", row, "RIGHT", -16, 0)
 
-	row.name = UI.NewText(row, 14, c.text)
-	row.name:SetPoint("TOPLEFT", iconFrame, "TOPRIGHT", 12, -2)
-	row.name:SetPoint("RIGHT", row, "RIGHT", -110, 0)
-
-	row.sub = UI.NewText(row, 11, c.muted)
-	row.sub:SetPoint("BOTTOMLEFT", iconFrame, "BOTTOMRIGHT", 12, 2)
-	row.sub:SetPoint("RIGHT", row, "RIGHT", -110, 0)
+	-- Right to left: the remove button, then Start (or the status text).
+	row.remove = CreateFrame("Button", nil, row)
+	row.remove:SetSize(REMOVE_SIZE, REMOVE_SIZE)
+	row.remove:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+	row.remove.bg = row.remove:CreateTexture(nil, "BACKGROUND")
+	row.remove.bg:SetAllPoints()
+	UI.SetTextureColor(row.remove.bg, c.panelHover)
+	row.remove.bg:Hide()
+	row.remove.text = UI.NewText(row.remove, 20, c.muted, "CENTER")
+	row.remove.text:SetPoint("CENTER", 0, 1)
+	row.remove.text:SetText("\195\151") -- multiplication sign
+	row.remove:SetScript("OnEnter", function(self)
+		self.bg:Show()
+		self.text:SetTextColor(c.danger[1], c.danger[2], c.danger[3], 1)
+		GameTooltip:SetOwner(self, "ANCHOR_TOP")
+		GameTooltip:SetText(L["Remove from the list"])
+		GameTooltip:Show()
+	end)
+	row.remove:SetScript("OnLeave", function(self)
+		self.bg:Hide()
+		self.text:SetTextColor(c.muted[1], c.muted[2], c.muted[3], 1)
+		GameTooltip:Hide()
+	end)
+	row.remove:SetScript("OnClick", function()
+		GameTooltip:Hide()
+		ALC.LootDetection:Remove(row.entryId)
+	end)
 
 	row.start = UI.NewButton(row, 76, 34, L["Start"], function()
 		local ok, message = ALC.LootDetection:StartSession(row.entryId)
 		if not ok and message then ALC:Print(message) end
 	end)
-	row.start:SetPoint("RIGHT", row, "RIGHT", -10, 0)
+	row.start:SetPoint("RIGHT", row.remove, "LEFT", -6, 0)
 
-	row.remove = CreateFrame("Button", nil, row)
-	row.remove:SetSize(16, 16)
-	row.remove:SetPoint("TOPRIGHT", row, "TOPRIGHT", -3, -3)
-	row.remove.text = UI.NewText(row.remove, 14, c.muted, "CENTER")
-	row.remove.text:SetPoint("CENTER", 0, 0)
-	row.remove.text:SetText("\195\151") -- multiplication sign
-	row.remove:SetAlpha(0.4)
-	row.remove:SetScript("OnEnter", function(self) self:SetAlpha(1) end)
-	row.remove:SetScript("OnLeave", function(self) self:SetAlpha(0.4) end)
-	row.remove:SetScript("OnClick", function() ALC.LootDetection:Remove(row.entryId) end)
+	row.name = UI.NewText(row, 14, c.text)
+	row.name:SetPoint("TOPLEFT", iconFrame, "TOPRIGHT", 12, -2)
+	row.name:SetPoint("RIGHT", row, "RIGHT", -(REMOVE_SIZE + 8 + 76 + 6 + 10), 0)
+
+	row.sub = UI.NewText(row, 11, c.muted)
+	row.sub:SetPoint("BOTTOMLEFT", iconFrame, "BOTTOMRIGHT", 12, 2)
+	row.sub:SetPoint("RIGHT", row, "RIGHT", -(REMOVE_SIZE + 8 + 76 + 6 + 10), 0)
 
 	row:SetScript("OnEnter", function(self) showTooltip(self) end)
 	row:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -197,6 +215,16 @@ end
 --------------------------------------------------------------------------------
 -- Rendering
 --------------------------------------------------------------------------------
+-- The status text sits at the right edge, or beside the remove button when it is shown.
+local function anchorStatus(row, besideRemove)
+	row.status:ClearAllPoints()
+	if besideRemove then
+		row.status:SetPoint("RIGHT", row.remove, "LEFT", -12, 0)
+	else
+		row.status:SetPoint("RIGHT", row, "RIGHT", -16, 0)
+	end
+end
+
 local function renderRow(row, entry, sessionActive, isLM)
 	local LootDetection = ALC.LootDetection
 	local status = LootDetection.STATUS
@@ -232,15 +260,18 @@ local function renderRow(row, entry, sessionActive, isLM)
 		row.start:SetAvailable(isLM and not sessionActive)
 		row.remove:Show()
 	elseif inSession then
+		anchorStatus(row, false)
 		row.status:SetTextColor(c.gold[1], c.gold[2], c.gold[3], 1)
 		row.status:SetText(L["In session"])
 		row.status:Show()
 	elseif entry.status == status.TRADE then
+		anchorStatus(row, true)
 		row.status:SetTextColor(c.gold[1], c.gold[2], c.gold[3], 0.8)
 		row.status:SetText(L["Awaiting trade"])
 		row.status:Show()
 		row.remove:Show()
 	else
+		anchorStatus(row, true)
 		row.status:SetTextColor(c.muted[1], c.muted[2], c.muted[3], 1)
 		row.status:SetText(L["Awarded"])
 		row.status:Show()

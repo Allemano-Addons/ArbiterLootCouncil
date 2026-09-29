@@ -80,7 +80,9 @@ function LootDetection:GetItemDisplay(entry)
 	if quality and not entry.quality then entry.quality = quality end
 
 	local parts = {}
+	-- Items that cannot be worn have an empty slot name; an empty string must not count.
 	local slot = equipLoc and equipLoc ~= "" and SLOT_NAMES[equipLoc]
+	if type(slot) ~= "string" or slot == "" then slot = nil end
 	if slot then parts[#parts + 1] = slot end
 	local kind = subType and subType ~= "" and subType or itemType
 	if kind and kind ~= "Miscellaneous" and kind ~= slot then parts[#parts + 1] = kind end

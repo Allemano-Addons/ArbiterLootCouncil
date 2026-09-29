@@ -14,7 +14,9 @@ return function(check, H)
 		[19019] = { "Thunderfury, Blessed Blade of the Windseeker", 5, "Weapon", "One-Handed Swords", "INVTYPE_WEAPON", 135349 },
 		[200] = { "Crown of Destruction", 4, "Armor", "Mail", "INVTYPE_HEAD", 133101 },
 		[100] = { "Band of Accuria", 3, "Armor", "Miscellaneous", "INVTYPE_FINGER", 133345 },
+		[300] = { "Small Furry Paw", 1, "Quest", "Quest", "INVTYPE_NON_EQUIP_IGNORE", 133648 },
 	}
+	INVTYPE_NON_EQUIP_IGNORE = "" -- the client gives items that cannot be worn an empty slot name
 	INVTYPE_WEAPON, INVTYPE_HEAD, INVTYPE_FINGER = "One-Hand", "Head", "Finger"
 	local requested = {}
 	local function idOf(item) return tonumber(item) or tonumber(tostring(item):match("item:(%d+)")) end
@@ -150,6 +152,8 @@ return function(check, H)
 	check("display: slot and armor type", d.subtitle == "Head \194\183 Mail")
 	check("display: weapon", LD:GetItemDisplay(LD:GetItems()[1]).subtitle == "One-Hand \194\183 One-Handed Swords")
 	check("display: miscellaneous is left out", LD:GetItemDisplay(LD:GetItems()[3]).subtitle == "Finger")
+	check("display: an item that cannot be worn has no leading separator",
+		LD:GetItemDisplay({ itemString = "item:300", itemID = 300 }).subtitle == "Quest")
 	LD:AddFromText("555")
 	local unknown = LD:GetItemDisplay(LD:GetItems()[4])
 	check("display: unknown item is requested from the client", unknown.name == nil and requested[#requested] == 555)
@@ -293,6 +297,7 @@ return function(check, H)
 		{ winner = "Veyra Moo", itemID = 19019, response = "BIS" })
 	check("an awarded row shows Awarded and the winner", rows[1].status:GetText() == "Awarded" and rows[1].sub:GetText():find("Veyra Moo", 1, true) ~= nil)
 
+	check("the remove button is big enough to hit", rows[2].remove:GetWidth() >= 24 and rows[2].remove:GetHeight() >= 24)
 	-- Removing and hover.
 	local removed = rows[2].entryId
 	rows[2].remove.scripts.OnClick(rows[2].remove)
