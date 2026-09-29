@@ -40,12 +40,38 @@ function Council.GetLeaderName()
 		local unit = "party" .. i
 		if UnitExists(unit) and UnitIsGroupLeader(unit) then return ALC:UnitFullName(unit) end
 	end
+	return nil
 end
 
+-- True when the game says we are the master looter.
+function Council.IsPlayerMasterLooter()
+	return IsMasterLooter ~= nil and IsMasterLooter() == true
+end
+
+-- The roster entry flagged as master looter: index, name (as GetRaidRosterInfo reports it).
+function Council.FindRosterMasterLooter()
+	if not GetRaidRosterInfo then return nil end
+	for i = 1, GetNumGroupMembers() do
+		local name, _, _, _, _, _, _, _, _, _, isMasterLooter = GetRaidRosterInfo(i)
+		if isMasterLooter then return i, name end
+	end
+	return nil
+end
+
+-- Newer clients return the loot method as a number: 2 is master loot, 3 group loot.
 local function isMasterLoot(method)
-	if method == "master" then return true end
+	if method == "master" or method == 2 then return true end
 	local enum = Enum and Enum.LootMethod
 	return type(method) == "number" and enum ~= nil and method == enum.Masterlooter
+end
+
+-- The unit whose first name matches a roster name (roster names carry no surname).
+local function unitByFirstName(first)
+	if UnitName("player") == first then return "player" end
+	for i = 1, 4 do
+		local unit = "party" .. i
+		if UnitName(unit) == first then return unit end
+	end
 end
 
 --------------------------------------------------------------------------------
@@ -57,19 +83,38 @@ function Council:GetLootMaster()
 	end
 	local method, partyMaster, raidMaster = self.GetLootMethodInfo()
 	if isMasterLoot(method) then
-		local unit
-		if IsInRaid() and raidMaster and raidMaster > 0 then
-			unit = "raid" .. raidMaster
-		elseif partyMaster == 0 then
-			unit = "player"
-		elseif partyMaster and partyMaster > 0 then
-			unit = "party" .. partyMaster
-		end
-		local name = unit and ALC:UnitFullName(unit)
-		if name then return ALC:NormalizeName(name) end
-		Debug:Warn("Council", "master looter unit %s not found, using the group leader", tostring(unit))
+		local name = self:FindMasterLooter(partyMaster, raidMaster)
+		if name then return name end
+		Debug:Warn("Council", "master loot is active but the master looter was not found, using the group leader")
 	end
 	return ALC:NormalizeName(self.GetLeaderName())
+end
+
+-- Master looter's full name, tried in order: the game says it is us, the ids
+-- from the loot method, the roster flag. Returns nil when none of them finds one.
+function Council:FindMasterLooter(partyMaster, raidMaster)
+	if self.IsPlayerMasterLooter() then
+		return ALC:NormalizeName(ALC:PlayerName())
+	end
+
+	local unit
+	if IsInRaid() and raidMaster and raidMaster > 0 then
+		unit = "raid" .. raidMaster
+	elseif partyMaster == 0 then
+		unit = "player"
+	elseif partyMaster and partyMaster > 0 then
+		unit = "party" .. partyMaster
+	end
+	local name = unit and ALC:UnitFullName(unit)
+	if name then return ALC:NormalizeName(name) end
+
+	local index, rosterName = self.FindRosterMasterLooter()
+	if index then
+		unit = IsInRaid() and ("raid" .. index) or unitByFirstName(rosterName)
+		name = unit and ALC:UnitFullName(unit)
+		if name then return ALC:NormalizeName(name) end
+	end
+	return nil
 end
 
 function Council:IsLootMaster(name)
@@ -152,8 +197,12 @@ end
 -- /alc debug lm: what the game says about the loot method, and who we think leads.
 ALC.Commands:RegisterDebug("lm", function()
 	local method, partyMaster, raidMaster = Council.GetLootMethodInfo()
-	ALC:Print("GetLootMethod: %s, party=%s, raid=%s", tostring(method), tostring(partyMaster), tostring(raidMaster))
-	ALC:Print("in group=%s raid=%s, leader=%s", tostring(IsInGroup()), tostring(IsInRaid()), tostring(Council.GetLeaderName()))
+	ALC:Print("loot method: %s (party=%s, raid=%s), master loot=%s", tostring(method), tostring(partyMaster),
+		tostring(raidMaster), tostring(isMasterLoot(method)))
+	ALC:Print("in group=%s raid=%s, leader=%s, IsMasterLooter()=%s", tostring(IsInGroup()), tostring(IsInRaid()),
+		tostring((Council.GetLeaderName())), tostring(Council.IsPlayerMasterLooter()))
+	local index, rosterName = Council.FindRosterMasterLooter()
+	ALC:Print("roster master looter flag: index=%s name=%s", tostring(index), tostring(rosterName))
 	ALC:Print("loot master: %s (you: %s)", tostring(Council:GetLootMaster()), tostring(ALC:PlayerName()))
 	ALC:Print("council: %s", table.concat(Council:GetList(), ", "))
 end)

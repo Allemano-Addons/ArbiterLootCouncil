@@ -70,6 +70,35 @@ return function(check, H)
 	setGroup({ "Ashvane Moo" }, "Ashvane Moo", "master", 4)
 	check("master looter not found: falls back to the leader", Council:GetLootMaster() == "Ashvane Moo")
 
+	-- The newer client returns the loot method as a number: 2 = master, 3 = group.
+	local realMethodInfo = Council.GetLootMethodInfo
+	Council.GetLootMethodInfo = function() return 3 end
+	setGroup({ "Ashvane Moo" }, "Ashvane Moo", "group")
+	check("numeric group loot: the leader", Council:GetLootMaster() == "Ashvane Moo")
+	Council.GetLootMethodInfo = function() return 2 end
+	Council.IsPlayerMasterLooter = function() return true end
+	check("numeric master loot and the game says it is you", Council:GetLootMaster() == ME)
+	Council.IsPlayerMasterLooter = function() return false end
+	Council.FindRosterMasterLooter = function() return 2, "Veyra" end
+	setGroup({ "Ashvane Moo", "Veyra Moo" }, "Ashvane Moo", "group")
+	check("master looter found through the roster flag in a party", Council:GetLootMaster() == "Veyra Moo")
+	H.inRaid = true
+	units = { raid2 = { "Jonatan", "Moo" } }
+	Council.FindRosterMasterLooter = function() return 2, "Jonatan" end
+	check("master looter found through the roster flag in a raid", Council:GetLootMaster() == "Jonatan Moo")
+	H.inRaid = false
+	Council.FindRosterMasterLooter = function() return nil end
+	Council.GetLootMethodInfo = realMethodInfo
+
+	-- A leader function that returns no value at all must not break the diagnostics.
+	setGroup({}, nil)
+	local realLeader = Council.GetLeaderName
+	Council.GetLeaderName = function() end
+	H.slash("debug lm")
+	check("debug lm survives a missing leader", true)
+	Council.GetLeaderName = realLeader
+	Council.GetLeaderName = function() return group.leader end
+
 	-- Loot master change is announced (not on the first resolve).
 	local changes = {}
 	ALC.Events.Register(listener, "ALC_COUNCIL_LM_CHANGED", function(_, new, old) changes[#changes + 1] = { new, old } end)
