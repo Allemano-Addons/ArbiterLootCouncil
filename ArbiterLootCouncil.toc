@@ -6,7 +6,7 @@
 ## SavedVariables: ALC_DB
 ## Category: Loot
 ## X-Curse-Project-ID: 1719135
-## IconTexture: Interface\AddOns\ArbiterLootCouncil\Media\Logo\alc_mark_64
+## IconTexture: Interface\AddOns\ArbiterLootCouncil\Media\wow\icon
 
 embeds.xml
 

@@ -7,7 +7,7 @@ local ALC = ALC
 local UI = ALC.UI
 local L = ALC.L
 
-local SIZE = 34
+local SIZE = 30
 local c = UI.color
 
 local MinimapButton = {}
@@ -60,9 +60,9 @@ local function build()
 	button.border = UI.AddBorder(button, c.border, 1, 8)
 
 	button.icon = button:CreateTexture(nil, "ARTWORK")
-	button.icon:SetPoint("TOPLEFT", 5, -5)
-	button.icon:SetPoint("BOTTOMRIGHT", -5, 5)
-	button.icon:SetTexture(UI.LOGO)
+	button.icon:SetPoint("TOPLEFT", 2, -2)
+	button.icon:SetPoint("BOTTOMRIGHT", -2, 2)
+	button.icon:SetTexture(UI.MEDIA .. "wow\\mark")
 
 	button:SetScript("OnClick", function(self, mouseButton)
 		GameTooltip:Hide()
