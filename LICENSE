@@ -1,0 +1,13 @@
+Copyright (c) 2026 Allemano. All rights reserved.
+
+Arbiter Loot Council is provided for personal use in World of Warcraft. You may download,
+install and use it, and read the source code.
+
+You may not copy, modify, redistribute, reupload or include any part of this
+addon in other projects without written permission from the author.
+
+The addon is provided "as is", without warranty of any kind.
+
+The embedded libraries in Libs/ (LibStub, CallbackHandler, AceAddon, AceComm,
+AceDB, AceEvent, AceSerializer and ChatThrottleLib) are by their respective authors
+and keep their own licenses. That license applies to those libraries only.

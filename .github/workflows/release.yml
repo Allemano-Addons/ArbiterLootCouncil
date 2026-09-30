@@ -1,0 +1,21 @@
+name: Package and release
+
+# Runs when a version tag is pushed, e.g. v0.6.1 (release), v0.6.1-beta or v0.6.1-alpha.
+# The tag name decides the release type on CurseForge.
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      CF_API_KEY: ${{ secrets.CF_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the packager reads the tag history
+
+      - name: Package and upload to CurseForge
+        uses: BigWigsMods/packager@v2

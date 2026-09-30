@@ -1,0 +1,12 @@
+package-as: ArbiterLootCouncil
+
+ignore:
+  - .luacheckrc
+  - .gitattributes
+  - .github
+  - docs
+  - Tests
+  - Tools
+  - ALC_Media
+  - CLAUDE.md
+  - ROADMAP.md

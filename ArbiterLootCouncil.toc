@@ -1,10 +1,11 @@
 ## Interface: 16001
 ## Title: Arbiter Loot Council
 ## Notes: Loot council for WoW Forever. Part of Allemano Addons.
-## Author: Patrick
+## Author: Allemano
 ## Version: 0.2.0-alpha2
 ## SavedVariables: ALC_DB
 ## Category: Loot
+## X-Curse-Project-ID: 1719135
 ## IconTexture: Interface\AddOns\ArbiterLootCouncil\Media\Logo\alc_mark_64
 
 embeds.xml
