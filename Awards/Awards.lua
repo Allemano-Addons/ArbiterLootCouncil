@@ -10,6 +10,7 @@
 -- GiveMasterLoot cannot say whether it worked, so we wait for the loot slot to empty.
 --
 -- Events:
+--   ALC_AWARDS_LOGGED (entry)     an award was written to the log (loot master only)
 --   ALC_AWARDS_ANNOUNCED (text)   the winner was announced (or printed, when ungrouped)
 
 local ALC = ALC
@@ -102,7 +103,7 @@ end
 
 local function logAward(session, target, entry, votes)
 	local log = ALC.Settings:GetAwardLog()
-	log[#log + 1] = {
+	local record = {
 		itemID = target.itemID,
 		itemString = target.itemString,
 		winner = entry.name,
@@ -116,6 +117,8 @@ local function logAward(session, target, entry, votes)
 		time = time(),
 		zone = (GetRealZoneText and GetRealZoneText()) or (GetZoneText and GetZoneText()) or "",
 	}
+	log[#log + 1] = record
+	ALC.Events:Fire("ALC_AWARDS_LOGGED", record)
 end
 
 --------------------------------------------------------------------------------

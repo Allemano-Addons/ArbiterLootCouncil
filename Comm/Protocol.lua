@@ -257,6 +257,32 @@ specs.AWARD = {
 	end,
 }
 
+-- What the council is shown about earlier awards: the window in days and, per player, how
+-- many awards there were and the latest few. `full` = everybody's figures (anybody missing has none).
+local function checkRecent(p)
+	if type(p) ~= "table" then return fail("bad recent") end
+	if not isInt(p.days, 1, 365) then return fail("bad recent days") end
+	if p.full ~= nil and type(p.full) ~= "boolean" then return fail("bad recent full") end
+	if not isArray(p.players, C.MAX_RECENT_PLAYERS) then return fail("bad recent players") end
+	for _, player in ipairs(p.players) do
+		if type(player) ~= "table" or not isName(player.name) or not isInt(player.count, 0, 9999) then return fail("bad recent player") end
+		if not isArray(player.awards, C.MAX_RECENT_AWARDS) then return fail("bad recent awards") end
+		for _, a in ipairs(player.awards) do
+			if type(a) ~= "table" or not isInt(a.itemID, 1, 9999999) or not isText(a.label, 1, C.MAX_RESPONSE_LABEL)
+				or not isInt(a.ago, 0, 3650) then
+				return fail("bad recent award")
+			end
+			if a.color ~= nil and not (type(a.color) == "string" and strmatch(a.color, "^%x%x%x%x%x%x$")) then return fail("bad recent colour") end
+		end
+	end
+	return true
+end
+
+specs.RECENT = {
+	allowed = "lm", channel = "WHISPER", sid = "active", seq = true,
+	validate = checkRecent,
+}
+
 specs.STATE_REQUEST = {
 	allowed = "group", channel = "WHISPER", sid = "none", seq = false,
 	validate = function() return true end,
@@ -291,6 +317,10 @@ specs.STATE_SNAPSHOT = {
 				ok, reason = checkVoters(v.voters)
 				if not ok then return fail(reason) end
 			end
+		end
+		if p.recent ~= nil then
+			ok, reason = checkRecent(p.recent)
+			if not ok then return fail(reason) end
 		end
 		-- What the receiver itself answered and voted, one entry per item.
 		if p.yourResponses ~= nil then

@@ -295,6 +295,23 @@ local function build()
 	end))
 	frame.autoOpen:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
 	y = y + 38
+
+	-- How far back the council sees what a player was awarded (the Recent column).
+	local recentLabel = into("lm", UI.NewText(frame, 12, c.text))
+	recentLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
+	recentLabel:SetText(L["Recent awards: the council sees the last"])
+	y = y + 22
+	SettingsWindow.recentButtons = {}
+	local recentWidth = math.floor((WIDTH - 2 * PAD - 3 * 6) / 4)
+	for i, recentDays in ipairs({ 7, 14, 30, 90 }) do
+		local button = into("lm", UI.NewButton(frame, recentWidth, 30, string.format(L["%d days"], recentDays), function()
+			ALC.Settings:SetRecentDays(recentDays)
+		end))
+		button:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD + (i - 1) * (recentWidth + 6), -y)
+		button.days = recentDays
+		SettingsWindow.recentButtons[i] = button
+	end
+	y = y + 42
 	heights.lm = y + 40
 
 	-- Council ---------------------------------------------------------------------
@@ -687,6 +704,7 @@ function SettingsWindow:Refresh()
 	end
 	frame.responseFeedback:SetText(responseFeedback or "")
 	frame.autoOpen:SetChecked(settings:GetAutoOpenLootWindow())
+	for _, button in ipairs(self.recentButtons) do button:SetSelected(button.days == settings:GetRecentDays()) end
 	frame.minimap:SetChecked(not settings:IsMinimapHidden())
 	frame.keepOpen:SetChecked(settings:GetKeepCouncilOpen())
 	frame.debug:SetChecked(settings:IsDebug())

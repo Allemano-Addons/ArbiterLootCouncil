@@ -502,7 +502,7 @@ return function(check, H)
 	ALC.Sessions:Cancel("done")
 
 	-- Put the environment back.
-	UnitIsConnected = nil
+	UnitIsConnected = function() return true end
 	H.inGroup = false
 	C_Item.GetItemInfo = function() end
 	C_Item.GetItemInfoInstant = nil

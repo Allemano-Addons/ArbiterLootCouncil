@@ -436,7 +436,7 @@ return function(check, H)
 	-- Put the environment back for the following tests.
 	ALC.Events.UnregisterAll(listener)
 	UnitName, UnitClass = realUnitName, realUnitClass
-	UnitIsConnected = nil
+	UnitIsConnected = function() return true end
 	H.inGroup = false
 	C_Item.GetItemInfo = function() end
 	C_Item.GetItemInfoInstant = nil

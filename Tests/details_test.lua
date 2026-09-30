@@ -474,7 +474,7 @@ return function(check, H)
 	ALC.Comm:Process(env("SESSION_CANCEL", "sidZ", 2, { reason = "done" }), "PARTY", "Veyra Moo")
 
 	-- Put the environment back.
-	UnitIsConnected = nil
+	UnitIsConnected = function() return true end
 	GetGuildInfo = nil
 	H.inGroup = false
 	C_Item.GetItemInfo = function() end

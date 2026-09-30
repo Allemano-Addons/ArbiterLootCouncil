@@ -19,8 +19,8 @@ local ROW_H, COMPACT_ROW_H = 56, 40
 local POOL, DEFAULT_ROWS, MIN_ROWS = 30, 10, 3
 local ICON = 52
 local BUTTON_W = 92
-local NAME_X, RANK_X, RESPONSE_X, GEAR_X, NOTE_X, VOTES_X = 16, 172, 268, 376, 552, 712
-local GEAR_W, NOTE_W, RANK_W = 166, 150, 90
+local NAME_X, RANK_X, RESPONSE_X, GEAR_X, RECENT_X, NOTE_X, VOTES_X = 16, 172, 268, 376, 536, 590, 712
+local GEAR_W, RECENT_W, NOTE_W, RANK_W = 150, 44, 116, 90
 local UNKNOWN_ICON = "Interface\\Icons\\INV_Misc_QuestionMark"
 
 -- The History tab: one row per award in the award log, newest first.
@@ -156,6 +156,19 @@ local function newRow(index)
 	row.rank = UI.NewText(row, 12, c.text)
 	row.rank:SetPoint("LEFT", row, "LEFT", RANK_X, 0)
 	row.rank:SetWidth(RANK_W)
+	-- How many items the player was awarded lately; the list of them on hover (council only).
+	row.recentButton = CreateFrame("Button", nil, row)
+	row.recentButton:SetSize(RECENT_W, 30)
+	row.recentButton:SetPoint("LEFT", row, "LEFT", RECENT_X, 0)
+	row.recent = UI.NewText(row.recentButton, 13, c.muted, "CENTER")
+	row.recent:SetPoint("CENTER", 0, 0)
+	row.recent:SetWidth(RECENT_W)
+	row.recentButton:SetScript("OnEnter", function(self)
+		if not self.player then return end
+		CouncilWindow:ShowRecentTooltip(self, self.player)
+	end)
+	row.recentButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
 	row.noteButton = CreateFrame("Button", nil, row)
 	row.noteButton:SetSize(NOTE_W, 30)
 	row.noteButton:SetPoint("LEFT", row, "LEFT", NOTE_X, 0)
@@ -639,6 +652,7 @@ local function build()
 		heading(L["Rank"], RANK_X),
 		heading(L["Response"], RESPONSE_X),
 		heading(L["Current gear"], GEAR_X),
+		heading(L["Recent"], RECENT_X, "CENTER", RECENT_W),
 		heading(L["Note"], NOTE_X),
 		heading(L["Votes"], VOTES_X, "CENTER", 60),
 	}
@@ -677,7 +691,7 @@ local function build()
 	frame.stop:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -(PAD + 240), -(HEADER_H + 22))
 
 	councilStatic = { itemBox, frame.name, frame.sub, frame.progress, frame.barBg, frame.barFill, itemDivider, tableDivider,
-		headings[1], headings[2], headings[3], headings[4], headings[5], headings[6], frame.empty, frame.footerLine, frame.lootMaster,
+		headings[1], headings[2], headings[3], headings[4], headings[5], headings[6], headings[7], frame.empty, frame.footerLine, frame.lootMaster,
 		frame.tally, frame.compact, frame.showPassed, frame.sort, frame.stop }
 
 	-- Shown instead of the Council tab while no session runs.
@@ -726,8 +740,24 @@ local function build()
 	frame.historyFooterLine = footerLine()
 	frame.historyCount = UI.NewText(frame, 13, c.muted)
 	frame.historyCount:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", PAD, 18)
+	-- Filter: all awards, or only the last 7, 14, 30 or 90 days.
+	frame.historyFilters = {}
+	local previous
+	for i = #CouncilWindow.HISTORY_FILTERS, 1, -1 do
+		local filter = CouncilWindow.HISTORY_FILTERS[i]
+		local button = UI.NewButton(frame, 56, 26, filter.label, function() CouncilWindow:SetHistoryDays(filter.days) end)
+		if previous then
+			button:SetPoint("RIGHT", previous, "LEFT", -6, 0)
+		else
+			button:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -PAD - 14, 13)
+		end
+		button.days = filter.days
+		previous = button
+		frame.historyFilters[i] = button
+	end
 	historyStatic = { historyHeadings[1], historyHeadings[2], historyHeadings[3], historyHeadings[4], historyHeadings[5],
 		historyDivider, frame.historyEmpty, frame.historyFooterLine, frame.historyCount }
+	for _, button in ipairs(frame.historyFilters) do historyStatic[#historyStatic + 1] = button end
 	for i = 1, HISTORY_ROWS do
 		CouncilWindow.historyRows[i] = newHistoryRow(i)
 	end
@@ -862,10 +892,65 @@ function CouncilWindow:GetVisible()
 end
 
 -- The awards in the log, newest first (a new list; the entries are shared).
+-- How long ago an award was, in words: "today", "yesterday", "5 days ago".
+local function daysAgo(days)
+	if days <= 0 then return L["today"] end
+	if days == 1 then return L["yesterday"] end
+	return string.format(L["%d days ago"], days)
+end
+
+-- What a player was awarded lately: the count in the column, the latest on hover.
+function CouncilWindow:ShowRecentTooltip(owner, name)
+	local count, awards = ALC.Recent:Get(name)
+	GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
+	GameTooltip:SetText(string.format(L["Awarded in the last %d days"], ALC.Recent:GetDays() or ALC.Settings:GetRecentDays()))
+	if count == 0 then
+		GameTooltip:AddLine(L["Nothing"], c.muted[1], c.muted[2], c.muted[3])
+	end
+	for _, award in ipairs(awards) do
+		local display = ALC.LootDetection:GetItemDisplay({ itemID = award.itemID, itemString = "item:" .. award.itemID })
+		local color = award.color or c.muted
+		GameTooltip:AddLine(string.format("%s  \194\183  %s  \194\183  %s", award.label, display.name or ("item " .. award.itemID), daysAgo(award.ago)),
+			color[1], color[2], color[3])
+	end
+	if count > #awards then
+		GameTooltip:AddLine(string.format(L["+ %d more"], count - #awards), c.muted[1], c.muted[2], c.muted[3])
+	end
+	GameTooltip:Show()
+end
+
+-- The History tab can show only the awards of the last 7, 14, 30 or 90 days (nil = all).
+CouncilWindow.HISTORY_FILTERS = { { days = nil, label = L["All"] }, { days = 7, label = "7 d" }, { days = 14, label = "14 d" },
+	{ days = 30, label = "30 d" }, { days = 90, label = "90 d" } }
+
+function CouncilWindow:GetHistoryDays()
+	local days = ALC.Settings:GetWindowOption("council", "historyDays", nil)
+	for _, f in ipairs(self.HISTORY_FILTERS) do
+		if f.days == days then return days end
+	end
+	return nil
+end
+
+function CouncilWindow:SetHistoryDays(days)
+	local valid = days == nil
+	for _, f in ipairs(self.HISTORY_FILTERS) do
+		if f.days == days then valid = true end
+	end
+	if not valid then return false end
+	ALC.Settings:SetWindowOption("council", "historyDays", days or false)
+	historyOffset = 0
+	self:Refresh()
+	return true
+end
+
 function CouncilWindow:GetHistory()
 	local log = ALC.Awards:GetLog()
+	local days = self:GetHistoryDays()
+	local cutoff = days and (time() - days * 86400) or nil
 	local list = {}
-	for i = #log, 1, -1 do list[#list + 1] = log[i] end
+	for i = #log, 1, -1 do
+		if not cutoff or (log[i].time or 0) >= cutoff then list[#list + 1] = log[i] end
+	end
 	return list
 end
 
@@ -885,6 +970,14 @@ local function renderRow(row, entry, myVote, topVotes, isLM, compact, open)
 	row.rank:SetText(entry.rank or "")
 	row.note:SetText(entry.note or "")
 	row.noteButton.fullNote = entry.note
+	local recentCount = ALC.Recent:Get(entry.name)
+	row.recentButton.player = entry.name
+	row.recent:SetText(recentCount > 0 and tostring(recentCount) or "\226\128\148") -- em dash
+	if recentCount > 0 then
+		row.recent:SetTextColor(c.text[1], c.text[2], c.text[3], 1)
+	else
+		row.recent:SetTextColor(c.muted[1], c.muted[2], c.muted[3], 1)
+	end
 
 	local response = ALC.Responses:Get(entry.response)
 	local rc = response and response.color or c.muted
@@ -1196,7 +1289,10 @@ local function renderHistory(self)
 		if entry and i <= shown then renderHistoryRow(row, entry) else row:Hide() end
 	end
 	frame.historyEmpty:SetShown(count == 0)
-	frame.historyCount:SetText(string.format("%d %s", count, count == 1 and L["award"] or L["awards"]))
+	local filterDays = self:GetHistoryDays()
+	frame.historyCount:SetText(string.format("%d %s%s", count, count == 1 and L["award"] or L["awards"],
+		filterDays and string.format(" \194\183 %s", string.format(L["last %d days"], filterDays)) or ""))
+	for _, button in ipairs(frame.historyFilters) do button:SetSelected(button.days == filterDays) end
 	frame.historyScroll:Update(count, HISTORY_ROWS, historyOffset)
 	frame:SetHeight(HEADER_H + TABLE_HEAD_H + max(shown, 3) * HISTORY_ROW_H + FOOTER_H)
 end
@@ -1515,6 +1611,7 @@ function CouncilWindow:Init()
 	register(self, "ALC_VOTING_CHANGED", refresh)
 	register(self, "ALC_LOOT_CHANGED", refresh)
 	register(self, "ALC_AWARDS_ANNOUNCED", refresh)
+	register(self, "ALC_RECENT_CHANGED", refresh)
 	register(self, "ALC_SESSION_STARTED", function(_, session, restored)
 		focus = 1
 		if not restored and session.isCouncil then CouncilWindow:Show() end

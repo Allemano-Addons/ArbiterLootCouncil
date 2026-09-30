@@ -187,6 +187,21 @@ function Settings:SetWindowShown(key, shown)
 	db.profile.windows[key] = window
 end
 
+-- Recent awards: how many days back the council sees what a player was awarded -----
+local RECENT_DAYS = { [7] = true, [14] = true, [30] = true, [90] = true }
+
+function Settings:GetRecentDays()
+	local value = db.profile.recentDays
+	return RECENT_DAYS[value] and value or 30
+end
+
+function Settings:SetRecentDays(value)
+	if not RECENT_DAYS[value] then return false end
+	db.profile.recentDays = value
+	changed("recentDays")
+	return true
+end
+
 -- Loot quality threshold ------------------------------------------------------
 function Settings:GetQualityThreshold()
 	return db.profile.qualityThreshold
