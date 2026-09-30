@@ -529,6 +529,20 @@ local function buildGrip()
 	frame.grip:Hide()
 end
 
+-- The column headings of the Council tab. (Apart from build(): a function may use at most 60
+-- outside variables in the game's Lua, and build() is near the limit.)
+local function councilHeadings(heading)
+	return {
+		heading(L["Player"], NAME_X),
+		heading(L["Rank"], RANK_X),
+		heading(L["Response"], RESPONSE_X),
+		heading(L["Current gear"], GEAR_X),
+		heading(L["Recent"], RECENT_X, "CENTER", RECENT_W),
+		heading(L["Note"], NOTE_X),
+		heading(L["Votes"], VOTES_X, "CENTER", 60),
+	}
+end
+
 local function build()
 	frame = CreateFrame("Frame", nil, UIParent)
 	frame:SetSize(WIDTH, 400)
@@ -647,15 +661,7 @@ local function build()
 	UI.SetTextureColor(frame.barFill, c.gold)
 
 	local itemDivider = divider(-(HEADER_H + ITEM_H))
-	local headings = {
-		heading(L["Player"], NAME_X),
-		heading(L["Rank"], RANK_X),
-		heading(L["Response"], RESPONSE_X),
-		heading(L["Current gear"], GEAR_X),
-		heading(L["Recent"], RECENT_X, "CENTER", RECENT_W),
-		heading(L["Note"], NOTE_X),
-		heading(L["Votes"], VOTES_X, "CENTER", 60),
-	}
+	local headings = councilHeadings(heading)
 	local tableDivider = divider(-(HEADER_H + ITEM_H + TABLE_HEAD_H))
 	frame.empty = centred(HEADER_H + ITEM_H + TABLE_HEAD_H + 26, L["Waiting for responses..."])
 	frame.footerLine = footerLine()
