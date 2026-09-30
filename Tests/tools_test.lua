@@ -332,8 +332,8 @@ return function(check, H)
 	-- The minimap button
 	----------------------------------------------------------------------------
 	check("it is a free button, not a child of the minimap", button.parent == UIParent)
-	check("a small square, like the other minimap buttons", button.w == 34 and button.h == 34 and button.bg ~= nil and button.border ~= nil)
-	check("with the ALC mark in it", button.icon.texture == ALC.UI.LOGO)
+	check("a small square, like the other minimap buttons", button.w == 30 and button.h == 30 and button.bg ~= nil and button.border ~= nil)
+	check("with the ALC mark in it", button.icon.texture == ALC.UI.MEDIA .. "wow\\mark")
 	check("it can be dragged with the left button and stays on screen", button.movable == true)
 	check("until moved it sits just left of the minimap",
 		button.point[1] == "TOPRIGHT" and button.point[2] == Minimap and button.point[3] == "TOPLEFT")
