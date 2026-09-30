@@ -68,8 +68,9 @@ local function maxRows()
 	return max(MIN_ROWS, min(POOL, rows))
 end
 
+-- The same setting as the other windows' compact mode (Settings, Everyone).
 local function isCompact()
-	return ALC.Settings:GetWindowOption("council", "compact", false) == true
+	return ALC.Settings:GetCompact()
 end
 
 local function rowHeight()
@@ -672,8 +673,7 @@ local function build()
 
 	-- The compact toggle: fewer pixels per candidate when there are many.
 	frame.compact = UI.NewCheckbox(frame, L["Compact rows"], function(checked)
-		ALC.Settings:SetWindowOption("council", "compact", checked)
-		CouncilWindow:Refresh()
+		ALC.Settings:SetCompact(checked) -- refreshes this window through the settings event
 	end)
 	frame.compact:SetSize(150, 24)
 	frame.compact:SetPoint("BOTTOM", frame, "BOTTOM", 60, 16)
@@ -1618,6 +1618,9 @@ function CouncilWindow:Init()
 	register(self, "ALC_LOOT_CHANGED", refresh)
 	register(self, "ALC_AWARDS_ANNOUNCED", refresh)
 	register(self, "ALC_RECENT_CHANGED", refresh)
+	register(self, "ALC_SETTINGS_CHANGED", function(_, key)
+		if key == "compact" then CouncilWindow:Refresh() end
+	end)
 	register(self, "ALC_SESSION_STARTED", function(_, session, restored)
 		focus = 1
 		if not restored and session.isCouncil then CouncilWindow:Show() end

@@ -93,8 +93,10 @@ local function announce(target, entry)
 	local text = format("[ALC] %s -> %s (%s)", link, entry.name, ALC.Responses:GetLabel(entry.response))
 	lastAnnouncement = text
 	local channel = (IsInRaid() and "RAID") or (IsInGroup() and "PARTY") or nil
-	if channel then
+	if channel and ALC.Settings:GetAnnounceAwards() then
 		SendChatMessage(text, channel)
+	elseif channel then
+		ALC:Print(L["Not announced in chat: %s"], text) -- the loot master chose not to announce
 	else
 		ALC:Print(text)
 	end

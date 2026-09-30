@@ -59,6 +59,7 @@ local function newRow(index)
 	row.border = UI.AddBorder(row, c.border, 1, 8)
 
 	local iconFrame = CreateFrame("Frame", nil, row)
+	row.iconFrame = iconFrame
 	iconFrame:SetSize(ICON, ICON)
 	iconFrame:SetPoint("LEFT", row, "LEFT", 12, 0)
 	row.iconBorder = UI.AddBorder(iconFrame, c.border, 2, 6, "OVERLAY")
@@ -113,6 +114,28 @@ local function newRow(index)
 	row:SetScript("OnEnter", function(self) showTooltip(self) end)
 	row:SetScript("OnLeave", function() GameTooltip:Hide() end)
 	return row
+end
+
+-- Compact mode (Settings, Everyone): lower rows and smaller icons.
+local layoutCompact
+
+local function applyDensity()
+	local compact = ALC.Settings:GetCompact()
+	if layoutCompact == compact then return end
+	layoutCompact = compact
+	if compact then
+		ROW_H, ROW_GAP, ICON = 44, 6, 32
+	else
+		ROW_H, ROW_GAP, ICON = 56, 8, 40
+	end
+	for index, row in ipairs(LootWindow.rows) do
+		row:SetHeight(ROW_H)
+		row:ClearAllPoints()
+		row:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, rowTop(index))
+		row:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PAD, rowTop(index))
+		row.iconFrame:SetSize(ICON, ICON)
+		row.start:SetSize(76, compact and 28 or 34)
+	end
 end
 
 local function savePosition()
@@ -353,6 +376,7 @@ end
 
 function LootWindow:Refresh()
 	if not frame or not frame:IsShown() then return end
+	applyDensity()
 	local LootDetection = ALC.LootDetection
 	local items = LootDetection:GetItems()
 	local count = #items
@@ -395,6 +419,7 @@ function LootWindow:Refresh()
 	frame.scroll:Update(count, rowsAllowed, offset)
 
 	-- The chat preview sits under the list once something has been announced.
+	frame.chatLabel:SetText(strupper(ALC.Settings:GetAnnounceAwards() and L["Raid chat"] or L["Raid chat (not announced)"]))
 	local announcement = ALC.Awards:GetLastAnnouncement()
 	local extra = 0
 	frame.chatLabel:ClearAllPoints()
@@ -494,6 +519,9 @@ function LootWindow:Init()
 	register(self, "ALC_SESSION_ENDED", refresh)
 	register(self, "ALC_COUNCIL_LM_CHANGED", refresh)
 	register(self, "ALC_AWARDS_ANNOUNCED", refresh)
+	register(self, "ALC_SETTINGS_CHANGED", function(_, key)
+		if key == "compact" or key == "announceAwards" then LootWindow:Refresh() end
+	end)
 	register(self, "ALC_LOOT_ADDED", function()
 		if ALC.Settings:GetAutoOpenLootWindow() then LootWindow:Show() end
 	end)

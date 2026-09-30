@@ -82,6 +82,9 @@ local function build()
 	local title = UI.NewText(menu, 11, c.muted)
 	title:SetPoint("TOPLEFT", menu, "TOPLEFT", PAD + 8, -PAD - 6)
 	title:SetText(strupper(L["Arbiter Loot Council"]))
+	-- "Session 2/5" in amber while a session is running (filled in by refresh).
+	menu.status = UI.NewText(menu, 11, c.gold, "RIGHT")
+	menu.status:SetPoint("TOPRIGHT", menu, "TOPRIGHT", -PAD - 8, -PAD - 6)
 
 	for i, entry in ipairs(Launcher.entries) do
 		local row = CreateFrame("Button", nil, menu)
@@ -123,6 +126,8 @@ end
 
 -- Greys out the entries that do not apply right now.
 local function refresh()
+	local summary = ALC.Sessions:GetSummary()
+	menu.status:SetText(summary.running and strupper(string.format(L["%d of %d open"], summary.open, summary.total)) or "")
 	for _, row in ipairs(Launcher.rows) do
 		local ok, reason = row.entry.available()
 		row.enabled = ok and true or false

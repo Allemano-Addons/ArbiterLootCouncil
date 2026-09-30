@@ -102,6 +102,32 @@ local function applySet(set)
 	frame:SetWidth(math.max(WIDTH, left + count * (buttonWidth + GAP) + NOTE_W + 4 + 12 + 2 * PAD + 14))
 end
 
+-- Compact mode (Settings, Everyone): lower rows, smaller icons and buttons.
+local layoutCompact
+
+local function applyDensity()
+	local compact = ALC.Settings:GetCompact()
+	if layoutCompact == compact then return end
+	layoutCompact = compact
+	if compact then
+		ROW_H, ROW_GAP, ICON, BUTTON_H, NAME_W = 34, 3, 24, 22, 150
+	else
+		ROW_H, ROW_GAP, ICON, BUTTON_H, NAME_W = 46, 4, 34, 30, 170
+	end
+	for index, row in ipairs(ResponseWindow.rows) do
+		row:SetHeight(ROW_H)
+		local top = -(HEADER_H + 10 + (index - 1) * (ROW_H + ROW_GAP))
+		row:ClearAllPoints()
+		row:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, top)
+		row:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PAD - 14, top)
+		row.itemBox:SetSize(ICON, ICON)
+		row.name:SetWidth(NAME_W)
+		row.sub:SetWidth(NAME_W)
+		row.note:SetSize(NOTE_W, BUTTON_H)
+	end
+	setKey = "" -- the buttons are laid out again with the new sizes
+end
+
 -- One item: its icon and name, and the answer buttons (or who won it).
 local function newRow(index)
 	local row = CreateFrame("Frame", nil, frame)
@@ -286,6 +312,7 @@ function ResponseWindow:Refresh()
 		return
 	end
 
+	applyDensity()
 	applySet(session.responses)
 	local count = #session.items
 	local visible = min(count, MAX_VISIBLE)
@@ -377,6 +404,9 @@ function ResponseWindow:Init()
 	register(self, "ALC_RESPONSES_CHANGED", refresh)
 	register(self, "ALC_LOOT_CHANGED", refresh)
 	register(self, "ALC_SESSION_ITEM_AWARDED", refresh)
+	register(self, "ALC_SETTINGS_CHANGED", function(_, key)
+		if key == "compact" then ResponseWindow:Refresh() end
+	end)
 	register(self, "ALC_SESSION_STARTED", function(_, _, restored)
 		if not restored then ResponseWindow:Show() end
 	end)

@@ -587,7 +587,7 @@ return function(check, H)
 	local crows = Win.rows
 	check("rows are tall by default", crows[1].h == 56 and crows[1].class:IsShown() and hframe.compact.checked == false)
 	hframe.compact.scripts.OnClick(hframe.compact)
-	check("the compact option is remembered", ALC.Settings:GetWindowOption("council", "compact", false) == true)
+	check("the compact option is remembered", ALC.Settings:GetCompact() == true)
 	check("compact rows are lower, with the class left out", crows[1].h == 40 and not crows[1].class:IsShown() and hframe:GetHeight() < tall)
 	check("only the first item of gear shows, the rest is counted", crows[1].gear[1]:IsShown() and not crows[1].gear[2]:IsShown() and crows[1].more:GetText() == "+1")
 	check("a row with one item of gear counts nothing extra", crows[2].more:GetText() == "")

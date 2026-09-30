@@ -187,6 +187,33 @@ function Settings:SetWindowShown(key, shown)
 	db.profile.windows[key] = window
 end
 
+-- Compact windows (Everyone): smaller rows and buttons in the loot, response and voting windows.
+-- Before this setting existed the voting window had its own "compact" option; that is used
+-- until the new setting is changed.
+function Settings:GetCompact()
+	local value = db.profile.compact
+	if value == nil then
+		local window = db.profile.windows.council
+		return window ~= nil and window.compact == true
+	end
+	return value == true
+end
+
+function Settings:SetCompact(enabled)
+	db.profile.compact = enabled and true or false
+	changed("compact")
+end
+
+-- Announce awards in raid chat (loot master): on by default.
+function Settings:GetAnnounceAwards()
+	return db.profile.announceAwards ~= false
+end
+
+function Settings:SetAnnounceAwards(enabled)
+	db.profile.announceAwards = enabled and true or false
+	changed("announceAwards")
+end
+
 -- Recent awards: how many days back the council sees what a player was awarded -----
 local RECENT_DAYS = { [7] = true, [14] = true, [30] = true, [90] = true }
 

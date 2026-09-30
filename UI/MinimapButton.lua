@@ -38,6 +38,10 @@ end
 local function showTooltip(self)
 	GameTooltip:SetOwner(self, "ANCHOR_LEFT")
 	GameTooltip:SetText(L["Arbiter Loot Council"])
+	local summary = ALC.Sessions:GetSummary()
+	if summary.running then
+		GameTooltip:AddLine(string.format(L["Session running: %d of %d items open"], summary.open, summary.total), c.gold[1], c.gold[2], c.gold[3])
+	end
 	GameTooltip:AddLine(L["Left-click: open the window menu"], 0.86, 0.87, 0.90)
 	GameTooltip:AddLine(L["Right-click: settings"], 0.86, 0.87, 0.90)
 	GameTooltip:AddLine(L["Drag: move this button"], 0.55, 0.58, 0.64)
@@ -59,6 +63,16 @@ local function build()
 	UI.SetTextureColor(button.bg, c.bg)
 	button.border = UI.AddBorder(button, c.border, 1, 8)
 
+	-- A small amber dot in the corner while a session is running, so it is not forgotten
+	-- when the windows are closed.
+	button.dot = CreateFrame("Frame", nil, button)
+	button.dot:SetSize(10, 10)
+	button.dot:SetPoint("TOPRIGHT", button, "TOPRIGHT", 3, 3)
+	button.dot:SetFrameLevel(button:GetFrameLevel() + 3)
+	button.dot.fill = UI.NewFill(button.dot, 4)
+	UI.SetTextureColor(button.dot.fill, c.gold)
+	button.dot:Hide()
+
 	button.icon = button:CreateTexture(nil, "ARTWORK")
 	button.icon:SetPoint("TOPLEFT", 2, -2)
 	button.icon:SetPoint("BOTTOMRIGHT", -2, 2)
@@ -78,7 +92,7 @@ local function build()
 		showTooltip(self)
 	end)
 	button:SetScript("OnLeave", function(self)
-		self.border:SetColor(c.border)
+		self.border:SetColor(MinimapButton:IsRunning() and c.gold or c.border)
 		GameTooltip:Hide()
 	end)
 	button:SetScript("OnDragStart", function(self)
@@ -93,10 +107,18 @@ local function build()
 	MinimapButton.button = button
 end
 
--- Places the button and shows or hides it according to the setting.
+function MinimapButton:IsRunning()
+	return ALC.Sessions:GetSummary().running
+end
+
+-- Places the button and shows or hides it according to the setting; the dot and the amber
+-- frame show that a session is running.
 function MinimapButton:Refresh()
 	if not button then return end
 	place()
+	local running = self:IsRunning()
+	button.dot:SetShown(running)
+	button.border:SetColor(running and c.gold or c.border)
 	if ALC.Settings:IsMinimapHidden() then button:Hide() else button:Show() end
 end
 
@@ -106,6 +128,10 @@ function MinimapButton:Init()
 	ALC.Events.Register(self, "ALC_SETTINGS_CHANGED", function(_, key)
 		if key == "minimapHidden" then MinimapButton:Refresh() end
 	end)
+	local refresh = function() MinimapButton:Refresh() end
+	for _, event in ipairs({ "ALC_SESSION_STARTED", "ALC_SESSION_ENDED", "ALC_SESSION_SNAPSHOT", "ALC_SESSION_RESTORED" }) do
+		ALC.Events.Register(self, event, refresh)
+	end
 end
 
 ALC.Commands:Register("minimap", function()

@@ -206,6 +206,18 @@ function Candidates:SetResponse(name, response, item)
 	return true
 end
 
+-- Test mode: the loot master adds a made-up player to an item, as if they had answered.
+-- Only outside a group (in a raid, candidates come from the players' own answers).
+function Candidates:Inject(item, entry)
+	local session = ALC.Sessions:GetSession()
+	if not session or not session.isLM or IsInGroup() then return false end
+	if not ALC.Sessions:IsItemOpen(item) or not ALC.Sessions:HasResponse(entry.response) then return false end
+	if type(entry.name) ~= "string" or type(entry.class) ~= "string" then return false end
+	if not upsert(item, entry) then return true end
+	send(session, item, entry)
+	return true
+end
+
 --------------------------------------------------------------------------------
 -- Council: CANDIDATE_UPDATE in
 --------------------------------------------------------------------------------

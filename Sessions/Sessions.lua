@@ -164,6 +164,16 @@ function Sessions:HasResponse(id)
 	return false
 end
 
+-- Whether a session runs, and how many of its items are still open: { running, total, open }.
+function Sessions:GetSummary()
+	if not session then return { running = false, total = 0, open = 0 } end
+	local open = 0
+	for _, item in ipairs(session.items) do
+		if item.winner == nil then open = open + 1 end
+	end
+	return { running = true, total = #session.items, open = open }
+end
+
 function Sessions:GetItemCount()
 	return session and #session.items or 0
 end

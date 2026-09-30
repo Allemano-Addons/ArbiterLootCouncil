@@ -294,6 +294,12 @@ local function build()
 		ALC.Settings:SetAutoOpenLootWindow(checked)
 	end))
 	frame.autoOpen:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
+	y = y + 32
+
+	frame.announce = into("lm", UI.NewCheckbox(frame, L["Announce awards in raid chat"], function(checked)
+		ALC.Settings:SetAnnounceAwards(checked)
+	end))
+	frame.announce:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
 	y = y + 38
 
 	-- How far back the council sees what a player was awarded (the Recent column).
@@ -335,6 +341,12 @@ local function build()
 		ALC.Settings:SetMinimapHidden(not checked)
 	end))
 	frame.minimap:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
+	y = y + 32
+
+	frame.compact = into("everyone", UI.NewCheckbox(frame, L["Compact windows (smaller rows and buttons)"], function(checked)
+		ALC.Settings:SetCompact(checked)
+	end))
+	frame.compact:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
 	y = y + 38
 
 	-- The font of every window; opens a list where each font is shown as itself.
@@ -704,6 +716,8 @@ function SettingsWindow:Refresh()
 	end
 	frame.responseFeedback:SetText(responseFeedback or "")
 	frame.autoOpen:SetChecked(settings:GetAutoOpenLootWindow())
+	frame.announce:SetChecked(settings:GetAnnounceAwards())
+	frame.compact:SetChecked(settings:GetCompact())
 	for _, button in ipairs(self.recentButtons) do button:SetSelected(button.days == settings:GetRecentDays()) end
 	frame.minimap:SetChecked(not settings:IsMinimapHidden())
 	frame.keepOpen:SetChecked(settings:GetKeepCouncilOpen())
