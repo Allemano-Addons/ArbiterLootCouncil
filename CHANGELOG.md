@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.3.4-beta
+- Credits and licenses added (a CREDITS.md in the addon, and the Ace3 license text next to the libraries). No changes to the addon itself: it works exactly as 0.3.3.
+
 ## 0.3.3-beta
 - Trade: from a stack (two Shadowgems, say) only one item is put into the trade for each award, not the whole stack.
 - The loot window no longer shows the box with the last chat announcement.

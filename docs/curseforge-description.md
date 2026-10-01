@@ -2,7 +2,7 @@
 
 **Run a loot council in WoW Forever without the spreadsheet.** ALC takes an item from the boss's corpse to the raider who deserves it: the loot master starts a session, every raider answers in a small window, the council votes, one click awards the item and the trade is queued and logged.
 
-> **Beta (0.3.3-beta).** ALC is new and being tested in real raids. **Everybody in the raid who should answer or vote needs the same version**, and this version cannot talk to 0.1.x. If someone has another version the addon says so in chat.
+> **Beta (0.3.4-beta).** ALC is new and being tested in real raids. **Everybody in the raid who should answer or vote needs the same version**, and this version cannot talk to 0.1.x. If someone has another version the addon says so in chat.
 
 ## How a loot decision works in ALC
 
