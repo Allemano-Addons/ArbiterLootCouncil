@@ -326,6 +326,21 @@ local function anchorStatus(row, besideRemove)
 	end
 end
 
+-- "1h 42m", "42m" or "<1m"; orange when under half an hour, red under ten minutes.
+function LootWindow.FormatTradeTime(seconds)
+	if seconds <= 0 then return "|cffff5a5a" .. L["expired"] .. "|r" end
+	local text
+	if seconds >= 3600 then
+		text = format("%dh %dm", math.floor(seconds / 3600), math.floor((seconds % 3600) / 60))
+	elseif seconds >= 60 then
+		text = format("%dm", math.floor(seconds / 60))
+	else
+		text = "<1m"
+	end
+	local color = seconds < 600 and "ff5a5a" or seconds < 1800 and "e8a33d" or "9aa0a8"
+	return "|cff" .. color .. text .. "|r"
+end
+
 local function renderRow(row, entry, sessionActive, isLM)
 	local LootDetection = ALC.LootDetection
 	local status = LootDetection.STATUS
@@ -341,6 +356,10 @@ local function renderRow(row, entry, sessionActive, isLM)
 	local subtitle = display.subtitle
 	if (entry.status == status.AWARDED or entry.status == status.TRADE) and entry.winner then
 		subtitle = (subtitle ~= "" and (subtitle .. " \194\183 ") or "") .. entry.winner
+	end
+	local left = LootDetection:GetTradeTimeLeft(entry)
+	if left then
+		subtitle = (subtitle ~= "" and (subtitle .. " \194\183 ") or "") .. format(L["BoP: trade within %s"], LootWindow.FormatTradeTime(left))
 	end
 	row.sub:SetText(subtitle)
 
@@ -543,6 +562,10 @@ function LootWindow:Init()
 	self:RegisterEvent("PLAYER_ENTERING_WORLD", function(_, isInitialLogin, isReloadingUi)
 		LootWindow:OnEnteringWorld(isInitialLogin, isReloadingUi)
 	end)
+	-- The trade timers count down while the window is open.
+	if C_Timer and C_Timer.NewTicker then
+		C_Timer.NewTicker(30, function() if frame and frame:IsShown() then LootWindow:Refresh() end end)
+	end
 end
 
 --------------------------------------------------------------------------------

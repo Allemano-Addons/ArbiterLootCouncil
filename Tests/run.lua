@@ -73,8 +73,10 @@ check("settings event fired", fired == "qualityThreshold")
 before = #H.chat
 H.slash("bogus")
 check("unknown command reported", #H.chat == before + 1)
+H.slash("quality uncommon")
+check("quality by name", ALC.Settings:GetQualityThreshold() == 2)
 H.slash("quality legendary")
-check("quality by name", ALC.Settings:GetQualityThreshold() == 5)
+check("legendary is not offered", ALC.Settings:GetQualityThreshold() == 2)
 H.slash("council add Kaelis")
 check("council via slash", ALC.Settings:GetCouncil()[2] == "Kaelis" or ALC.Settings:GetCouncil()[1] == "Kaelis")
 

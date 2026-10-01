@@ -147,6 +147,27 @@ return function(check, H)
 	check("a secret encounter name is not used as the boss", LD:GetBossName() == "Molten Core")
 	issecretvalue, UnitExists, UnitIsDead, UnitName = realSecret, realExists, realDead, realName
 
+	-- A looted Bind-on-Pickup item can be traded for two hours: the loot window counts it down.
+	local realInfo = C_Item.GetItemInfo
+	local bind = 1
+	C_Item.GetItemInfo = function() return "Crown", "|Hitem:200|h[Crown]|h", 4, 60, 0, "Armor", "Plate", 1, "INVTYPE_HEAD", 133101, 0, 4, 1, bind end
+	local bopEntry = LD:GetItems()[1]
+	bopEntry.addedAt = time() - 600
+	local left = LD:GetTradeTimeLeft(bopEntry)
+	check("a looted BoP item has about 1h 50m left", left ~= nil and left > 6500 and left <= 6600)
+	bopEntry.addedAt = time() - 8000
+	check("an expired window counts down to zero", LD:GetTradeTimeLeft(bopEntry) == 0)
+	bind = 2
+	check("other items get no timer", LD:GetTradeTimeLeft(bopEntry) == nil)
+	bind = 1
+	bopEntry.source = "manual"
+	check("items added by hand get no timer", LD:GetTradeTimeLeft(bopEntry) == nil)
+	bopEntry.source = "loot"
+	local fmt = ALC.LootWindow.FormatTradeTime
+	check("the time reads as hours and minutes", fmt(6100):find("1h 41m", 1, true) ~= nil and fmt(1500):find("25m", 1, true) ~= nil and fmt(30):find("<1m", 1, true) ~= nil)
+	check("expired is said so", fmt(0):find("expired", 1, true) ~= nil)
+	C_Item.GetItemInfo = realInfo
+
 	----------------------------------------------------------------------------
 	-- Adding by hand
 	----------------------------------------------------------------------------

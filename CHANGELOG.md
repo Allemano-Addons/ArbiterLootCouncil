@@ -5,6 +5,9 @@
 
 - Votes, answers and awards now travel in the fast lane of the addon messages, so they no longer wait behind big messages; and your own vote shows at once.
 - Trade: with auto trade on, the trade window opens with the winner as soon as you award (when they are near). A winner who is too far away is asked by whisper to come. The trade is also noticed when the game sends no "Trade complete" message (the offered items left your bags).
+- BoP timer: a looted Bind-on-Pickup item shows how long it can still be traded to the raid (2 hours), in the loot window and the trade queue; orange under 30 minutes, red under 10.
+- The loot threshold offers only Uncommon, Rare and Epic (the qualities that drop). An older saved Poor, Common or Legendary becomes the nearest one.
+- Settings > Council shows who is on the council (this session, or the last one). The trade queue tells council members that it is for the loot master only.
 - History: council members now keep the history too (what the loot master awards is logged on their side, and an undo marks it).
 
 ## 0.3.0-beta

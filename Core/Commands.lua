@@ -116,14 +116,14 @@ Commands:Register("council", function(arg)
 	end
 end, L["show or edit the council list"])
 
-local QUALITY_NAMES = { poor = 0, common = 1, uncommon = 2, rare = 3, epic = 4, legendary = 5 }
+local QUALITY_NAMES = { uncommon = 2, green = 2, rare = 3, blue = 3, epic = 4, purple = 4 }
 
 Commands:Register("quality", function(arg)
 	local settings = ALC.Settings
 	if arg ~= "" then
 		local quality = QUALITY_NAMES[strlower(arg)] or tonumber(arg)
 		if not settings:SetQualityThreshold(quality) then
-			ALC:Print(L["Usage: /alc quality [poor|common|uncommon|rare|epic|legendary]"])
+			ALC:Print(L["Usage: /alc quality [uncommon|rare|epic]"])
 			return
 		end
 	end

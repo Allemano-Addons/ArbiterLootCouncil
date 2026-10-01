@@ -149,13 +149,13 @@ return function(check, H)
 	check("the threshold starts at epic", Settings:GetQualityThreshold() == 4 and frame.qualityButton.label:GetText() == "Epic")
 	frame.qualityButton.scripts.OnClick(frame.qualityButton)
 	local menuRows = ALC.ContextMenu.rows
-	check("the drop-down lists the six qualities under a caption", ALC.ContextMenu:IsShown() and menuRows[1].header == true and menuRows[2].label:GetText() == "Poor"
-		and menuRows[7].label:GetText() == "Legendary")
-	check("the current one is marked", menuRows[6].label:GetText():find("Epic", 1, true) ~= nil and menuRows[6].label:GetText() ~= "Epic")
-	menuRows[5].scripts.OnClick(menuRows[5])
+	check("the drop-down lists the three qualities under a caption", ALC.ContextMenu:IsShown() and menuRows[1].header == true and menuRows[2].label:GetText() == "Uncommon"
+		and menuRows[4].label:GetText():find("Epic", 1, true) ~= nil)
+	check("the current one is marked", menuRows[4].label:GetText() ~= "Epic")
+	menuRows[3].scripts.OnClick(menuRows[3])
 	check("a choice sets the threshold and closes the list", Settings:GetQualityThreshold() == 3 and frame.qualityButton.label:GetText() == "Rare" and not ALC.ContextMenu:IsShown())
-	H.slash("quality legendary")
-	check("the window follows /alc quality", frame.qualityButton.label:GetText() == "Legendary")
+	H.slash("quality uncommon")
+	check("the window follows /alc quality", frame.qualityButton.label:GetText() == "Uncommon")
 	Settings:SetQualityThreshold(4)
 
 	check("auto open starts on", frame.autoOpen:IsChecked() == true)

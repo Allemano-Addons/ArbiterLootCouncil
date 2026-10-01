@@ -1582,7 +1582,12 @@ local function renderTradeRow(row, entry)
 	local cc = class and UI.ClassColor(class) or c.text
 	row.winner:SetTextColor(cc[1], cc[2], cc[3], 1)
 	row.winner:SetText(entry.winner)
-	row.note:SetText(unit and "" or L["Not in the group right now"])
+	local note = unit and "" or L["Not in the group right now"]
+	local left = ALC.LootDetection:GetTradeTimeLeft(entry)
+	if left then
+		note = (note ~= "" and (note .. " \194\183 ") or "") .. format(L["BoP: trade within %s"], ALC.LootWindow.FormatTradeTime(left))
+	end
+	row.note:SetText(note)
 	row.when:SetText(timeAgo(entry.awardedAt))
 	row.trade:SetAvailable(unit ~= nil and not ALC:SameName(entry.winner, ALC:PlayerName()))
 	row:Show()
@@ -1605,8 +1610,12 @@ local function renderTrades(self)
 		local entry = list[tradeOffset + i]
 		if entry and i <= shown then renderTradeRow(row, entry) else row.entryId = nil; row:Hide() end
 	end
+	-- Only the loot master has the items, so only the loot master has a queue.
+	local isLM = ALC.Council:AmLootMaster()
+	frame.tradeEmpty:SetText(isLM and L["Everything that was awarded has been handed out."]
+		or L["The trade queue is only for the loot master, who has the items and hands them out."])
 	frame.tradeEmpty:SetShown(count == 0)
-	frame.tradeCount:SetText(string.format("%d %s", count, L["waiting"]))
+	frame.tradeCount:SetText(isLM and string.format("%d %s", count, L["waiting"]) or L["Loot master only"])
 	frame.tradeScroll:Update(count, TRADE_ROWS, tradeOffset)
 	frame:SetHeight(HEADER_H + TABLE_HEAD_H + max(shown, 3) * TRADE_ROW_H + FOOTER_H)
 end
@@ -1889,6 +1898,9 @@ end
 function CouncilWindow:Init()
 	local register = ALC.Events.Register
 	local refresh = function() CouncilWindow:Refresh() end
+	if C_Timer and C_Timer.NewTicker then
+		C_Timer.NewTicker(30, function() if activeTab == "trades" then CouncilWindow:Refresh() end end)
+	end
 	register(self, "ALC_CANDIDATES_CHANGED", refresh)
 	register(self, "ALC_VOTING_CHANGED", refresh)
 	register(self, "ALC_LOOT_CHANGED", refresh)

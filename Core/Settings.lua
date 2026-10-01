@@ -11,7 +11,7 @@ local Settings = {}
 ALC.Settings = Settings
 
 -- Item quality ids: 0 poor, 1 common, 2 uncommon, 3 rare, 4 epic, 5 legendary.
-local QUALITY_MIN, QUALITY_MAX = 0, 5
+local QUALITY_MIN, QUALITY_MAX = 2, 4 -- only green, blue and purple drop as loot
 
 local defaults = {
 	profile = {
@@ -143,6 +143,18 @@ end
 function Settings:SetMinimapHidden(hidden)
 	db.profile.minimap.hidden = hidden and true or false
 	changed("minimapHidden")
+end
+
+-- The council and loot master of the last session this character took part in, so the Settings
+-- window can show who is on the council also between sessions. { lm = "Name", council = { ... } }
+function Settings:GetLastCouncil()
+	return db.global.lastCouncil
+end
+
+function Settings:SetLastCouncil(lm, council)
+	local names = {}
+	for i, name in ipairs(council or {}) do names[i] = name end
+	db.global.lastCouncil = { lm = lm, council = names }
 end
 
 -- The append-only log of every award, kept for the history views (v0.4). Only Awards writes.
@@ -313,7 +325,9 @@ end
 
 -- Loot quality threshold ------------------------------------------------------
 function Settings:GetQualityThreshold()
-	return db.profile.qualityThreshold
+	local quality = db.profile.qualityThreshold
+	if type(quality) ~= "number" then return 4 end
+	return math.max(QUALITY_MIN, math.min(QUALITY_MAX, quality)) -- an older saved Poor, Common or Legendary
 end
 
 function Settings:SetQualityThreshold(quality)

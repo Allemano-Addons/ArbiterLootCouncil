@@ -25,7 +25,7 @@ end
 function SettingsWindow:OpenQualityMenu()
 	local current = ALC.Settings:GetQualityThreshold()
 	local items = {}
-	for quality = 0, 5 do
+	for quality = 2, 4 do
 		items[#items + 1] = {
 			label = qualityName(quality) .. (quality == current and "  \226\128\162" or ""),
 			color = UI.QualityColor(quality),
@@ -414,6 +414,14 @@ local function build()
 	y = y + 8
 	frame.councilHint = paragraph("council", y, L["Sorting, compact rows and the number of rows are set in the voting window itself. Right-click a player there for more."])
 	y = y + 50
+
+	-- Who is on the council: the loot master decides, everybody on it can read the list here.
+	section("council", y, L["Who is on the council"])
+	y = y + 24
+	frame.councilNames = paragraph("council", y, "", c.text)
+	frame.councilNames:SetHeight(96)
+	frame.councilNames:SetJustifyV("TOP")
+	y = y + 104
 	heights.council = y + 40
 
 	-- Everyone --------------------------------------------------------------------
@@ -777,6 +785,22 @@ function SettingsWindow:Refresh()
 	frame.count:SetText(string.format("%d/%d", count, ALC.Constants.MAX_COUNCIL - 1))
 	frame.feedback:SetText(feedback or "")
 
+	-- The council of the running session, else the one of the last session.
+	local session = ALC.Sessions:GetSession()
+	local lm, names
+	if session then
+		lm, names = session.lm, session.council
+	else
+		local last = settings:GetLastCouncil()
+		lm, names = last and last.lm, last and last.council
+	end
+	if names and #names > 0 then
+		frame.councilNames:SetText(format(L["Loot master: %s"], lm or "?") .. "\n" .. table.concat(names, ", ")
+			.. (session and "" or ("\n\n" .. L["From the last session. The loot master sends the council again when a session starts."])))
+	else
+		frame.councilNames:SetText(L["No session yet. The loot master chooses the council and sends it to everybody when a session starts."])
+	end
+
 	local threshold = settings:GetQualityThreshold()
 	frame.qualityButton:SetLabel(qualityName(threshold))
 	local qc = UI.QualityColor(threshold)
@@ -863,6 +887,11 @@ end
 
 function SettingsWindow:Init()
 	ALC.Events.Register(self, "ALC_SETTINGS_CHANGED", function() SettingsWindow:Refresh() end)
+	ALC.Events.Register(self, "ALC_SESSION_STARTED", function(_, session)
+		if session and session.council then ALC.Settings:SetLastCouncil(session.lm, session.council) end
+		SettingsWindow:Refresh()
+	end)
+	ALC.Events.Register(self, "ALC_SESSION_ENDED", function() SettingsWindow:Refresh() end)
 	self:RegisterEvent("PLAYER_ENTERING_WORLD", function(_, isInitialLogin, isReloadingUi)
 		SettingsWindow:OnEnteringWorld(isInitialLogin, isReloadingUi)
 	end)

@@ -29,6 +29,7 @@ local STATUS = { PENDING = "pending", SESSION = "session", AWARDED = "awarded", 
 LootDetection.STATUS = STATUS
 
 local MAX_AGE = 8 * 3600      -- a saved list older than this is dropped
+local BOP_TRADE_SECONDS = 2 * 3600 -- how long a looted Bind-on-Pickup item can still be traded to the raid
 local MAX_SEEN = 300          -- remembered loot slots, to ignore a re-opened corpse
 local ENCOUNTER_MEMORY = 900  -- seconds an encounter name is used for loot
 
@@ -63,6 +64,16 @@ end
 local SLOT_NAMES = _G -- INVTYPE_* strings live in the global table
 
 -- What the window shows for an item; asks the client for data it does not have yet.
+-- Seconds left to trade a looted Bind-on-Pickup item to the group (the game allows 2 hours after the
+-- loot), or nil for other items. Counted from the moment the loot master's loot window listed it.
+-- Items added by hand have no known loot time and get no timer.
+function LootDetection:GetTradeTimeLeft(entry)
+	if entry.source ~= "loot" or not entry.addedAt or entry.status == STATUS.AWARDED then return nil end
+	local bindType = select(14, ALC:GetItemInfo(entry.itemString))
+	if bindType ~= 1 then return nil end -- 1 = bound when picked up
+	return math.max(0, BOP_TRADE_SECONDS - (time() - entry.addedAt))
+end
+
 function LootDetection:GetItemDisplay(entry)
 	local name, link, quality, _, _, itemType, subType, _, equipLoc, icon = ALC:GetItemInfo(entry.itemString)
 	local _, instantType, instantSub, instantEquip, instantIcon = ALC:GetItemInfoInstant(entry.itemString)
