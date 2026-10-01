@@ -34,12 +34,20 @@ jobs:
 
       - name: Tests
         run: |
+          fail() {
+            cat tests.txt
+            # the failing lines also as annotations, so they show on the commit and in pull requests
+            grep -E "FAIL|lua:|error|Error" tests.txt | head -20 | while IFS= read -r line; do echo "::error::$line"; done
+            exit 1
+          }
           if [ -f Tests/run.lua ]; then
-            lua Tests/run.lua
+            lua Tests/run.lua > tests.txt 2>&1 || fail
+            tail -1 tests.txt
           else
             for t in Tests/*_test.lua; do
               [ -e "$t" ] || continue
               echo "== $t"
-              lua "$t" || exit 1
+              lua "$t" > tests.txt 2>&1 || fail
+              tail -1 tests.txt
             done
           fi
