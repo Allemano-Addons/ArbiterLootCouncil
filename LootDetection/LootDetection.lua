@@ -422,6 +422,28 @@ local function allFinished()
 	return true
 end
 
+-- Gives the loot slots to ourselves (loot master with master loot), so the items are in our bags
+-- when the session starts. Returns how many were handed over.
+function LootDetection:TakeLootSlots(slots)
+	if #slots == 0 or not ALC.Council.IsPlayerMasterLooter() then return 0 end
+	local me = ALC:PlayerName()
+	local first = me and string.lower(me):match("^(%S+)")
+	local taken = 0
+	for _, slot in ipairs(slots) do
+		local index
+		for i = 1, 40 do
+			local ok, name = pcall(GetMasterLootCandidate, slot, i)
+			if ok and name and (ALC:SameName(name, me) or string.lower(name) == first) then index = i break end
+		end
+		if index and pcall(GiveMasterLoot, slot, index) then taken = taken + 1 end
+	end
+	if taken > 0 then
+		Debug:Log("LootDetection", "%d item(s) taken for ourselves", taken)
+		ALC:Print(L["Took %d item(s) for yourself. Award them from the council window."], taken)
+	end
+	return taken
+end
+
 function LootDetection:OnLootOpened()
 	if not IsInGroup() or not ALC.Council:AmLootMaster() then return end
 	local threshold = ALC.Settings:GetQualityThreshold()
@@ -441,7 +463,7 @@ function LootDetection:OnLootOpened()
 					store.seenCount = store.seenCount + 1
 					local quality = itemQuality(itemString, link)
 					if quality == nil or quality >= threshold then
-						fresh[#fresh + 1] = { itemString = itemString, itemID = itemID, quality = quality }
+						fresh[#fresh + 1] = { itemString = itemString, itemID = itemID, quality = quality, slot = slot }
 					else
 						hidden = hidden + 1
 					end
@@ -463,6 +485,11 @@ function LootDetection:OnLootOpened()
 		Debug:Log("LootDetection", "%d item(s) added from %s, %d below the threshold", #fresh, tostring(store.boss), hidden)
 		changed()
 		ALC.Events:Fire("ALC_LOOT_ADDED", #fresh)
+		if ALC.Settings:GetAutoLoot() then
+			local slots = {}
+			for _, item in ipairs(fresh) do slots[#slots + 1] = item.slot end
+			self:TakeLootSlots(slots)
+		end
 	else
 		changed()
 	end

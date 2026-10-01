@@ -265,6 +265,17 @@ function Settings:SetRollsEnabled(enabled)
 	changed("rolls")
 end
 
+-- Take the loot for yourself when you open a corpse as master looter, so it sits in your bags
+-- before the session starts (loot master): on by default.
+function Settings:GetAutoLoot()
+	return db.profile.autoLoot ~= false
+end
+
+function Settings:SetAutoLoot(enabled)
+	db.profile.autoLoot = enabled and true or false
+	changed("autoLoot")
+end
+
 -- Put won items into the trade window by itself (loot master): on by default.
 function Settings:GetAutoTrade()
 	return db.profile.autoTrade ~= false

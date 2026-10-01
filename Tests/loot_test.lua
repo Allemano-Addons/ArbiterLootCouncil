@@ -186,6 +186,26 @@ return function(check, H)
 	ALC.Settings:SetQualityThreshold(4)
 	UnitIsGroupLeader, SetLootThreshold, GetLootThreshold = realLeader, nil, nil
 
+	-- Auto loot: as master looter the loot goes to ourselves at once.
+	local realMaster = ALC.Council.IsPlayerMasterLooter
+	local given = {}
+	ALC.Council.IsPlayerMasterLooter = function() return true end
+	GetMasterLootCandidate = function(_, i) return ({ "Veyra Moo", "Tester Moo" })[i] end
+	GiveMasterLoot = function(slot, index) given[#given + 1] = { slot, index } end
+	reset()
+	H.clock = H.clock + 5000
+	corpse("Creature-F", 200)
+	LD:OnLootOpened()
+	check("the loot is given to ourselves", #given == 1 and given[1][1] == 1 and given[1][2] == 2 and #LD:GetItems() == 1)
+	ALC.Settings:SetAutoLoot(false)
+	reset()
+	corpse("Creature-G", 200)
+	LD:OnLootOpened()
+	check("and not when auto loot is off", #given == 1)
+	ALC.Settings:SetAutoLoot(true)
+	ALC.Council.IsPlayerMasterLooter = realMaster
+	GetMasterLootCandidate, GiveMasterLoot = nil, nil
+
 	----------------------------------------------------------------------------
 	-- Adding by hand
 	----------------------------------------------------------------------------

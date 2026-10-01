@@ -332,6 +332,12 @@ local function build()
 	frame.announce:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
 	y = y + 32
 
+	frame.autoLoot = into("lm", UI.NewCheckbox(frame, L["Take the loot for myself when I open a corpse (so I can award it later)"], function(checked)
+		ALC.Settings:SetAutoLoot(checked)
+	end))
+	frame.autoLoot:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
+	y = y + 32
+
 	frame.autoTrade = into("lm", UI.NewCheckbox(frame, L["Put won items in the trade window when the winner trades with you"], function(checked)
 		ALC.Settings:SetAutoTrade(checked)
 	end))
@@ -824,6 +830,7 @@ function SettingsWindow:Refresh()
 	frame.responseFeedback:SetText(responseFeedback or "")
 	frame.autoOpen:SetChecked(settings:GetAutoOpenLootWindow())
 	frame.announce:SetChecked(settings:GetAnnounceAwards())
+	frame.autoLoot:SetChecked(settings:GetAutoLoot())
 	frame.autoTrade:SetChecked(settings:GetAutoTrade())
 	frame.timerCheck:SetChecked(settings:GetTimerEnabled())
 	frame.timerCheck.label:SetText(settings:GetTimerEnabled()
