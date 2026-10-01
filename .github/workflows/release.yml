@@ -2,16 +2,23 @@ name: Package and release
 
 # Runs when a version tag is pushed, e.g. v0.6.1 (release), v0.6.1-beta or v0.6.1-alpha.
 # The tag name decides the release type on CurseForge.
+# The checks (ci.yml) run first; the files are uploaded only if they are green, and then the release
+# is announced on Discord (secret DISCORD_RELEASES_WEBHOOK; nothing is posted without it).
 on:
   push:
     tags:
       - "v*"
 
 jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
   release:
+    needs: ci
     runs-on: ubuntu-latest
     env:
       CF_API_KEY: ${{ secrets.CF_API_KEY }}
+      DISCORD_WEBHOOK: ${{ secrets.DISCORD_RELEASES_WEBHOOK }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -19,3 +26,6 @@ jobs:
 
       - name: Package and upload to CurseForge
         uses: BigWigsMods/packager@v2
+
+      - name: Announce on Discord
+        run: bash .github/announce.sh

@@ -6,6 +6,7 @@ on:
   push:
     branches: [main, master]
   pull_request:
+  workflow_call: # the release workflow runs these checks first
 
 jobs:
   check:
