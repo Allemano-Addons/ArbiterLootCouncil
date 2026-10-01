@@ -15,7 +15,7 @@ jobs:
 
   release:
     needs: ci
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04 # pinned: "latest" moves to a newer Ubuntu on 2026-10-19
     env:
       CF_API_KEY: ${{ secrets.CF_API_KEY }}
       DISCORD_WEBHOOK: ${{ secrets.DISCORD_RELEASES_WEBHOOK }}

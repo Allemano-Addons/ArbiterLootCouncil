@@ -10,7 +10,7 @@ on:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04 # pinned: "latest" moves to a newer Ubuntu on 2026-10-19
     steps:
       - uses: actions/checkout@v4
 
