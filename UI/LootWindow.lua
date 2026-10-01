@@ -13,6 +13,7 @@ local WIDTH, PAD = 400, 16
 local HEADER_H, LABEL_H, FOOTER_H = 52, 34, 64
 local ROW_H, ROW_GAP = 56, 8
 local POOL, DEFAULT_ROWS, MIN_ROWS = 24, 8, 3 -- rows built, rows shown by default, fewest rows
+local INITIAL_ROWS = 6 -- rows made when the window is built
 local ICON = 40
 local REMOVE_SIZE = 28
 local CHAT_BOX_H = 44
@@ -128,6 +129,16 @@ end
 
 -- Compact mode (Settings, Everyone): lower rows and smaller icons.
 local layoutCompact
+
+-- Makes the rows up to `count` (never more than the pool), in the density that is current.
+function LootWindow.EnsureRows(count)
+	for i = #LootWindow.rows + 1, min(POOL, count) do
+		local row = newRow(i)
+		row.iconFrame:SetSize(ICON, ICON)
+		row.start:SetSize(layoutCompact and 64 or 76, layoutCompact and 24 or 34)
+		LootWindow.rows[i] = row
+	end
+end
 
 local function applyDensity()
 	local compact = ALC.Settings:GetCompact()
@@ -273,9 +284,14 @@ local function build()
 	frame.hint:ClearAllPoints()
 	frame.hint:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", PAD, 48)
 
-	for i = 1, POOL do
-		LootWindow.rows[i] = newRow(i)
+	-- Rows are made as they are needed and the rest of the pool a few at a time (see CouncilWindow).
+	LootWindow.EnsureRows(INITIAL_ROWS)
+	local function fillPool()
+		if #LootWindow.rows >= POOL then return end
+		LootWindow.EnsureRows(#LootWindow.rows + 4)
+		C_Timer.After(0, fillPool)
 	end
+	C_Timer.After(0, fillPool)
 
 	-- The scrollbar sits in the right margin, beside the rows.
 	frame.scroll = UI.NewScrollBar(frame, function(newOffset)
@@ -442,7 +458,8 @@ function LootWindow:Refresh()
 	local isLM = ALC.Council:AmLootMaster()
 
 	local shown = min(count - offset, rowsAllowed)
-	for i = 1, POOL do
+	LootWindow.EnsureRows(shown)
+	for i = 1, #self.rows do
 		local row = self.rows[i]
 		local entry = items[offset + i]
 		if entry and i <= shown then renderRow(row, entry, sessionActive, isLM) else row.entry, row.entryId = nil, nil; row:Hide() end

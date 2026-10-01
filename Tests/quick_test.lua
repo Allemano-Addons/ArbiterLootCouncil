@@ -175,6 +175,9 @@ return function(check, H)
 	ALC.LootDetection.FindBagSlots, ALC.LootDetection.ScanBagItem = realSlots, realScan
 	ALC.LootDetection:ClearTradeCache()
 
+	-- The windows make their rows as needed and fill the pool in the background (never one long script).
+	check("the loot window's pool fills up", #lootRows == 24)
+
 	-- The window size follows the setting, in every window.
 	check("an unknown window size is refused", Settings:SetWindowScale(0.5) == false and Settings:GetWindowScale() == 1)
 	check("a known one is accepted", Settings:SetWindowScale(0.8) == true and lootRows[1].parent:GetScale() == 0.8)
@@ -199,6 +202,7 @@ return function(check, H)
 	local crow
 	for _, row in ipairs(Win.rows) do if row:IsShown() and row.candidate == "Veyra Moo" then crow = row end end
 	check("the voting window's rows are compact too", crow.h == 32)
+	check("and its pool fills up in the background", #ALC.CouncilWindow.rows == 30)
 	local councilFrame = crow.parent
 	check("its own checkbox follows the setting", councilFrame.compact.checked == true)
 	councilFrame.compact.scripts.OnClick(councilFrame.compact)

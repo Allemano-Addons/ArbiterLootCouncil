@@ -16,6 +16,7 @@ local ICON = 34
 local BUTTON_W, BUTTON_H, GAP = 58, 30, 4
 local NAME_W = 170
 local POOL, MAX_VISIBLE = ALC.Constants.MAX_SESSION_ITEMS, 10
+local INITIAL_ROWS = 6 -- rows made when the window is built
 local UNKNOWN_ICON = "Interface\\Icons\\INV_Misc_QuestionMark"
 
 local ResponseWindow = {}
@@ -105,6 +106,19 @@ end
 -- Compact mode (Settings, Everyone): lower rows, smaller icons and buttons.
 local layoutCompact
 
+-- Sizes and places one row for the density that is current.
+local function layoutRowDensity(row, index)
+	row:SetHeight(ROW_H)
+	local top = -(HEADER_H + 10 + (index - 1) * (ROW_H + ROW_GAP))
+	row:ClearAllPoints()
+	row:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, top)
+	row:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PAD - 14, top)
+	row.itemBox:SetSize(ICON, ICON)
+	row.name:SetWidth(NAME_W)
+	row.sub:SetWidth(NAME_W)
+	row.note:SetSize(NOTE_W, BUTTON_H)
+end
+
 local function applyDensity()
 	local compact = ALC.Settings:GetCompact()
 	if layoutCompact == compact then return end
@@ -114,22 +128,24 @@ local function applyDensity()
 	else
 		ROW_H, ROW_GAP, ICON, BUTTON_H, NAME_W = 46, 4, 34, 30, 170
 	end
-	for index, row in ipairs(ResponseWindow.rows) do
-		row:SetHeight(ROW_H)
-		local top = -(HEADER_H + 10 + (index - 1) * (ROW_H + ROW_GAP))
-		row:ClearAllPoints()
-		row:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, top)
-		row:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PAD - 14, top)
-		row.itemBox:SetSize(ICON, ICON)
-		row.name:SetWidth(NAME_W)
-		row.sub:SetWidth(NAME_W)
-		row.note:SetSize(NOTE_W, BUTTON_H)
-	end
+	for index, row in ipairs(ResponseWindow.rows) do layoutRowDensity(row, index) end
 	setKey = "" -- the buttons are laid out again with the new sizes
 end
 
 -- One item: its icon and name, and the answer buttons (or who won it).
-local function newRow(index)
+local newRow
+
+-- Makes the rows up to `count` (never more than the pool), in the density that is current.
+function ResponseWindow.EnsureRows(count)
+	for i = #ResponseWindow.rows + 1, math.min(POOL, count) do
+		local row = newRow(i)
+		layoutRowDensity(row, i)
+		ResponseWindow.rows[i] = row
+		setKey = "" -- the buttons are laid out again for the new row
+	end
+end
+
+function newRow(index)
 	local row = CreateFrame("Frame", nil, frame)
 	row:SetHeight(ROW_H)
 	local top = -(HEADER_H + 10 + (index - 1) * (ROW_H + ROW_GAP))
@@ -243,9 +259,14 @@ local function build()
 	divider:SetHeight(1)
 	UI.SetTextureColor(divider, c.border)
 
-	for i = 1, POOL do
-		ResponseWindow.rows[i] = newRow(i)
+	-- Rows are made as they are needed and the rest of the pool a few at a time (see CouncilWindow).
+	ResponseWindow.EnsureRows(INITIAL_ROWS)
+	local function fillPool()
+		if #ResponseWindow.rows >= POOL then return end
+		ResponseWindow.EnsureRows(#ResponseWindow.rows + 4)
+		C_Timer.After(0, fillPool)
 	end
+	C_Timer.After(0, fillPool)
 	frame.scroll = UI.NewScrollBar(frame, function(newOffset)
 		offset = newOffset
 		ResponseWindow:Refresh()
@@ -354,7 +375,8 @@ function ResponseWindow:Refresh()
 	for index, item in ipairs(session.items) do
 		if item.winner then order[#order + 1] = index end
 	end
-	for i = 1, POOL do
+	ResponseWindow.EnsureRows(visible)
+	for i = 1, #self.rows do
 		local index = order[offset + i]
 		if index and i <= visible then renderRow(self.rows[i], index, session.items[index]) else self.rows[i]:Hide() end
 	end

@@ -17,6 +17,7 @@ local WIDTH, PAD = 1010, 20
 local HEADER_H, ITEM_H, TABLE_HEAD_H, FOOTER_H = 60, 64, 34, 52
 local ROW_H, COMPACT_ROW_H = 56, 32
 local POOL, DEFAULT_ROWS, MIN_ROWS = 30, 10, 3
+local INITIAL_ROWS = 6 -- candidate rows made when the window is built
 local ICON = 40
 local BUTTON_W = 92
 local NAME_X, RANK_X, RESPONSE_X, GEAR_X, RECENT_X, NOTE_X, VOTES_X = 16, 172, 268, 376, 536, 590, 712
@@ -303,6 +304,15 @@ local function layoutHistoryRow(row, index, compact)
 	row.item:SetSize(HITEM_W, compact and 24 or 36)
 	row.item.iconBorder:SetSize(compact and 22 or 30, compact and 22 or 30)
 	row.chip:SetHeight(compact and 20 or 24)
+end
+
+-- Makes the candidate rows up to `count` (never more than the pool).
+function CouncilWindow.EnsureRows(count)
+	for i = #CouncilWindow.rows + 1, min(POOL, count) do
+		local row = newRow(i)
+		layoutRow(row, i, layoutCompact == true)
+		CouncilWindow.rows[i] = row
+	end
 end
 
 -- A row of the History tab: when, what, to whom, with which answer, and the votes.
@@ -860,9 +870,15 @@ local function build()
 	end
 	setShown(queueStatic, false)
 
-	for i = 1, POOL do
-		CouncilWindow.rows[i] = newRow(i)
+	-- The rows are made as they are needed, and the rest of the pool a few at a time, so opening
+	-- the window never runs one long script (the game stops those: "script ran too long").
+	CouncilWindow.EnsureRows(INITIAL_ROWS)
+	local function fillPool()
+		if #CouncilWindow.rows >= POOL then return end
+		CouncilWindow.EnsureRows(#CouncilWindow.rows + 4)
+		C_Timer.After(0, fillPool)
 	end
+	C_Timer.After(0, fillPool)
 	frame.scroll = UI.NewScrollBar(frame, function(newOffset)
 		offset = newOffset
 		CouncilWindow:Refresh()
@@ -1441,7 +1457,8 @@ local function renderCouncil(self, session)
 
 	local myVote = ALC.Voting:GetMyVote(focus)
 	local shown = min(count - offset, rowsAllowed)
-	for i = 1, POOL do
+	CouncilWindow.EnsureRows(shown)
+	for i = 1, #self.rows do
 		local row = self.rows[i]
 		local entry = list[offset + i]
 		if entry and i <= shown then

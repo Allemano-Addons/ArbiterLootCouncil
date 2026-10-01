@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.3.3-beta
+- Fix: "script ran too long" when a window was opened the first time. The loot, response and voting windows now make only the rows they need at once (a handful) and the rest of their rows a few at a time in the background, instead of everything in one long script.
+
 ## 0.3.2-beta
 - Fix: messages from the loot master could overtake each other on the way (an award passing a vote count, say) and the later-numbered one then made the earlier be thrown away. That is likely why council members did not see an award ("Awarded to ...") or the end of the session, and why their history stayed empty. A number is now accepted once while it is near the newest, and an old count never replaces a newer one.
 - The game's own loot threshold (the one on the player frame) now follows ALC's threshold when the group leader changes it.
