@@ -105,9 +105,10 @@ local function announce(target, entry)
 	ALC.Events:Fire("ALC_AWARDS_ANNOUNCED", text)
 end
 
-local function logAward(session, target, entry, votes)
+local function logAward(session, target, entry, votes, item)
 	local log = ALC.Settings:GetAwardLog()
 	local record = {
+		item = item,
 		itemID = target.itemID,
 		itemString = target.itemString,
 		winner = entry.name,
@@ -204,10 +205,25 @@ function Awards:Award(name, item, disenchant)
 	end
 
 	-- Log first: the announcement refreshes windows that read the log (the history).
-	logAward(session, target, entry, votes)
+	logAward(session, target, entry, votes, item)
 	announce(target, entry)
 	Debug:Log("Awards", "%s -> %s (%s, %d votes, %s)", target.itemString, entry.name, entry.response, votes,
 		slot and "given" or "awaiting trade")
+
+	-- With auto trade on, the trade window opens with the winner right away (or the winner is
+	-- asked by whisper to come when too far away).
+	if not slot and not ALC:SameName(entry.name, ALC:PlayerName()) and ALC.Settings:GetAutoTrade() then
+		local sid = session.sid
+		C_Timer.After(0.5, function()
+			for _, waiting in ipairs(ALC.Trades:GetPending()) do
+				if waiting.sid == sid and waiting.item == item then
+					local ok, message = ALC.Trades:StartTrade(waiting.id)
+					if not ok and message then ALC:Print(message) end
+					return
+				end
+			end
+		end)
+	end
 	return true
 end
 
@@ -390,7 +406,47 @@ function Awards:OnGiveTimeout(waiting)
 	ALC:Print(L["%s was not handed out. Trade it to %s."], select(2, ALC:GetItemInfo(waiting.itemString)) or waiting.itemString, waiting.winner)
 end
 
+-- Council members keep the history too: what the loot master announced is logged on their side,
+-- and an undo marks the line as revoked. (The loot master logs in Awards:Award.)
+local function onAwardReceived(_, item, winner)
+	local session = ALC.Sessions:GetSession()
+	if not session or not session.isCouncil or session.isLM then return end
+	local sid = session.sid
+	local target = session.items[item]
+	if not target then return end
+	local p = { item = item, winner = winner, itemID = target.itemID }
+	local log = ALC.Settings:GetAwardLog()
+	for i = #log, math.max(1, #log - 40), -1 do
+		local r = log[i]
+		if not r.revoked and r.sid == sid and r.item == p.item and ALC:SameName(r.winner, p.winner) then return end
+	end
+	local entry = ALC.Candidates:Get(p.winner, p.item)
+	if not entry then
+		local unit = ALC:FindUnitByName(p.winner)
+		entry = { name = p.winner, class = (unit and select(2, UnitClass(unit))) or "PRIEST", response = ALC.Constants.DISENCHANT_ID }
+	end
+	local votes = ALC.Voting:GetVotes(p.winner, p.item)
+	logAward(session, target, entry, votes, p.item)
+end
+
+local function onAwardRevokeReceived(_, item, winner)
+	local session = ALC.Sessions:GetSession()
+	if not session or not session.isCouncil or session.isLM then return end
+	local sid, p = session.sid, { item = item, winner = winner }
+	local log = ALC.Settings:GetAwardLog()
+	for i = #log, 1, -1 do
+		local r = log[i]
+		if not r.revoked and r.sid == sid and r.item == p.item and ALC:SameName(r.winner, p.winner) then
+			r.revoked, r.revokedAt = true, time()
+			ALC.Events:Fire("ALC_AWARDS_REVOKED", r)
+			return
+		end
+	end
+end
+
 function Awards:Init()
+	ALC.Events.Register(self, "ALC_SESSION_ITEM_AWARDED", onAwardReceived)
+	ALC.Events.Register(self, "ALC_SESSION_ITEM_REVOKED", onAwardRevokeReceived)
 	self:RegisterEvent("LOOT_OPENED", function() lootOpen = true end)
 	self:RegisterEvent("LOOT_CLOSED", function() lootOpen = false end)
 	self:RegisterEvent("LOOT_SLOT_CLEARED", function(_, slot) Awards:OnLootSlotCleared(slot) end)

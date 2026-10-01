@@ -396,7 +396,7 @@ return function(check, H)
 	Awards:Award("Jonatan Moo")
 	check("an award leaves it open, on the same tab", Win:IsShown() and Win:GetTab() == "council")
 	Win:SetTab("history")
-	check("and the new award is in the history", Win.historyRows[1].winner:GetText() == "Jonatan Moo")
+	check("and the new award is in the history", Win:GetHistory()[1].winner == "Jonatan Moo")
 	Win:SetTab("council")
 	reset()
 	newSession()
@@ -483,6 +483,7 @@ return function(check, H)
 	local chatBefore = #H.chat
 	trows[1].trade.scripts.OnClick(trows[1].trade)
 	check("out of range is explained, no trade is opened", #traded == 1 and H.chat[#H.chat]:find("too far", 1, true) ~= nil and #H.chat > chatBefore)
+	check("and the winner is asked by whisper to come", H.said[#H.said].channel == "WHISPER" and H.said[#H.said].text:find("You won", 1, true) ~= nil and H.said[#H.said].to ~= nil)
 	inRange = true
 	UnitIsConnected = function() return false end
 	trows[1].trade.scripts.OnClick(trows[1].trade)

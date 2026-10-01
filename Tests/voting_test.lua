@@ -369,7 +369,10 @@ return function(check, H)
 	check("cast a vote", Voting:Cast("Kaelis Moo") == true)
 	local _, castEnv = AceSerializer:Deserialize(H.sent[1].text)
 	check("it goes to the loot master", H.sent[1].target == "Ashvane Moo" and castEnv.t == "VOTE" and castEnv.p.candidate == "Kaelis Moo")
-	check("and we do not count it ourselves", Voting:GetVotes("Kaelis Moo") == 0 and Voting:GetMyVote() == nil)
+	check("a vote goes in the fast lane", H.sent[1].prio == "ALERT")
+	check("our own vote shows at once", Voting:GetVotes("Kaelis Moo") == 1 and Voting:GetMyVote() == "Kaelis Moo")
+	check("a vote for another player moves it", Voting:Cast("Veyra Moo") == true and Voting:GetVotes("Kaelis Moo") == 0 and Voting:GetMyVote() == "Veyra Moo")
+	check("the same player again takes it back", Voting:Cast("Veyra Moo") == true and Voting:GetMyVote() == nil)
 
 	-- The window sorts by votes within an answer.
 	check("more votes come first", Win:GetVisible()[1].name == "Veyra Moo")
@@ -379,6 +382,19 @@ return function(check, H)
 	check("and no Stop session button", not frame.stop:IsShown())
 	local okSet, msgSet = Candidates:SetResponse("Veyra Moo", "BIS")
 	check("only the loot master changes an answer", okSet == false and msgSet ~= nil and Candidates:Get("Veyra Moo").response == "UPGRADE")
+
+	-- The history on a council member's side: what the loot master awards is logged here too, and an undo marks it.
+	local log = ALC.Settings:GetAwardLog()
+	local logBefore = #log
+	H.deferTimers = true -- the session would otherwise finish at once, as the last item is awarded
+	check("an award from the loot master is logged on the council side",
+		Comm:Process(env("AWARD", "sidV", 30, { item = 1, winner = "Veyra Moo", itemID = 200, response = "UPGRADE" }), "PARTY", "Ashvane Moo") == true
+		and #log == logBefore + 1 and log[#log].winner == "Veyra Moo" and log[#log].itemID == 200 and log[#log].sid == "sidV" and log[#log].votes == 2)
+	Comm:Process(env("AWARD_REVOKE", "sidV", 31, { item = 1, winner = "Veyra Moo", itemID = 200 }), "PARTY", "Ashvane Moo")
+	check("an undo marks the line as revoked", log[#log].revoked == true)
+	H.runTimers()
+	H.deferTimers = false
+	table.remove(log) -- leave the log as the next tests expect it
 
 	Comm:Process(env("SESSION_CANCEL", "sidV", 20, { reason = "done" }), "PARTY", "Ashvane Moo")
 

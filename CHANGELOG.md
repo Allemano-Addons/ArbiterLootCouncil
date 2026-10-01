@@ -3,6 +3,10 @@
 ## 0.3.1-beta
 - Fix: the loot window failed to open for the loot master when the boss name was a "secret" text (WoW Forever hides some names). The name is now only used when it is readable; otherwise the zone names the loot.
 
+- Votes, answers and awards now travel in the fast lane of the addon messages, so they no longer wait behind big messages; and your own vote shows at once.
+- Trade: with auto trade on, the trade window opens with the winner as soon as you award (when they are near). A winner who is too far away is asked by whisper to come. The trade is also noticed when the game sends no "Trade complete" message (the offered items left your bags).
+- History: council members now keep the history too (what the loot master awards is logged on their side, and an undo marks it).
+
 ## 0.3.0-beta
 Everybody in the raid who answers or votes should update to this version together.
 

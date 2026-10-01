@@ -100,6 +100,30 @@ end
 -- Council: cast a vote
 --------------------------------------------------------------------------------
 
+-- Shows our own vote at once, before the loot master's count arrives (that one replaces it).
+local function applyLocal(item, candidate)
+	local me = ALC:PlayerName()
+	local function without(voters)
+		local list = {}
+		for _, v in ipairs(voters) do if not ALC:SameName(v, me) then list[#list + 1] = v end end
+		return list
+	end
+	local old = myVotes[item]
+	if old then
+		local entry = tally[item] and tally[item][strlower(old)]
+		setTally(item, old, entry and without(entry.voters) or {})
+	end
+	if candidate then
+		local entry = tally[item] and tally[item][strlower(candidate)]
+		local voters = entry and without(entry.voters) or {}
+		voters[#voters + 1] = me
+		table.sort(voters)
+		setTally(item, candidate, voters)
+	end
+	recomputeMine()
+	changed()
+end
+
 -- Votes for a candidate of an item; voting for the one you already chose takes the vote
 -- back. Returns true, or false and a message.
 function Voting:Cast(candidate, item)
@@ -122,6 +146,7 @@ function Voting:Cast(candidate, item)
 	if not ALC.Comm:SendWhisper(session.lm, "VOTE", session.sid, payload) then
 		return false, L["Could not send your vote. See /alc debug log."]
 	end
+	applyLocal(item, payload.candidate)
 	return true
 end
 

@@ -444,6 +444,14 @@ local function commit(env)
 	end
 end
 
+-- Small messages the players wait for (answers, votes, awards) go in the fast lane of the
+-- throttle library, so they are not stuck behind the big ones (a session start, a snapshot).
+local ALERT_TYPES = {
+	RESPONSE = true, CANDIDATE_UPDATE = true, VOTE = true, VOTE_UPDATE = true,
+	AWARD = true, AWARD_REVOKE = true, SESSION_PAUSE = true,
+}
+local function priorityOf(t) return ALERT_TYPES[t] and "ALERT" or "NORMAL" end
+
 -- Broadcast to the group (RAID, or PARTY in a party). Always delivered locally too.
 function Comm:SendRaid(t, sid, p)
 	local env = prepare(t, sid, p, "GROUP")
@@ -452,17 +460,17 @@ function Comm:SendRaid(t, sid, p)
 	local message = AceSerializer:Serialize(env)
 	local channel = self:GetGroupChannel()
 	if channel then
-		self:SendCommMessage(ALC.PREFIX, message, channel, nil, "NORMAL")
+		self:SendCommMessage(ALC.PREFIX, message, channel, nil, priorityOf(t))
 	end
 	enqueueLoopback(message, channel or "RAID")
 	return true
 end
 
-local function deliverWhisper(comm, message, target)
+local function deliverWhisper(comm, message, target, priority)
 	if ALC:SameName(target, me()) then
 		enqueueLoopback(message, "WHISPER")
 	else
-		comm:SendCommMessage(ALC.PREFIX, message, "WHISPER", ALC:NormalizeName(target), "NORMAL")
+		comm:SendCommMessage(ALC.PREFIX, message, "WHISPER", ALC:NormalizeName(target), priority or "NORMAL")
 	end
 end
 
@@ -474,7 +482,7 @@ function Comm:SendWhisper(target, t, sid, p)
 	local env = prepare(t, sid, p, "WHISPER")
 	if not env then return false end
 	commit(env)
-	deliverWhisper(self, AceSerializer:Serialize(env), target)
+	deliverWhisper(self, AceSerializer:Serialize(env), target, priorityOf(t))
 	return true
 end
 
@@ -490,7 +498,7 @@ function Comm:SendCouncil(targets, t, sid, p)
 		local key = name and strlower(name)
 		if key and not sent[key] then
 			sent[key] = true
-			deliverWhisper(self, message, name)
+			deliverWhisper(self, message, name, priorityOf(t))
 		end
 	end
 	return true

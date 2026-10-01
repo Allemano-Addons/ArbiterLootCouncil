@@ -22,7 +22,8 @@ LibStub("AceEvent-3.0"):Embed(Trades)
 local SNAPSHOT_KEEP = 3 -- seconds the note of an accepted trade is kept after the window closes
 local TRADE_SLOTS = 6   -- items you can offer in a trade
 
-local offered -- { partner, items = { itemID, ... } } for the trade both sides accepted
+local offered -- { partner, items = { itemID, ... }, counts = { [itemID] = in bags } } for the trade both sides accepted
+local lastAsked = {} -- queue entry id -> when the winner was last asked by whisper to come
 
 local function status() return ALC.LootDetection.STATUS end
 
@@ -58,6 +59,20 @@ end
 -- Opening a trade with the winner
 --------------------------------------------------------------------------------
 
+-- Whispers the winner of a waiting item to come and trade (at most once every 30 seconds per item).
+-- Returns true when the whisper was sent.
+function Trades:AskToCome(entry)
+	if not SendChatMessage then return false end
+	local now = GetTime()
+	if lastAsked[entry.id] and now - lastAsked[entry.id] < 30 then return false end
+	local name = ALC:NormalizeName(entry.winner)
+	if not name then return false end
+	lastAsked[entry.id] = now
+	local link = select(2, ALC:GetItemInfo(entry.itemString or entry.itemID)) or ("item " .. entry.itemID)
+	SendChatMessage(format("[ALC] You won %s. Please come to me and open a trade.", link), "WHISPER", nil, name)
+	return true
+end
+
 -- Opens the trade window with an item's winner when that is possible. Returns true, or
 -- false and the reason.
 function Trades:StartTrade(id)
@@ -76,7 +91,9 @@ function Trades:StartTrade(id)
 		return false, format(L["%s is offline."], entry.winner)
 	end
 	if CheckInteractDistance and not CheckInteractDistance(unit, 2) then
-		return false, format(L["%s is too far away to trade with."], entry.winner)
+		local message = format(L["%s is too far away to trade with."], entry.winner)
+		if Trades:AskToCome(entry) then message = message .. " " .. L["They were asked by whisper to come."] end
+		return false, message
 	end
 	InitiateTrade(unit)
 	return true
@@ -89,16 +106,38 @@ local function isOn(value)
 	return value == 1 or value == true
 end
 
+-- How many of an item are in the bags (0 when the container API is missing).
+local function bagCount(itemID)
+	local get = (C_Container and C_Container.GetContainerItemInfo) or GetContainerItemInfo
+	local numSlots = (C_Container and C_Container.GetContainerNumSlots) or GetContainerNumSlots
+	if not get or not numSlots then return 0 end
+	local total = 0
+	for bag = 0, (NUM_BAG_SLOTS or 4) do
+		for slot = 1, (numSlots(bag) or 0) do
+			local info, count, _, _, _, _, _, _, _, id = get(bag, slot)
+			if type(info) == "table" then
+				if info.itemID == itemID then total = total + (info.stackCount or 1) end
+			elseif id == itemID then
+				total = total + (count or 1)
+			end
+		end
+	end
+	return total
+end
+
 -- Both sides accepted: remember what we give and to whom.
 function Trades:OnTradeAcceptUpdate(playerAccepted, targetAccepted)
 	if not (isOn(playerAccepted) and isOn(targetAccepted)) then return end
-	local items = {}
+	local items, counts = {}, {}
 	for slot = 1, TRADE_SLOTS do
 		local link = GetTradePlayerItemLink(slot)
 		local _, itemID = ALC:ParseItem(link)
-		if itemID then items[#items + 1] = itemID end
+		if itemID then
+			items[#items + 1] = itemID
+			counts[itemID] = bagCount(itemID)
+		end
 	end
-	offered = { partner = ALC:UnitFullName("NPC"), items = items }
+	offered = { partner = ALC:UnitFullName("NPC"), items = items, counts = counts }
 end
 
 -- The game says the trade went through: move the matching items out of the queue.
@@ -207,10 +246,21 @@ function Trades:FillTrade()
 	return placed
 end
 
--- The window closed: keep the note a moment, since the "complete" message may follow.
+-- The window closed: keep the note a moment, since the "complete" message may follow. When no
+-- message came, the bags tell: if the offered items left them, the trade went through.
 function Trades:OnTradeClosed()
 	local snapshot = offered
 	if not snapshot then return end
+	C_Timer.After(1.5, function()
+		if offered ~= snapshot then return end
+		for itemID, before in pairs(snapshot.counts or {}) do
+			if bagCount(itemID) < before then
+				Debug:Log("Trades", "no completion message, but item %d left the bags: the trade went through", itemID)
+				Trades:OnTradeComplete()
+				return
+			end
+		end
+	end)
 	C_Timer.After(SNAPSHOT_KEEP, function()
 		if offered == snapshot then offered = nil end
 	end)
@@ -223,6 +273,9 @@ function Trades:Init()
 	end)
 	self:RegisterEvent("TRADE_CLOSED", function() Trades:OnTradeClosed() end)
 	self:RegisterEvent("UI_INFO_MESSAGE", function(_, _, message)
+		if message == (ERR_TRADE_COMPLETE or "Trade complete.") then Trades:OnTradeComplete() end
+	end)
+	self:RegisterEvent("CHAT_MSG_SYSTEM", function(_, message)
 		if message == (ERR_TRADE_COMPLETE or "Trade complete.") then Trades:OnTradeComplete() end
 	end)
 end

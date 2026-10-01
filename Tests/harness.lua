@@ -122,6 +122,7 @@ function H.setup()
 	geterrorhandler = function() return print end
 	UnitName = function(unit) if unit == "player" then return "Tester", "Moo" end end
 	UnitIsConnected = function() return true end
+	InitiateTrade = function() end
 	-- The client has no global GetItemInfo; it lives in C_Item.
 	GetItemInfo = nil
 	C_Item = { GetItemInfo = function() end }
@@ -135,7 +136,7 @@ function H.setup()
 	H.timers, H.deferTimers = {}, false
 	C_Timer = { After = function(_, fn) if H.deferTimers then H.timers[#H.timers + 1] = fn else fn() end end }
 	H.said = {}
-	SendChatMessage = function(text, channel) H.said[#H.said + 1] = { text = text, channel = channel } end
+	SendChatMessage = function(text, channel, _, to) H.said[#H.said + 1] = { text = text, channel = channel, to = to } end
 	H.inRaid, H.inGroup = false, false
 	IsInRaid = function() return H.inRaid end
 	IsInGroup = function(category) if category == 2 then return false end return H.inGroup or H.inRaid end
