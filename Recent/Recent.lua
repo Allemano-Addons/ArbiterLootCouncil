@@ -73,7 +73,8 @@ function Recent:Build(windowDays, names)
 	-- Newest first (the log is in the order things happened, but do not rely on it).
 	local recent = {}
 	for i, entry in ipairs(log) do
-		if entry.time and entry.time >= cutoff and entry.winner and (not wanted or wanted[strlower(entry.winner)]) then
+		if entry.time and entry.time >= cutoff and entry.winner and not entry.revoked
+			and entry.response ~= ALC.Constants.DISENCHANT_ID and (not wanted or wanted[strlower(entry.winner)]) then
 			recent[#recent + 1] = { entry = entry, index = i }
 		end
 	end
@@ -182,6 +183,12 @@ function Recent:Init()
 		end
 	end)
 	register(self, "ALC_SESSION_ENDED", reset)
+	-- The history was cleared or restored: everybody's figures change.
+	register(self, "ALC_AWARDS_CLEARED", function() Recent:Send() end)
+	-- An award was taken back: the winner's figures changed too.
+	register(self, "ALC_AWARDS_REVOKED", function(_, entry)
+		if entry and entry.winner then Recent:Send({ entry.winner }) end
+	end)
 	-- An award was just logged: the winner's figures changed.
 	register(self, "ALC_AWARDS_LOGGED", function(_, entry)
 		if entry and entry.winner then Recent:Send({ entry.winner }) end

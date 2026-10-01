@@ -10,3 +10,7 @@ ignore:
   - ALC_Media
   - CLAUDE.md
   - ROADMAP.md
+
+manual-changelog:
+  filename: CHANGELOG.md
+  markup-type: markdown

@@ -20,7 +20,7 @@ local Protocol = ALC.Protocol
 local Debug = ALC.Debug
 
 local type, pairs, ipairs = type, pairs, ipairs
-local strlower = string.lower
+local strlower, strmatch = string.lower, string.match
 local floor = math.floor
 local GetTime, time = GetTime, time
 
@@ -131,10 +131,71 @@ end
 --------------------------------------------------------------------------------
 local function recordVersion(name, addon, proto)
 	versions[strlower(name)] = { name = name, addon = addon, proto = proto, seen = time() }
+	ALC.Events:Fire("ALC_VERSIONS_CHANGED")
 end
 
 function Comm:GetVersions()
 	return versions
+end
+
+-- Compares two version texts such as "0.2.0-alpha2": the numbers first, then a release is
+-- newer than a pre-release, and pre-releases are compared as text. Returns -1, 0 or 1.
+function Comm.CompareVersions(a, b)
+	local function parse(text)
+		local numbers, tag = strmatch(tostring(text or ""), "^v?([%d%.]+)%-?(.*)$")
+		local parts = {}
+		for n in string.gmatch(numbers or "", "%d+") do parts[#parts + 1] = tonumber(n) end
+		return parts, tag or ""
+	end
+	local pa, ta = parse(a)
+	local pb, tb = parse(b)
+	for i = 1, math.max(#pa, #pb) do
+		local x, y = pa[i] or 0, pb[i] or 0
+		if x ~= y then return x < y and -1 or 1 end
+	end
+	if ta == tb then return 0 end
+	if ta == "" then return 1 end  -- a release is newer than its pre-release
+	if tb == "" then return -1 end
+	return ta < tb and -1 or 1
+end
+
+-- The group as a list for the version window: { name, class, status, addon, proto }, problems
+-- first. Status: "self", "ok", "older", "newer" (their version compared with ours),
+-- "incompatible" (another protocol) or "none" (no reply: no addon, or one too old).
+local STATUS_ORDER = { incompatible = 1, none = 2, older = 3, newer = 4, ok = 5, self = 6 }
+
+function Comm:GetVersionRows()
+	local rows, listed = {}, {}
+	local me = ALC:NormalizeName(ALC:PlayerName())
+	local function add(name)
+		local normalized = ALC:NormalizeName(name)
+		local key = normalized and strlower(normalized)
+		if not key or listed[key] then return end
+		listed[key] = true
+		local unit = ALC:FindUnitByName(normalized)
+		local row = { name = normalized, class = unit and select(2, UnitClass(unit)) or nil }
+		local info = versions[key]
+		if me and strlower(me) == key then
+			row.status, row.addon, row.proto = "self", ALC.version, Protocol.VERSION
+		elseif not info then
+			row.status = "none"
+		elseif not info.addon or info.proto ~= Protocol.VERSION then
+			row.status, row.addon, row.proto = "incompatible", info.addon, info.proto
+		else
+			local cmp = Comm.CompareVersions(info.addon, ALC.version)
+			row.status = cmp == 0 and "ok" or (cmp < 0 and "older" or "newer")
+			row.addon, row.proto = info.addon, info.proto
+		end
+		rows[#rows + 1] = row
+	end
+	if me then add(me) end
+	for _, name in ipairs(self.GetGroupNames()) do add(name) end
+	table.sort(rows, function(a, b)
+		local oa, ob = STATUS_ORDER[a.status], STATUS_ORDER[b.status]
+		if oa ~= ob then return oa < ob end
+		return a.name < b.name
+	end)
+	return rows
 end
 
 --------------------------------------------------------------------------------
@@ -438,13 +499,20 @@ end
 --------------------------------------------------------------------------------
 -- Version discovery (`/alc debug versions`)
 --------------------------------------------------------------------------------
-function Comm:RequestVersions()
-	if not self:SendRaid("VERSION_REQUEST", nil, {}) then return end
-	if not self:GetGroupChannel() then
+-- Asks the group who has the addon. `silent` leaves the answer to a window (no chat list).
+function Comm:RequestVersions(silent)
+	if not self:SendRaid("VERSION_REQUEST", nil, {}) then return false end
+	if not self:GetGroupChannel() and not silent then
 		ALC:Print(ALC.L["Not in a group; only your own version will be shown."])
 	end
-	C_Timer.After(VERSION_WAIT, function() Comm:PrintVersions() end)
+	if not silent then
+		C_Timer.After(VERSION_WAIT, function() Comm:PrintVersions() end)
+	end
+	return true
 end
+
+-- How long replies are awaited after a request (for "waiting" in the version window).
+Comm.VERSION_WAIT = VERSION_WAIT
 
 ALC.Commands:RegisterDebug("versions", function() Comm:RequestVersions() end)
 

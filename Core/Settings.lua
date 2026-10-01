@@ -150,6 +150,15 @@ function Settings:GetAwardLog()
 	return db.global.awardLog
 end
 
+-- The last cleared award history, kept so a clear can be taken back: { time, entries }, or nil.
+function Settings:GetAwardBackup()
+	return db.global.awardLogBackup
+end
+
+function Settings:SetAwardBackup(backup)
+	db.global.awardLogBackup = backup
+end
+
 -- Saved state that lets the loot master survive a /reload. Each module owns its keys:
 -- Sessions writes `session` and `savedAt`, Candidates writes `candidates`.
 function Settings:GetSessionStore()
@@ -204,7 +213,7 @@ function Settings:SetCompact(enabled)
 	changed("compact")
 end
 
--- Announce awards in raid chat (loot master): on by default.
+-- Announce awards in raid or party chat (loot master): on by default.
 function Settings:GetAnnounceAwards()
 	return db.profile.announceAwards ~= false
 end
@@ -212,6 +221,79 @@ end
 function Settings:SetAnnounceAwards(enabled)
 	db.profile.announceAwards = enabled and true or false
 	changed("announceAwards")
+end
+
+-- The disenchanter (loot master): who gets the items nobody wants. A full name, or nil.
+function Settings:GetDisenchanter()
+	return db.profile.disenchanter
+end
+
+-- Returns true, or false and why ("invalid").
+function Settings:SetDisenchanter(name)
+	if name == nil or name == "" then
+		db.profile.disenchanter = nil
+		changed("disenchanter")
+		return true
+	end
+	name = ALC:NormalizeName(name)
+	-- The name travels in AWARD, where the protocol rejects control characters and `|`.
+	if not name or #name < 2 or #name > 48 or string.find(name, "[%c|]") then return false, "invalid" end
+	db.profile.disenchanter = (string.gsub(name, "(%S)(%S*)", function(first, rest) return string.upper(first) .. strlower(rest) end))
+	changed("disenchanter")
+	return true
+end
+
+-- The Roll column of the voting window (reads /roll from the chat): off by default.
+function Settings:GetRollsEnabled()
+	return db.profile.rollsEnabled == true
+end
+
+function Settings:SetRollsEnabled(enabled)
+	db.profile.rollsEnabled = enabled and true or false
+	changed("rolls")
+end
+
+-- Put won items into the trade window by itself (loot master): on by default.
+function Settings:GetAutoTrade()
+	return db.profile.autoTrade ~= false
+end
+
+function Settings:SetAutoTrade(enabled)
+	db.profile.autoTrade = enabled and true or false
+	changed("autoTrade")
+end
+
+-- Answer timer (loot master): players may answer for this many seconds after a session
+-- starts; then the response window closes. Off by default.
+Settings.TIMER_PRESETS = { 30, 60, 90, 120, 180, 300 }
+
+function Settings:GetTimerEnabled()
+	return db.profile.timerEnabled == true
+end
+
+function Settings:SetTimerEnabled(enabled)
+	db.profile.timerEnabled = enabled and true or false
+	changed("timer")
+end
+
+function Settings:GetTimerSeconds()
+	local value = db.profile.timerSeconds
+	local C = ALC.Constants
+	if type(value) ~= "number" or value < C.TIMER_MIN or value > C.TIMER_MAX then return 120 end
+	return math.floor(value)
+end
+
+function Settings:SetTimerSeconds(value)
+	local C = ALC.Constants
+	if type(value) ~= "number" or value < C.TIMER_MIN or value > C.TIMER_MAX then return false end
+	db.profile.timerSeconds = math.floor(value)
+	changed("timer")
+	return true
+end
+
+-- What a new session starts with: seconds, or nil when the timer is off.
+function Settings:GetActiveTimer()
+	return self:GetTimerEnabled() and self:GetTimerSeconds() or nil
 end
 
 -- Recent awards: how many days back the council sees what a player was awarded -----

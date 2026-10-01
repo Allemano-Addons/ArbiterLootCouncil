@@ -126,6 +126,87 @@ function Trades:OnTradeComplete()
 	return delivered
 end
 
+--------------------------------------------------------------------------------
+-- Putting the won items into the trade window
+--------------------------------------------------------------------------------
+local PLACE_DELAY = 0.3 -- seconds after the window opens before the items are put in
+
+-- What sits in a bag slot: itemID and whether it is locked. Handles both client shapes of the
+-- container API (a table, or several return values).
+local function slotInfo(bag, slot)
+	local get = (C_Container and C_Container.GetContainerItemInfo) or GetContainerItemInfo
+	if not get then return nil end
+	local info, _, _, _, _, _, _, _, _, itemID = get(bag, slot)
+	if type(info) == "table" then return info.itemID, info.isLocked end
+	return itemID, nil
+end
+
+-- The first bag slot holding the item that we have not used yet, or nil.
+local function findInBags(itemID, used)
+	local numSlots = (C_Container and C_Container.GetContainerNumSlots) or GetContainerNumSlots
+	if not numSlots then return nil end
+	for bag = 0, (NUM_BAG_SLOTS or 4) do
+		for slot = 1, (numSlots(bag) or 0) do
+			local id, locked = slotInfo(bag, slot)
+			if id == itemID and not locked and not used[bag .. ":" .. slot] then return bag, slot end
+		end
+	end
+end
+
+-- Puts the won items of the trade partner into the open trade window: one per waiting
+-- entry, up to the six slots. The player still has to press Accept. Returns how many went in.
+function Trades:FillTrade()
+	if not ALC.Settings:GetAutoTrade() then return 0 end
+	local partner = ALC:UnitFullName("NPC")
+	if not partner or (InCombatLockdown and InCombatLockdown()) then return 0 end
+	if CursorHasItem and CursorHasItem() then return 0 end -- something is being carried: leave it
+
+	local inWindow, nextSlot = {}, 1
+	for slot = 1, TRADE_SLOTS do
+		local _, itemID = ALC:ParseItem(GetTradePlayerItemLink and GetTradePlayerItemLink(slot))
+		if itemID then
+			inWindow[itemID] = (inWindow[itemID] or 0) + 1
+			nextSlot = slot + 1
+		end
+	end
+
+	local used, placed = {}, 0
+	for _, entry in ipairs(self:GetPending()) do
+		if ALC:SameName(entry.winner, partner) then
+			local link = select(2, ALC:GetItemInfo(entry.itemString or entry.itemID)) or ("item:" .. entry.itemID)
+			if (inWindow[entry.itemID] or 0) > 0 then
+				inWindow[entry.itemID] = inWindow[entry.itemID] - 1 -- already in the window
+			elseif nextSlot > TRADE_SLOTS then
+				ALC:Print(L["The trade window is full: %s is still waiting."], link)
+			else
+				local bag, slot = findInBags(entry.itemID, used)
+				if not bag then
+					ALC:Print(L["%s is not in your bags: it cannot be added to the trade."], link)
+				else
+					used[bag .. ":" .. slot] = true
+					local pickup = (C_Container and C_Container.PickupContainerItem) or PickupContainerItem
+					local ok = pcall(function()
+						pickup(bag, slot)
+						ClickTradeButton(nextSlot)
+					end)
+					if ok and not (CursorHasItem and CursorHasItem()) then
+						placed = placed + 1
+						nextSlot = nextSlot + 1
+						Debug:Log("Trades", "put item %d in trade slot %d for %s", entry.itemID, nextSlot - 1, partner)
+					else
+						if ClearCursor then ClearCursor() end
+						ALC:Print(L["Could not put %s in the trade: add it yourself."], link)
+					end
+				end
+			end
+		end
+	end
+	if placed > 0 then
+		ALC:Print(L["Added %d item(s) to the trade with %s. Check it and press Accept."], placed, partner)
+	end
+	return placed
+end
+
 -- The window closed: keep the note a moment, since the "complete" message may follow.
 function Trades:OnTradeClosed()
 	local snapshot = offered
@@ -137,6 +218,9 @@ end
 
 function Trades:Init()
 	self:RegisterEvent("TRADE_ACCEPT_UPDATE", function(_, player, target) Trades:OnTradeAcceptUpdate(player, target) end)
+	self:RegisterEvent("TRADE_SHOW", function()
+		C_Timer.After(PLACE_DELAY, function() Trades:FillTrade() end)
+	end)
 	self:RegisterEvent("TRADE_CLOSED", function() Trades:OnTradeClosed() end)
 	self:RegisterEvent("UI_INFO_MESSAGE", function(_, _, message)
 		if message == (ERR_TRADE_COMPLETE or "Trade complete.") then Trades:OnTradeComplete() end

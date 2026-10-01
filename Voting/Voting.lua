@@ -109,6 +109,7 @@ function Voting:Cast(candidate, item)
 	if not session.isCouncil then return false, L["Only the council can vote."] end
 	if not ALC.Sessions:GetItem(item) then return false, L["That item is not in the session."] end
 	if not ALC.Sessions:IsItemOpen(item) then return false, L["That item has already been awarded."] end
+	if session.paused then return false, L["The session is paused."] end
 
 	local payload = { item = item }
 	local mine = myVotes[item]
@@ -160,6 +161,10 @@ local function onVote(_, sender, _, p)
 	local session = ALC.Sessions:GetSession()
 	if not session or not session.isLM then return end
 	local item = p.item
+	if session.paused then
+		Debug:Log("Voting", "vote from %s ignored (the session is paused)", sender)
+		return
+	end
 	if not ALC.Sessions:IsItemOpen(item) then
 		Debug:Warn("Voting", "%s voted on item %d, which is not open", sender, item)
 		return

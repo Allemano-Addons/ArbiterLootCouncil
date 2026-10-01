@@ -339,25 +339,24 @@ end
 -- `checkbox:SetChecked(bool)` only changes how it looks.
 function UI.NewCheckbox(parent, label, onToggle)
 	local box = CreateFrame("Button", nil, parent)
-	box:SetSize(320, 24)
+	box:SetSize(320, 26)
 	box:RegisterForClicks("LeftButtonUp")
 
+	-- A switch: a pill that is amber when on, with a round knob that slides to the right.
 	box.square = CreateFrame("Frame", nil, box)
-	box.square:SetSize(18, 18)
+	box.square:SetSize(44, 24)
 	box.square:SetPoint("LEFT", box, "LEFT", 0, 0)
-	box.square.bg = UI.NewFill(box.square, 4)
-	UI.SetTextureColor(box.square.bg, UI.color.panel)
-	box.square.border = UI.AddBorder(box.square, UI.color.border, 1, 4)
-	-- The tick is a small rounded square in the amber colour.
-	box.markFrame = CreateFrame("Frame", nil, box.square)
-	box.markFrame:SetPoint("TOPLEFT", 4, -4)
-	box.markFrame:SetPoint("BOTTOMRIGHT", -4, 4)
-	box.mark = UI.NewFill(box.markFrame, 4)
-	UI.SetTextureColor(box.mark, UI.color.gold)
-	box.markFrame:Hide()
+	box.square.bg = UI.NewFill(box.square, 10)
+	UI.SetTextureColor(box.square.bg, UI.color.border)
+	box.square.border = UI.AddBorder(box.square, UI.color.border, 1, 10)
+	box.knob = CreateFrame("Frame", nil, box.square)
+	box.knob:SetSize(18, 18)
+	box.knob:SetFrameLevel(box.square:GetFrameLevel() + 2)
+	box.knob.bg = UI.NewFill(box.knob, 8)
+	UI.SetTextureColor(box.knob.bg, UI.color.muted)
 
 	box.label = UI.NewText(box, 13, UI.color.text)
-	box.label:SetPoint("LEFT", box.square, "RIGHT", 10, 0)
+	box.label:SetPoint("LEFT", box.square, "RIGHT", 12, 0)
 	box.label:SetText(label)
 
 	box.checked = false
@@ -371,11 +370,62 @@ function UI.NewCheckbox(parent, label, onToggle)
 
 	function box:SetChecked(checked)
 		self.checked = checked and true or false
-		self.markFrame:SetShown(self.checked)
+		self.knob:ClearAllPoints()
+		if self.checked then
+			self.knob:SetPoint("RIGHT", self.square, "RIGHT", -3, 0)
+			UI.SetTextureColor(self.square.bg, UI.color.gold)
+			UI.SetTextureColor(self.knob.bg, UI.color.text)
+		else
+			self.knob:SetPoint("LEFT", self.square, "LEFT", 3, 0)
+			UI.SetTextureColor(self.square.bg, UI.color.border)
+			UI.SetTextureColor(self.knob.bg, UI.color.muted)
+		end
 	end
 	function box:IsChecked() return self.checked end
 
+	box:SetChecked(false)
 	return box
+end
+
+-- A read-only block of text in a scrolling box, for text the player copies (Ctrl+C): the text
+-- is selected when the box is clicked. Returns the scroll frame; `block.edit` is the EditBox.
+function UI.NewTextBlock(parent, width, height)
+	local scroll = CreateFrame("ScrollFrame", nil, parent)
+	scroll:SetSize(width, height)
+	scroll.bg = UI.NewFill(scroll, 6)
+	UI.SetTextureColor(scroll.bg, UI.color.panel)
+	scroll.border = UI.AddBorder(scroll, UI.color.border, 1, 6)
+	scroll:EnableMouseWheel(true)
+	scroll:SetScript("OnMouseWheel", function(self, delta)
+		local maxScroll = math.max(0, (self.edit:GetHeight() or 0) - self:GetHeight())
+		local target = math.max(0, math.min(maxScroll, (self:GetVerticalScroll() or 0) - delta * 40))
+		self:SetVerticalScroll(target)
+	end)
+
+	local edit = CreateFrame("EditBox", nil, scroll)
+	edit:SetMultiLine(true)
+	edit:SetAutoFocus(false)
+	edit:SetMaxLetters(0)
+	edit:SetWidth(width - 20)
+	applyFont(edit, 12)
+	texts[#texts + 1] = { fs = edit, size = 12 }
+	edit:SetTextColor(unpackColor(UI.color.text))
+	edit:SetTextInsets(8, 8, 6, 6)
+	scroll:SetScrollChild(edit)
+	scroll.edit = edit
+	-- Read only: what is typed is undone. Clicking selects everything, ready for Ctrl+C.
+	edit:SetScript("OnTextChanged", function(self, userInput)
+		if userInput and scroll.fixed and self:GetText() ~= scroll.fixed then self:SetText(scroll.fixed) end
+	end)
+	edit:SetScript("OnEditFocusGained", function(self) self:HighlightText() end)
+	edit:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+
+	function scroll:SetContent(text)
+		self.fixed = text
+		self.edit:SetText(text)
+		self:SetVerticalScroll(0)
+	end
+	return scroll
 end
 
 -- A one-line text field. `onEnter(text)` runs when the player presses Enter.

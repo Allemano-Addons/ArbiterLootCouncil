@@ -55,6 +55,11 @@ Launcher.entries = {
 		open = function() ALC.CouncilWindow:ToggleTrades() end,
 	},
 	{
+		icon = "addon_check", label = L["Versions"],
+		available = function() return true end,
+		open = function() ALC.VersionWindow:Toggle() end,
+	},
+	{
 		icon = "settings", label = L["Settings"],
 		available = function() return true end,
 		open = function() ALC.SettingsWindow:Toggle() end,

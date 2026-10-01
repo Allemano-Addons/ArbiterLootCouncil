@@ -330,6 +330,15 @@ local function onAward(_, _, sid, p)
 	changed()
 end
 
+-- The award was taken back: the item is open in the session again and leaves the trade queue.
+local function onAwardRevoke(_, _, sid, p)
+	local entry = findBySid(sid, p.item)
+	if not entry then return end
+	entry.winner, entry.awardedAt, entry.trade = nil, nil, nil
+	entry.status = STATUS.SESSION
+	changed()
+end
+
 -- The item of this session has to be traded to the winner (Awards calls this when it
 -- could not be handed out through the loot window). Works before or after the AWARD
 -- message is handled.
@@ -447,6 +456,7 @@ function LootDetection:Init()
 	register(self, "ALC_SESSION_STARTED", onSessionStarted)
 	register(self, "ALC_SESSION_ENDED", onSessionEnded)
 	register(self, "ALC_COMM_AWARD", onAward)
+	register(self, "ALC_COMM_AWARD_REVOKE", onAwardRevoke)
 end
 
 --------------------------------------------------------------------------------

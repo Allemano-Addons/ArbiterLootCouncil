@@ -71,7 +71,7 @@ end
 
 -- Asks whether to award an item of the running session (the first when none is named)
 -- to a candidate.
-function AwardDialog:Ask(name, item)
+function AwardDialog:Ask(name, item, disenchant)
 	item = item or 1
 	local session = ALC.Sessions:GetSession()
 	if not session then
@@ -91,15 +91,26 @@ function AwardDialog:Ask(name, item)
 		ALC:Print(L["That item has already been awarded."])
 		return
 	end
-	local entry = ALC.Candidates:Get(name, item)
-	if not entry then
-		ALC:Print(L["That player has not answered."])
-		return
+	local entry
+	if disenchant then
+		local message
+		entry, message = ALC.Awards:GetDisenchantEntry()
+		if not entry then
+			ALC:Print(message)
+			return
+		end
+	else
+		entry = ALC.Candidates:Get(name, item)
+		if not entry then
+			ALC:Print(L["That player has not answered."])
+			return
+		end
 	end
 
 	if not frame then build() end
 	self.candidate = entry.name
 	self.item = item
+	self.disenchant = disenchant and true or false
 
 	local display = ALC.LootDetection:GetItemDisplay({ itemString = target.itemString, itemID = target.itemID })
 	frame.icon:SetTexture(display.icon or UNKNOWN_ICON)
@@ -112,8 +123,12 @@ function AwardDialog:Ask(name, item)
 	frame.winner:SetTextColor(cc[1], cc[2], cc[3], 1)
 	frame.winner:SetText(L["to"] .. " " .. entry.name)
 
-	local votes = ALC.Voting:GetVotes(entry.name, item)
-	frame.details:SetText(string.format("%s: %s  \194\183  %s: %d", L["Response"], ALC.Responses:GetLabel(entry.response), L["Votes"], votes))
+	if disenchant then
+		frame.details:SetText(L["Disenchant: the item goes to the disenchanter."])
+	else
+		local votes = ALC.Voting:GetVotes(entry.name, item)
+		frame.details:SetText(string.format("%s: %s  \194\183  %s: %d", L["Response"], ALC.Responses:GetLabel(entry.response), L["Votes"], votes))
+	end
 	frame.note:SetText(ALC.Awards:CanGiveNow(entry.name, item)
 		and L["The item is handed out from the open loot window."]
 		or L["The loot window is not open for this item: it will be marked Awaiting trade and you trade it yourself."])
@@ -121,16 +136,21 @@ function AwardDialog:Ask(name, item)
 end
 
 function AwardDialog:Confirm()
-	local name, item = self.candidate, self.item
+	local name, item, disenchant = self.candidate, self.item, self.disenchant
 	self:Hide()
 	if not name then return end
-	local ok, message = ALC.Awards:Award(name, item)
+	local ok, message = ALC.Awards:Award(name, item, disenchant)
 	if not ok and message then ALC:Print(message) end
 end
 
 function AwardDialog:Hide()
 	if frame then frame:Hide() end
-	self.candidate, self.item = nil, nil
+	self.candidate, self.item, self.disenchant = nil, nil, nil
+end
+
+-- Asks whether to give an item of the running session to the disenchanter.
+function AwardDialog:AskDisenchant(item)
+	self:Ask(nil, item, true)
 end
 
 function AwardDialog:IsShown()

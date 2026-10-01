@@ -222,6 +222,7 @@ local function build()
 	title:SetPoint("LEFT", logo, "RIGHT", 10, 0)
 	title:SetText(strupper(L["Loot response"]))
 	frame.lm = UI.NewText(header, 12, c.muted, "RIGHT")
+	frame.timer = UI.NewText(header, 13, c.gold, "RIGHT") -- the answer timer, when the session has one
 
 	local close = CreateFrame("Button", nil, header)
 	close:SetSize(28, 28)
@@ -233,6 +234,7 @@ local function build()
 	close:SetScript("OnLeave", function(self) self.text:SetTextColor(c.muted[1], c.muted[2], c.muted[3], 1) end)
 	close:SetScript("OnClick", function() ResponseWindow:Hide() end)
 	frame.lm:SetPoint("RIGHT", close, "LEFT", -10, 0)
+	frame.timer:SetPoint("RIGHT", frame.lm, "LEFT", -16, 0)
 
 	local divider = frame:CreateTexture(nil, "BORDER")
 	divider:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -HEADER_H)
@@ -269,6 +271,13 @@ local function build()
 		ResponseWindow:Refresh()
 	end)
 	frame:SetScript("OnShow", function() ResponseWindow:Refresh() end)
+	local sinceTick = 0
+	frame:SetScript("OnUpdate", function(_, elapsed)
+		sinceTick = sinceTick + elapsed
+		if sinceTick < 0.25 then return end
+		sinceTick = 0
+		ResponseWindow:UpdateTimer()
+	end)
 	restorePosition()
 end
 
@@ -304,6 +313,25 @@ local function renderRow(row, index, item)
 	row:Show()
 end
 
+-- The countdown in the header: "Time left 1:23", red for the last 15 seconds.
+function ResponseWindow:UpdateTimer()
+	if not frame then return end
+	local left = ALC.Sessions:GetTimeLeft()
+	if not left then
+		frame.timer:SetText("")
+		return
+	end
+	if ALC.Sessions:IsPaused() then
+		frame.timer:SetTextColor(c.danger[1], c.danger[2], c.danger[3], 1)
+		frame.timer:SetText(string.format(L["Paused \194\183 %d:%02d left"], math.floor(math.ceil(left) / 60), math.ceil(left) % 60))
+		return
+	end
+	left = math.ceil(left)
+	local color = left <= 15 and c.danger or c.gold
+	frame.timer:SetTextColor(color[1], color[2], color[3], 1)
+	frame.timer:SetText(string.format(L["Time left %d:%02d"], math.floor(left / 60), left % 60))
+end
+
 function ResponseWindow:Refresh()
 	if not frame or not frame:IsShown() then return end
 	local session = ALC.Sessions:GetSession()
@@ -332,6 +360,7 @@ function ResponseWindow:Refresh()
 	frame.scroll:SetHeight(visible * (ROW_H + ROW_GAP) - ROW_GAP)
 	frame.scroll:Update(count, visible, offset)
 	frame.lm:SetText(L["Loot master"] .. ": " .. session.lm)
+	self:UpdateTimer()
 	frame:SetHeight(HEADER_H + 10 + visible * (ROW_H + ROW_GAP) - ROW_GAP + 14 + FOOTER_H)
 
 	local open = 0
@@ -342,6 +371,9 @@ function ResponseWindow:Refresh()
 	if feedback then
 		frame.status:SetTextColor(c.danger[1], c.danger[2], c.danger[3], 1)
 		frame.status:SetText(feedback)
+	elseif ALC.Sessions:IsPaused() then
+		frame.status:SetTextColor(c.danger[1], c.danger[2], c.danger[3], 1)
+		frame.status:SetText(L["The loot master has paused the session. You can answer when it goes on."])
 	elseif count == 1 and answered == 1 then
 		frame.status:SetTextColor(c.gold[1], c.gold[2], c.gold[3], 1)
 		frame.status:SetText(L["Your response: %s. You can change it until the session ends."]:format(ALC.Responses:GetLabel(ALC.Responses:GetMyResponse(1))))
@@ -362,6 +394,10 @@ end
 function ResponseWindow:Show()
 	if not ALC.Sessions:IsActive() then
 		ALC:Print(L["There is no active session."])
+		return
+	end
+	if ALC.Sessions:IsTimeUp() then
+		ALC:Print(L["The time to answer is up."])
 		return
 	end
 	if not frame then
@@ -387,7 +423,9 @@ end
 -- After a reload the session is back: the window returns if it was open, and also if
 -- there is still something to answer.
 local function reopen(answered)
-	if ALC.Settings:GetWindowShown("response") or not answered then
+	if ALC.Sessions:IsTimeUp() then
+		ResponseWindow:Hide()
+	elseif ALC.Settings:GetWindowShown("response") or not answered then
 		ResponseWindow:Show()
 	else
 		ResponseWindow:Refresh()
@@ -404,6 +442,7 @@ function ResponseWindow:Init()
 	register(self, "ALC_RESPONSES_CHANGED", refresh)
 	register(self, "ALC_LOOT_CHANGED", refresh)
 	register(self, "ALC_SESSION_ITEM_AWARDED", refresh)
+	register(self, "ALC_SESSION_PAUSED", refresh)
 	register(self, "ALC_SETTINGS_CHANGED", function(_, key)
 		if key == "compact" then ResponseWindow:Refresh() end
 	end)
@@ -423,4 +462,6 @@ function ResponseWindow:Init()
 		reopen(answered)
 	end)
 	register(self, "ALC_SESSION_ENDED", function() ResponseWindow:Hide() end)
+	-- The answer timer ran out: the window goes away for everybody.
+	register(self, "ALC_SESSION_TIMER_ENDED", function() ResponseWindow:Hide() end)
 end

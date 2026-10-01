@@ -67,6 +67,7 @@ function Responses:ValidateSet(set)
 	for i, r in ipairs(set) do
 		if type(r) ~= "table" or type(r.id) ~= "string" or not string.match(r.id, "^%u[%u%d]*$") or #r.id > 10 then return false, "bad id" end
 		if seen[r.id] then return false, "duplicate id" end
+		if r.id == ALC.Constants.DISENCHANT_ID then return false, "reserved id" end
 		seen[r.id] = true
 		if Responses.CleanLabel(r.label) ~= r.label then return false, "bad label" end
 		local col = r.color
@@ -136,6 +137,9 @@ end
 
 -- A response by id: among the buttons of the session, else among the loot master's, else
 -- among the default five (old awards keep their ids). Nil for an id nobody knows.
+-- The award to the disenchanter: shown in the log and the chat like an answer.
+local DISENCHANT = { id = "DISENCHANT", label = L["Disenchant"], color = { 0.65, 0.45, 0.90 } }
+
 function Responses:Get(id)
 	for _, r in ipairs(self:GetSet()) do
 		if r.id == id then return r end
@@ -143,6 +147,7 @@ function Responses:Get(id)
 	for _, r in ipairs(DEFAULT) do
 		if r.id == id then return r end
 	end
+	if id == DISENCHANT.id then return DISENCHANT end
 end
 
 function Responses:GetLabel(id)
@@ -203,6 +208,8 @@ function Responses:Send(id, item)
 	local target = session.items[item]
 	if not target then return false, L["That item is not in the session."] end
 	if target.winner then return false, L["That item has already been awarded."] end
+	if session.paused then return false, L["The session is paused."] end
+	if session.timeUp then return false, L["The time to answer is up."] end
 	local payload = { item = item, response = id, gear = ALC.Gear:GetEquipped(target.itemString) }
 	payload.note = myNotes[item]
 	local sent = ALC.Comm:SendWhisper(session.lm, "RESPONSE", session.sid, payload)

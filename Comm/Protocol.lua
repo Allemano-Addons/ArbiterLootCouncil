@@ -165,6 +165,7 @@ local function checkCandidate(c, set)
 	if not ok then return fail(reason) end
 	ok, reason = checkRank(c)
 	if not ok then return fail(reason) end
+	if c.roll ~= nil and not isInt(c.roll, 1, 100) then return fail("bad roll") end
 	return checkGear(c.gear)
 end
 
@@ -190,6 +191,21 @@ specs.SESSION_START = {
 		ok, reason = checkNameList(p.council, C.MAX_COUNCIL, "council")
 		if not ok then return fail(reason) end
 		if not isName(p.lm) or not SameName(p.lm, sender) then return fail("lm does not match sender") end
+		-- The answer timer: how many seconds the players may answer. Absent = no timer.
+		if p.timer ~= nil and not isInt(p.timer, C.TIMER_MIN, C.TIMER_MAX) then return fail("bad timer") end
+		if p.paused ~= nil and type(p.paused) ~= "boolean" then return fail("bad paused") end
+		if p.rolls ~= nil and type(p.rolls) ~= "boolean" then return fail("bad rolls") end
+		-- In a snapshot: what is left of it (0 = the time is up).
+		if p.timerLeft ~= nil and not isInt(p.timerLeft, 0, C.TIMER_MAX) then return fail("bad timerLeft") end
+		return true
+	end,
+}
+
+-- The loot master pauses or resumes the session: no new answers, votes or awards while paused.
+specs.SESSION_PAUSE = {
+	allowed = "lm", channel = "GROUP", sid = "active", seq = true,
+	validate = function(p)
+		if type(p.paused) ~= "boolean" then return fail("bad paused") end
 		return true
 	end,
 }
@@ -244,6 +260,19 @@ specs.VOTE_UPDATE = {
 	end,
 }
 
+-- The loot master takes an award back (Undo award): the item is open again.
+specs.AWARD_REVOKE = {
+	allowed = "lm", channel = "GROUP", sid = "active", seq = true,
+	validate = function(p)
+		local ok, reason = checkItemIndex(p)
+		if not ok then return fail(reason) end
+		ok, reason = checkItem(p)
+		if not ok then return fail(reason) end
+		if not isName(p.winner) then return fail("bad winner") end
+		return true
+	end,
+}
+
 specs.AWARD = {
 	allowed = "lm", channel = "GROUP", sid = "active", seq = true,
 	validate = function(p)
@@ -252,7 +281,8 @@ specs.AWARD = {
 		ok, reason = checkItem(p)
 		if not ok then return fail(reason) end
 		if not isName(p.winner) then return fail("bad winner") end
-		if not isResponse(p.response) then return fail("bad response") end
+		-- An award to the disenchanter carries an answer that is not one of the buttons.
+		if p.response ~= C.DISENCHANT_ID and not isResponse(p.response) then return fail("bad response") end
 		return true
 	end,
 }

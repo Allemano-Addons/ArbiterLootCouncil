@@ -10,6 +10,9 @@
 --   ALC_SESSION_STARTED (session, restored)   a session began, or was restored from a snapshot
 --   ALC_SESSION_ENDED   (sid, reason, session)
 --   ALC_SESSION_ITEM_AWARDED (item, winner)   one item of the running session was awarded
+--   ALC_SESSION_ITEM_REVOKED (item, winner)   the loot master took an award back: the item is open again
+--   ALC_SESSION_TIMER_ENDED (session)   the answer timer ran out: players can no longer answer
+--       (the session itself goes on: the council still votes and awards)
 --   ALC_SESSION_SNAPSHOT_BUILD (payload, requester, isCouncil)
 --       loot master side: modules add their own fields to a STATE_SNAPSHOT payload
 --   ALC_SESSION_SNAPSHOT (payload, session)
@@ -38,6 +41,7 @@ local SNAPSHOT_WAIT = 15      -- seconds a snapshot is accepted after asking for
 local SNAPSHOT_COOLDOWN = 2   -- seconds between snapshots to the same player
 local RELOAD_SYNC_DELAY = 5   -- seconds after a reload before asking for state
 local RESTORE_DELAY = 3       -- seconds after a reload before the loot master restores its session
+local UNDO_GRACE = 90         -- seconds a session with every item awarded stays, for Undo award
 local MAX_SAVED_AGE = 6 * 3600 -- a saved session older than this is dropped
 
 local session               -- the active session, or nil
@@ -80,7 +84,19 @@ local function isMe(name)
 end
 
 local function makeSession(sid, p, restored)
+	-- The answer timer: a snapshot says what is left of it, a new session its whole length.
+	local timer = p.timer
+	local left = p.timerLeft or timer
+	local paused = p.paused == true
+	local timeUp = timer ~= nil and left <= 0
 	local s = {
+		timer = timer,
+		-- Paused: the time left is kept and the timer starts again on Resume.
+		endsAt = (timer and not paused) and (GetTime() + left) or nil,
+		pausedLeft = (timer and paused and not timeUp) and left or nil,
+		paused = paused,
+		rolls = p.rolls == true, -- the council gets a random roll per candidate
+		timeUp = timeUp,
 		sid = sid,
 		items = copyItems(itemsOf(p)),
 		responses = ALC.Responses.FromWire(p.responses),
@@ -111,6 +127,11 @@ local function saveSession()
 	if not session or not session.isLM then return end
 	local store = ALC.Settings:GetSessionStore()
 	store.session = {
+		timer = session.timer,
+		paused = session.paused or nil,
+		rolls = session.rolls or nil,
+		pausedLeft = session.pausedLeft,
+		endsAtEpoch = session.endsAt and (time() + math.ceil(session.endsAt - GetTime())) or nil,
 		sid = session.sid,
 		items = copyItems(session.items),
 		responses = ALC.Responses.ToWire(session.responses),
@@ -120,6 +141,43 @@ local function saveSession()
 	store.savedAt = time()
 end
 
+local function allAwarded()
+	if not session then return false end
+	for _, item in ipairs(session.items) do
+		if item.winner == nil then return false end
+	end
+	return true
+end
+
+-- The session with its last item awarded stays for a while, so a mistaken award can be
+-- undone with everybody's answers and votes still there. Then it ends.
+local function finishLater(sid)
+	session.finishing = true
+	session.finishEndsAt = GetTime() + UNDO_GRACE
+	C_Timer.After(UNDO_GRACE, function()
+		if session and session.sid == sid and allAwarded() then endSession("awarded") end
+	end)
+end
+
+local function timerEnded(sid)
+	if not session or session.sid ~= sid then return end
+	session.timeUp = true
+	Debug:Log("Sessions", "session %s: the answer timer ran out", sid)
+	ALC:Print(L["The time to answer is up."])
+	ALC.Events:Fire("ALC_SESSION_TIMER_ENDED", session)
+end
+
+-- Starts the answer timer for the seconds that are left. An older timer that is still
+-- waiting (before a pause, say) no longer counts.
+local timerGeneration = 0
+local function armTimer(sid, seconds)
+	timerGeneration = timerGeneration + 1
+	local mine = timerGeneration
+	C_Timer.After(math.max(0, seconds), function()
+		if mine == timerGeneration then timerEnded(sid) end
+	end)
+end
+
 local function beginSession(sid, p, restored)
 	if session then endSession("superseded") end
 	session, starting = makeSession(sid, p, restored), false
@@ -127,6 +185,21 @@ local function beginSession(sid, p, restored)
 	Debug:Log("Sessions", "session %s started for %d item(s) (lm %s, council %d, restored=%s)",
 		sid, #session.items, session.lm, #session.council, tostring(session.restored))
 	ALC.Events:Fire("ALC_SESSION_STARTED", session, session.restored)
+	if session and session.sid == sid and allAwarded() then finishLater(sid) end -- restored with nothing left open
+	if session.endsAt and session.sid == sid then
+		if session.timeUp then
+			Sessions:FireTimeUp(sid)
+		else
+			armTimer(sid, session.endsAt - GetTime())
+		end
+	end
+end
+
+-- A session that starts with its time already up (a snapshot or a reload late in the timer).
+function Sessions:FireTimeUp(sid)
+	if session and session.sid == sid then
+		ALC.Events:Fire("ALC_SESSION_TIMER_ENDED", session)
+	end
 end
 
 --------------------------------------------------------------------------------
@@ -171,7 +244,36 @@ function Sessions:GetSummary()
 	for _, item in ipairs(session.items) do
 		if item.winner == nil then open = open + 1 end
 	end
-	return { running = true, total = #session.items, open = open }
+	return { running = open > 0, total = #session.items, open = open }
+end
+
+-- Seconds left of the answer timer (0 when it ran out), or nil when the session has none.
+function Sessions:GetTimeLeft()
+	if not session or not session.timer then return nil end
+	if session.timeUp then return 0 end
+	if session.paused then return session.pausedLeft or 0 end
+	return math.max(0, session.endsAt - GetTime())
+end
+
+-- True when the loot master gave this session random rolls (the Roll column of the council).
+function Sessions:HasRolls()
+	return session ~= nil and session.rolls == true
+end
+
+-- True while the loot master has paused the session: no new answers, votes or awards.
+function Sessions:IsPaused()
+	return session ~= nil and session.paused == true
+end
+
+-- Seconds until a session with every item awarded closes (Undo award is possible until then), or nil.
+function Sessions:GetFinishLeft()
+	if not session or not session.finishing or not session.finishEndsAt then return nil end
+	return math.max(0, session.finishEndsAt - GetTime())
+end
+
+-- True once the answer timer has run out.
+function Sessions:IsTimeUp()
+	return session ~= nil and session.timeUp == true
 end
 
 function Sessions:GetItemCount()
@@ -207,7 +309,7 @@ function Sessions:StartItems(list)
 	if not name or not ALC.Council:IsLootMaster(name) then
 		return false, L["You are not the loot master."]
 	end
-	if session or starting then
+	if (session and not session.finishing) or starting then
 		return false, L["A session is already active. Cancel it first with /alc cancel."]
 	end
 	if type(list) ~= "table" or #list == 0 then
@@ -232,6 +334,8 @@ function Sessions:StartItems(list)
 		responses = ALC.Responses.ToWire(ALC.Responses:GetConfiguredSet()),
 		council = ALC.Council:BuildSessionList(name),
 		lm = name,
+		timer = ALC.Settings:GetActiveTimer(),
+		rolls = ALC.Settings:GetRollsEnabled() or nil,
 	})
 	if not ok then
 		starting = false
@@ -243,6 +347,22 @@ end
 -- Starts a session for one item.
 function Sessions:Start(item)
 	return self:StartItems({ item })
+end
+
+-- Pauses (true) or resumes (false) the session for everybody. Returns true, or false and a message.
+function Sessions:SetPaused(paused)
+	if not session then return false, L["There is no active session."] end
+	if not session.isLM or not ALC.Council:AmLootMaster() then
+		return false, L["Only the loot master can pause the session."]
+	end
+	if session.finishing then return false, L["Everything is awarded: there is nothing to pause."] end
+	if (session.paused == true) == (paused == true) then
+		return false, paused and L["The session is already paused."] or L["The session is not paused."]
+	end
+	if not ALC.Comm:SendRaid("SESSION_PAUSE", session.sid, { paused = paused and true or false }) then
+		return false, L["Could not pause the session. See /alc debug log."]
+	end
+	return true
 end
 
 function Sessions:Cancel(reason)
@@ -294,10 +414,43 @@ local function onAward(_, _, sid, p)
 	saveSession()
 	Debug:Log("Sessions", "item %d awarded to %s", p.item, p.winner)
 	ALC.Events:Fire("ALC_SESSION_ITEM_AWARDED", p.item, p.winner)
-	for _, other in ipairs(session.items) do
-		if other.winner == nil then return end
+	if session and session.sid == sid and allAwarded() then finishLater(sid) end
+end
+
+-- The loot master paused or resumed the session (every client, the loot master included).
+local function onSessionPause(_, _, sid, p)
+	if not session or session.sid ~= sid or session.paused == p.paused then return end
+	if p.paused then
+		if session.endsAt and not session.timeUp then
+			session.pausedLeft = math.max(0, session.endsAt - GetTime())
+			session.endsAt = nil
+		end
+		timerGeneration = timerGeneration + 1 -- the running timer must not fire now
+	elseif session.pausedLeft then
+		session.endsAt = GetTime() + session.pausedLeft
+		armTimer(sid, session.pausedLeft)
+		session.pausedLeft = nil
 	end
-	endSession("awarded")
+	session.paused = p.paused
+	saveSession()
+	Debug:Log("Sessions", "session %s %s", sid, p.paused and "paused" or "resumed")
+	ALC:Print(p.paused and L["The loot master paused the session."] or L["The session goes on."])
+	ALC.Events:Fire("ALC_SESSION_PAUSED", p.paused)
+end
+
+-- The loot master took an award back: the item is open again.
+local function onAwardRevoke(_, _, sid, p)
+	local item = session and session.sid == sid and session.items[p.item]
+	if not item then return end
+	if item.winner == nil or item.itemID ~= p.itemID or not ALC:SameName(item.winner, p.winner) then
+		Debug:Warn("Sessions", "ignored a revoke for item %d that does not fit the session", p.item)
+		return
+	end
+	item.winner = nil
+	session.finishing, session.finishEndsAt = false, nil
+	saveSession()
+	Debug:Log("Sessions", "award of item %d to %s revoked", p.item, p.winner)
+	ALC.Events:Fire("ALC_SESSION_ITEM_REVOKED", p.item, p.winner)
 end
 
 local function onStateRequest(_, sender)
@@ -316,6 +469,18 @@ local function onStateRequest(_, sender)
 		council = copyList(session.council),
 		lm = session.lm,
 	}
+	if session.timer then
+		payload.timer = session.timer
+		if session.timeUp then
+			payload.timerLeft = 0
+		elseif session.paused then
+			payload.timerLeft = math.ceil(session.pausedLeft or 0)
+		else
+			payload.timerLeft = math.max(0, math.ceil(session.endsAt - GetTime()))
+		end
+	end
+	if session.paused then payload.paused = true end
+	if session.rolls then payload.rolls = true end
 	ALC.Events:Fire("ALC_SESSION_SNAPSHOT_BUILD", payload, sender, isCouncil)
 	ALC.Comm:SendWhisper(sender, "STATE_SNAPSHOT", session.sid, payload)
 end
@@ -360,6 +525,13 @@ function Sessions:RestoreSaved()
 		Debug:Log("Sessions", "kept the saved session %s: we are not its loot master now", tostring(saved.sid))
 		return false
 	end
+	if saved.timer and saved.paused and saved.pausedLeft then
+		saved.timerLeft = math.min(saved.timer, math.max(0, math.ceil(saved.pausedLeft)))
+	elseif saved.timer and saved.endsAtEpoch then
+		saved.timerLeft = math.min(saved.timer, math.max(0, saved.endsAtEpoch - time()))
+	else
+		saved.timer = nil
+	end
 	beginSession(saved.sid, saved, true)
 	ALC.Events:Fire("ALC_SESSION_RESTORED", session)
 	return true
@@ -381,6 +553,8 @@ function Sessions:Init()
 	register(self, "ALC_COMM_SESSION_START", onSessionStart)
 	register(self, "ALC_COMM_SESSION_CANCEL", onSessionCancel)
 	register(self, "ALC_COMM_AWARD", onAward)
+	register(self, "ALC_COMM_AWARD_REVOKE", onAwardRevoke)
+	register(self, "ALC_COMM_SESSION_PAUSE", onSessionPause)
 	register(self, "ALC_COMM_STATE_REQUEST", onStateRequest)
 	register(self, "ALC_COMM_STATE_SNAPSHOT", onStateSnapshot)
 	register(self, "ALC_COUNCIL_LM_CHANGED", onLootMasterChanged)
@@ -405,6 +579,10 @@ ALC.Commands:Register("start", function(arg)
 	end
 	say(Sessions:Start(arg))
 end, L["start a session for an item (loot master)"])
+
+ALC.Commands:Register("pause", function()
+	say(Sessions:SetPaused(not Sessions:IsPaused()))
+end, L["pause or resume the session (loot master)"])
 
 ALC.Commands:Register("cancel", function()
 	say(Sessions:Cancel("cancelled"))

@@ -17,7 +17,23 @@ local SettingsWindow = {}
 ALC.SettingsWindow = SettingsWindow
 LibStub("AceEvent-3.0"):Embed(SettingsWindow)
 SettingsWindow.rows = {}
-SettingsWindow.qualityButtons = {}
+local function qualityName(quality)
+	return _G["ITEM_QUALITY" .. quality .. "_DESC"] or tostring(quality)
+end
+
+-- The list of qualities for the loot threshold drop-down.
+function SettingsWindow:OpenQualityMenu()
+	local current = ALC.Settings:GetQualityThreshold()
+	local items = {}
+	for quality = 0, 5 do
+		items[#items + 1] = {
+			label = qualityName(quality) .. (quality == current and "  \226\128\162" or ""),
+			color = UI.QualityColor(quality),
+			onClick = function() ALC.Settings:SetQualityThreshold(quality) end,
+		}
+	end
+	ALC.ContextMenu:Open(items, L["Loot quality threshold"])
+end
 
 local frame, offset = nil, 0
 local feedback -- the last message about the council list, shown under the input
@@ -73,6 +89,28 @@ local function addName(text)
 	else
 		setFeedback(REASONS[reason] or REASONS.invalid)
 	end
+end
+
+-- The disenchanter: the name typed, the target, or nothing (clears it).
+local deFeedback
+local function setDisenchanter(text)
+	text = strtrim(text or "")
+	local ok = ALC.Settings:SetDisenchanter(text)
+	deFeedback = (not ok) and L["That is not a valid name."] or nil
+	if ok and frame and frame.deInput then
+		frame.deInput:SetText("")
+		frame.deInput.placeholder:Show()
+	end
+	SettingsWindow:Refresh()
+end
+
+local function setDisenchanterTarget()
+	if not UnitIsPlayer("target") then
+		deFeedback = L["Target a player first."]
+		SettingsWindow:Refresh()
+		return
+	end
+	setDisenchanter(ALC:UnitFullName("target") or "")
 end
 
 local function addTarget()
@@ -275,19 +313,11 @@ local function build()
 	thresholdLabel:SetText(L["Loot quality threshold"])
 	y = y + 22
 
-	local qualityGap = 6
-	local width = math.floor((WIDTH - 2 * PAD - 5 * qualityGap) / 6)
-	for quality = 0, 5 do
-		local label = _G["ITEM_QUALITY" .. quality .. "_DESC"] or tostring(quality)
-		local button = into("lm", UI.NewButton(frame, width, 30, label, function()
-			ALC.Settings:SetQualityThreshold(quality)
-		end))
-		button:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD + quality * (width + qualityGap), -y)
-		local qc = UI.QualityColor(quality)
-		button.label:SetTextColor(qc[1], qc[2], qc[3], 1)
-		button.quality = quality
-		SettingsWindow.qualityButtons[quality + 1] = button
-	end
+	-- A drop-down: the button shows the threshold, a click opens the list of qualities.
+	frame.qualityButton = into("lm", UI.NewButton(frame, WIDTH - 2 * PAD, 30, "", function()
+		SettingsWindow:OpenQualityMenu()
+	end))
+	frame.qualityButton:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
 	y = y + 42
 
 	frame.autoOpen = into("lm", UI.NewCheckbox(frame, L["Open the loot window when items arrive"], function(checked)
@@ -296,11 +326,42 @@ local function build()
 	frame.autoOpen:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
 	y = y + 32
 
-	frame.announce = into("lm", UI.NewCheckbox(frame, L["Announce awards in raid chat"], function(checked)
+	frame.announce = into("lm", UI.NewCheckbox(frame, L["Announce awards in chat (raid chat in a raid, party chat in a party)"], function(checked)
 		ALC.Settings:SetAnnounceAwards(checked)
 	end))
 	frame.announce:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
+	y = y + 32
+
+	frame.autoTrade = into("lm", UI.NewCheckbox(frame, L["Put won items in the trade window when the winner trades with you"], function(checked)
+		ALC.Settings:SetAutoTrade(checked)
+	end))
+	frame.autoTrade:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
+	y = y + 32
+
+	-- A random roll per candidate and item, for the council to choose by when it cannot decide.
+	frame.rolls = into("lm", UI.NewCheckbox(frame, L["Random rolls for the council"], function(checked)
+		ALC.Settings:SetRollsEnabled(checked)
+	end))
+	frame.rolls:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
 	y = y + 38
+
+	-- The disenchanter: gets the items nobody wants (the Disenchant button of the voting window).
+	local deLabel = into("lm", UI.NewText(frame, 12, c.text))
+	deLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
+	deLabel:SetText(L["Disenchanter: gets the items nobody wants"])
+	y = y + 22
+	frame.deInput = into("lm", UI.NewEditBox(frame, 200, 30, L["Player name (First Last)"], setDisenchanter))
+	frame.deInput:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
+	frame.deSet = into("lm", UI.NewButton(frame, 60, 30, L["Set"], function() setDisenchanter(frame.deInput:GetText()) end))
+	frame.deSet:SetPoint("LEFT", frame.deInput, "RIGHT", 8, 0)
+	frame.deTarget = into("lm", UI.NewButton(frame, 100, 30, L["Use target"], setDisenchanterTarget))
+	frame.deTarget:SetPoint("LEFT", frame.deSet, "RIGHT", 8, 0)
+	frame.deClear = into("lm", UI.NewButton(frame, 60, 30, L["Clear"], function() setDisenchanter("") end))
+	frame.deClear:SetPoint("LEFT", frame.deTarget, "RIGHT", 8, 0)
+	y = y + 36
+	frame.deCurrent = into("lm", UI.NewText(frame, 12, c.muted))
+	frame.deCurrent:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
+	y = y + 28
 
 	-- How far back the council sees what a player was awarded (the Recent column).
 	local recentLabel = into("lm", UI.NewText(frame, 12, c.text))
@@ -318,6 +379,27 @@ local function build()
 		SettingsWindow.recentButtons[i] = button
 	end
 	y = y + 42
+
+	-- The answer timer: when it runs out the response window closes for the players.
+	frame.timerCheck = into("lm", UI.NewCheckbox(frame, "", function(checked)
+		ALC.Settings:SetTimerEnabled(checked)
+	end))
+	frame.timerCheck:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
+	y = y + 30
+	SettingsWindow.timerButtons = {}
+	local presets = ALC.Settings.TIMER_PRESETS
+	local timerWidth = math.floor((WIDTH - 2 * PAD - (#presets - 1) * 6) / #presets)
+	for i, seconds in ipairs(presets) do
+		local button = into("lm", UI.NewButton(frame, timerWidth, 30, string.format(L["%d sec"], seconds), function()
+			ALC.Settings:SetTimerSeconds(seconds)
+		end))
+		button:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD + (i - 1) * (timerWidth + 6), -y)
+		button.seconds = seconds
+		SettingsWindow.timerButtons[i] = button
+	end
+	y = y + 38
+	paragraph("lm", y, L["When the time is up the response window closes for everybody. The council can still vote and award."])
+	y = y + 40
 	heights.lm = y + 40
 
 	-- Council ---------------------------------------------------------------------
@@ -328,7 +410,8 @@ local function build()
 		ALC.Settings:SetKeepCouncilOpen(checked)
 	end))
 	frame.keepOpen:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
-	y = y + 40
+	y = y + 32
+	y = y + 8
 	frame.councilHint = paragraph("council", y, L["Sorting, compact rows and the number of rows are set in the voting window itself. Right-click a player there for more."])
 	y = y + 50
 	heights.council = y + 40
@@ -695,9 +778,9 @@ function SettingsWindow:Refresh()
 	frame.feedback:SetText(feedback or "")
 
 	local threshold = settings:GetQualityThreshold()
-	for _, button in ipairs(self.qualityButtons) do
-		button:SetSelected(button.quality == threshold)
-	end
+	frame.qualityButton:SetLabel(qualityName(threshold))
+	local qc = UI.QualityColor(threshold)
+	frame.qualityButton.label:SetTextColor(qc[1], qc[2], qc[3], 1)
 	local buttons = ALC.Responses:GetConfiguredSet()
 	frame.responseCount:SetText(string.format("%d/%d", #buttons, ALC.Constants.MAX_RESPONSES))
 	for i, row in ipairs(self.responseRows) do
@@ -717,10 +800,25 @@ function SettingsWindow:Refresh()
 	frame.responseFeedback:SetText(responseFeedback or "")
 	frame.autoOpen:SetChecked(settings:GetAutoOpenLootWindow())
 	frame.announce:SetChecked(settings:GetAnnounceAwards())
+	frame.autoTrade:SetChecked(settings:GetAutoTrade())
+	frame.timerCheck:SetChecked(settings:GetTimerEnabled())
+	frame.timerCheck.label:SetText(settings:GetTimerEnabled()
+		and string.format(L["Answer timer: On, %d sec"], settings:GetTimerSeconds()) or L["Answer timer: Off"])
+	for _, button in ipairs(self.timerButtons) do button:SetSelected(button.seconds == settings:GetTimerSeconds()) end
 	frame.compact:SetChecked(settings:GetCompact())
 	for _, button in ipairs(self.recentButtons) do button:SetSelected(button.days == settings:GetRecentDays()) end
 	frame.minimap:SetChecked(not settings:IsMinimapHidden())
 	frame.keepOpen:SetChecked(settings:GetKeepCouncilOpen())
+	frame.rolls:SetChecked(settings:GetRollsEnabled())
+	local disenchanter = settings:GetDisenchanter()
+	if deFeedback then
+		frame.deCurrent:SetTextColor(c.danger[1], c.danger[2], c.danger[3], 1)
+		frame.deCurrent:SetText(deFeedback)
+	else
+		frame.deCurrent:SetTextColor(c.muted[1], c.muted[2], c.muted[3], 1)
+		frame.deCurrent:SetText(disenchanter and (L["Disenchanter"] .. ": " .. disenchanter) or L["No disenchanter set."])
+	end
+	frame.deClear:SetAvailable(disenchanter ~= nil)
 	frame.debug:SetChecked(settings:IsDebug())
 	frame.fontButton:SetLabel(UI.FontName(settings:GetFont()))
 	refreshFontMenu()

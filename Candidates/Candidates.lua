@@ -40,7 +40,7 @@ end
 local function copyEntry(entry, item)
 	return {
 		item = item or entry.item, name = entry.name, class = entry.class, response = entry.response, gear = copyGear(entry.gear),
-		note = entry.note, rank = entry.rank, rankIndex = entry.rankIndex,
+		note = entry.note, rank = entry.rank, rankIndex = entry.rankIndex, roll = entry.roll,
 	}
 end
 
@@ -90,7 +90,7 @@ local function upsert(item, entry)
 	if index then
 		local old = list[index]
 		if old.response == entry.response and old.class == entry.class and sameGear(old.gear, entry.gear)
-			and old.note == entry.note and old.rank == entry.rank and old.rankIndex == entry.rankIndex then
+			and old.note == entry.note and old.rank == entry.rank and old.rankIndex == entry.rankIndex and old.roll == entry.roll then
 			return false
 		end
 		list[index] = copyEntry(entry, item)
@@ -168,10 +168,34 @@ local function send(session, item, entry)
 	ALC.Comm:SendCouncil(ALC.Council:GetReachableCouncil(), "CANDIDATE_UPDATE", session.sid, copyEntry(entry, item))
 end
 
+-- The random roll of a new candidate: 1 to 100, and a number nobody else of the item has
+-- while there is one left (so the highest roll is always one player).
+local function pickRoll(item)
+	local used = {}
+	for _, entry in ipairs(lists[item] or {}) do
+		if entry.roll then used[entry.roll] = true end
+	end
+	local roll = math.random(1, 100)
+	for _ = 1, 200 do
+		if not used[roll] then break end
+		roll = math.random(1, 100)
+	end
+	return roll
+end
+
 local function onResponse(_, sender, _, p)
 	local session = ALC.Sessions:GetSession()
 	if not session or not session.isLM then return end
 	if not ALC.Sessions:IsItemOpen(p.item) then return end -- already awarded
+	if session.paused then
+		Debug:Log("Candidates", "response from %s ignored (the session is paused)", sender)
+		return
+	end
+	-- After the answer timer: only what was sent just before it ran out (a moment for the whisper to arrive).
+	if session.timeUp and GetTime() - session.endsAt > 3 then
+		Debug:Log("Candidates", "late response from %s ignored (the timer ran out)", sender)
+		return
+	end
 
 	local unit = ALC:FindUnitByName(sender)
 	local class = unit and select(2, UnitClass(unit))
@@ -182,6 +206,9 @@ local function onResponse(_, sender, _, p)
 
 	local rank, rankIndex = ALC:GetGuildRank(unit)
 	local entry = { name = sender, class = class, response = p.response, gear = p.gear, note = p.note, rank = rank, rankIndex = rankIndex }
+	-- The roll is made once, when the player first answers the item; a new answer keeps it.
+	local known = lists[p.item] and lists[p.item][findIndex(lists[p.item], sender) or 0]
+	entry.roll = known and known.roll or (session.rolls and pickRoll(p.item) or nil)
 	if not upsert(p.item, entry) then return end -- nothing new: council already knows
 	Debug:Log("Candidates", "item %d, %s: %s", p.item, sender, p.response)
 	send(session, p.item, entry)

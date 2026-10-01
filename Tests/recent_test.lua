@@ -291,44 +291,64 @@ return function(check, H)
 	ALC.Sessions:Cancel("done")
 
 	----------------------------------------------------------------------------
-	-- The History filter
+	-- The History: dates, search
 	----------------------------------------------------------------------------
 	H.reload("fresh")
 	leader = ME
 	world()
 	Awards, Win, Settings = ALC.Awards, ALC.CouncilWindow, ALC.Settings
-	local function addLog(winner, days)
+	local function addLog(winner, days, itemID, zone)
 		local l = Awards:GetLog()
-		l[#l + 1] = { itemID = 200, itemString = "item:200", winner = winner, class = "WARRIOR", response = "BIS", votes = 0, sid = "x", lm = ME,
-			time = time() - days * DAY - 30, zone = "Test" }
+		l[#l + 1] = { itemID = itemID or 200, itemString = "item:" .. (itemID or 200), winner = winner, class = "WARRIOR", response = "BIS", responseLabel = "BiS",
+			votes = 0, sid = "x", lm = ME, time = time() - days * DAY - 30, zone = zone or "Test" }
 	end
-	addLog("F Moo", 200) addLog("E Moo", 60) addLog("D Moo", 20) addLog("C Moo", 10) addLog("B Moo", 6) addLog("A Moo", 1) -- oldest first, as the log is written
-	check("all awards are shown by default", #Win:GetHistory() == 6 and Win:GetHistoryDays() == nil)
-	check("newest first", Win:GetHistory()[1].winner == "A Moo" and Win:GetHistory()[6].winner == "F Moo")
-	check("7 days", Win:SetHistoryDays(7) == true and #Win:GetHistory() == 2 and Win:GetHistoryDays() == 7)
-	check("14 days", Win:SetHistoryDays(14) == true and #Win:GetHistory() == 3)
-	check("30 days", Win:SetHistoryDays(30) == true and #Win:GetHistory() == 4)
-	check("90 days", Win:SetHistoryDays(90) == true and #Win:GetHistory() == 5)
-	check("back to all", Win:SetHistoryDays(nil) == true and #Win:GetHistory() == 6 and Win:GetHistoryDays() == nil)
-	check("another number is refused", Win:SetHistoryDays(45) == false and Win:GetHistoryDays() == nil)
-	Win:SetHistoryDays(30)
-	check("the choice is saved", Settings:GetWindowOption("council", "historyDays") == 30)
-	Settings:SetWindowOption("council", "historyDays", 45)
-	check("a damaged saved choice means all", Win:GetHistoryDays() == nil and #Win:GetHistory() == 6)
-	Win:SetHistoryDays(30)
-	check("the log itself is untouched", #Awards:GetLog() == 6)
+	addLog("F Moo", 200) addLog("E Moo", 60) addLog("D Moo", 20) addLog("C Moo", 10, 201, "Karazhan")
+	addLog("B Moo", 6) addLog("A Moo", 1) addLog("A Moo", 1, 201) -- oldest first, as the log is written
+	check("all awards are shown by default", #Win:GetHistory() == 7 and Win:GetSelectedDates() == nil)
+	check("newest first", Win:GetHistory()[1].winner == "A Moo" and Win:GetHistory()[7].winner == "F Moo")
+	local dates = Awards:GetDates()
+	check("the dates are listed newest first, with counts", #dates == 6 and dates[1].count == 2 and dates[1].key > dates[2].key)
+
+	Win:ToggleHistoryDate(dates[1].key)
+	check("picking a date shows only that day", #Win:GetHistory() == 2 and Win:GetSelectedDates()[dates[1].key] == true)
+	Win:ToggleHistoryDate(dates[3].key)
+	check("several dates can be picked", #Win:GetHistory() == 3)
+	Win:ToggleHistoryDate(dates[1].key)
+	check("picking it again drops it", #Win:GetHistory() == 1 and Win:GetHistory()[1].winner == "C Moo")
+	Win:ClearHistoryDates()
+	check("All dates clears the pick", #Win:GetHistory() == 7 and Win:GetSelectedDates() == nil)
+
+	Win:SetHistorySearch("a moo")
+	check("search finds a player, without regard to case", #Win:GetHistory() == 2)
+	Win:SetHistorySearch("karazhan")
+	check("search finds a zone", #Win:GetHistory() == 1 and Win:GetHistory()[1].winner == "C Moo")
+	Win:SetHistorySearch("crown")
+	check("search finds an item by name", #Win:GetHistory() >= 1 and Win:GetHistory()[1].itemID == 200)
+	Win:SetHistorySearch("zzz")
+	check("nothing matches", #Win:GetHistory() == 0)
+	Win:SetHistorySearch("")
+	Win:ToggleHistoryDate(dates[1].key)
+	Win:SetHistorySearch("belt")
+	check("search and date work together", #Win:GetHistory() == 1 and Win:GetHistory()[1].itemID == 201)
+	Win:SetHistorySearch("")
+	Win:ClearHistoryDates()
+	check("the log itself is untouched", #Awards:GetLog() == 7)
 
 	Win:ShowHistory()
 	local frame = Win.historyRows[1].parent
-	check("five filter buttons in the footer", #frame.historyFilters == 5 and frame.historyFilters[1].label:GetText() == "All"
-		and frame.historyFilters[3].label:GetText() == "14 d" and frame.historyFilters[5].label:GetText() == "90 d")
-	check("the chosen one is marked", frame.historyFilters[4].selected == true and frame.historyFilters[1].selected == false)
-	check("the count says what it covers", frame.historyCount:GetText() == "4 awards \194\183 last 30 days")
-	frame.historyFilters[2].scripts.OnClick(frame.historyFilters[2])
-	check("a click changes the filter and the list", Win:GetHistoryDays() == 7 and frame.historyFilters[2].selected == true and frame.historyCount:GetText() == "2 awards \194\183 last 7 days"
-		and Win.historyRows[1]:IsShown() and Win.historyRows[2]:IsShown() and not Win.historyRows[3]:IsShown())
-	frame.historyFilters[1].scripts.OnClick(frame.historyFilters[1])
-	check("All shows everything again", frame.historyCount:GetText() == "6 awards" and Win.historyRows[6]:IsShown())
+	check("the date list has All dates first", frame.dateRows[1].label:GetText() == "All dates" and frame.dateRows[1].count:GetText() == "7")
+	check("then the days", frame.dateRows[2].label:GetText() == dates[1].key and frame.dateRows[2].count:GetText() == "2")
+	check("the list is marked: All dates is the pick", frame.dateRows[1].picked == true and frame.dateRows[2].picked == false)
+	frame.dateRows[2].scripts.OnClick(frame.dateRows[2])
+	check("a click picks the day", Win:GetSelectedDates()[dates[1].key] == true and frame.dateRows[2].picked == true and frame.dateRows[1].picked == false)
+	check("the count says what it covers", frame.historyCount:GetText() == "2 awards \194\183 1 date")
+	check("Clear now means the picked dates", frame.historyClear.label:GetText() == "Clear dates")
+	frame.dateRows[1].scripts.OnClick(frame.dateRows[1])
+	check("All dates shows everything again", frame.historyCount:GetText() == "7 awards" and Win.historyRows[7]:IsShown())
+	frame.historySearch:SetText("karazhan")
+	frame.historySearch.scripts.OnTextChanged(frame.historySearch)
+	check("typing in the search field filters", frame.historyCount:GetText():find("^1 award") ~= nil and not Win.historyRows[2]:IsShown())
+	Win:SetHistorySearch("")
 	Win:Hide()
 
 	----------------------------------------------------------------------------

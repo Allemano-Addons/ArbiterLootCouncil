@@ -218,7 +218,7 @@ local function build()
 	frame.empty:SetWordWrap(true)
 	frame.empty:SetText(L["No items yet. Loot a boss as loot master, or add one with /alc add [item]."])
 
-	-- The last announcement in raid chat, as a preview under the list.
+	-- The last announcement in raid or party chat, as a preview under the list.
 	frame.chatLabel = UI.NewText(frame, 11, c.muted)
 	frame.chatLabel:SetText(strupper(L["Raid chat"]))
 	frame.chatBox = CreateFrame("Frame", nil, frame)
@@ -242,18 +242,25 @@ local function build()
 	frame.hint = UI.NewText(frame, 13, c.muted)
 	frame.hint:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", PAD, 22)
 
-	frame.cancel = UI.NewButton(frame, 150, 40, L["Cancel session"], function()
+	frame.cancel = UI.NewButton(frame, 120, 30, L["Cancel session"], function()
 		local ok, message = ALC.Sessions:Cancel("cancelled")
 		if not ok and message then ALC:Print(message) end
 	end)
-	frame.startAll = UI.NewButton(frame, 130, 40, L["Start all"], function()
+	frame.startAll = UI.NewButton(frame, 100, 30, L["Start all"], function()
 		local ok, message = ALC.LootDetection:StartAll()
 		if not ok and message then ALC:Print(message) end
 	end)
-	frame.startAll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -PAD, 12)
+	frame.startAll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -PAD, 17)
 	frame.startAll:SetSelected(true)
 	frame.startAll.label:SetTextColor(c.gold[1], c.gold[2], c.gold[3], 1)
-	frame.cancel:SetPoint("RIGHT", frame.startAll, "LEFT", -10, 0)
+	frame.cancel:SetPoint("RIGHT", frame.startAll, "LEFT", -8, 0)
+	-- Takes the finished (awarded) items off the list; items still to trade stay.
+	frame.clearDone = UI.NewButton(frame, 92, 30, L["Clear done"], function()
+		ALC:Print(L["Removed %d finished item(s)."], ALC.LootDetection:ClearFinished())
+	end)
+	frame.clearDone:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", PAD, 17)
+	frame.hint:ClearAllPoints()
+	frame.hint:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", PAD, 48)
 
 	for i = 1, POOL do
 		LootWindow.rows[i] = newRow(i)
@@ -406,6 +413,12 @@ function LootWindow:Refresh()
 
 	frame.empty:SetShown(count == 0)
 	frame.hint:SetText(sessionActive and L["In session"] or "")
+	local finished = 0
+	for _, entry in ipairs(items) do
+		if entry.status == LootDetection.STATUS.AWARDED then finished = finished + 1 end
+	end
+	frame.clearDone:SetLabel(finished > 0 and string.format("%s (%d)", L["Clear done"], finished) or L["Clear done"])
+	frame.clearDone:SetAvailable(finished > 0)
 	frame.cancel:SetAvailable(sessionActive and session.isLM)
 	local waiting = #LootDetection:GetPending()
 	frame.startAll:SetLabel(waiting > 1 and string.format("%s (%d)", L["Start all"], waiting) or L["Start all"])
@@ -419,7 +432,8 @@ function LootWindow:Refresh()
 	frame.scroll:Update(count, rowsAllowed, offset)
 
 	-- The chat preview sits under the list once something has been announced.
-	frame.chatLabel:SetText(strupper(ALC.Settings:GetAnnounceAwards() and L["Raid chat"] or L["Raid chat (not announced)"]))
+	frame.chatLabel:SetText(strupper(IsInRaid() and (ALC.Settings:GetAnnounceAwards() and L["Raid chat"] or L["Raid chat (not announced)"])
+		or (ALC.Settings:GetAnnounceAwards() and L["Party chat"] or L["Party chat (not announced)"])))
 	local announcement = ALC.Awards:GetLastAnnouncement()
 	local extra = 0
 	frame.chatLabel:ClearAllPoints()
