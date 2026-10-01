@@ -390,10 +390,27 @@ function Awards:Revoke(item)
 	return true, winner, handedOut
 end
 
+-- Notes in the log that the winner now has the item (a trade went through, or the game handed it
+-- over). Looks at the newest awards of that item to that player that were not delivered yet.
+-- Returns the log record, or nil when there is none.
+function Awards:MarkDelivered(itemID, winner)
+	local log = ALC.Settings:GetAwardLog()
+	for i = #log, math.max(1, #log - 200), -1 do
+		local r = log[i]
+		if not r.revoked and not r.deliveredAt and r.itemID == itemID and ALC:SameName(r.winner, winner) then
+			r.deliveredAt = time()
+			ALC.Events:Fire("ALC_AWARDS_DELIVERED", r)
+			return r
+		end
+	end
+end
+
 -- The loot slot emptied: the game handed the item over.
 function Awards:OnLootSlotCleared(slot)
 	if pendingGive and pendingGive.slot == slot then
 		Debug:Log("Awards", "slot %d emptied: %s was handed out", slot, pendingGive.winner)
+		local _, itemID = ALC:ParseItem(pendingGive.itemString)
+		if itemID then Awards:MarkDelivered(itemID, pendingGive.winner) end
 		pendingGive = nil
 	end
 end

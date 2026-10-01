@@ -125,6 +125,19 @@ local function bagCount(itemID)
 	return total
 end
 
+-- Says in the chat which item went to whom: to the group (as the awards are, when announcing is on)
+-- and otherwise only to ourselves.
+function Trades:AnnounceDelivery(itemID, partner)
+	local link = select(2, ALC:GetItemInfo(itemID)) or ("item:" .. itemID)
+	local text = format("[ALC] %s", format(L["%s handed to %s."], link, partner))
+	local channel = (IsInRaid and IsInRaid() and "RAID") or (IsInGroup and IsInGroup() and "PARTY") or nil
+	if channel and SendChatMessage and ALC.Settings:GetAnnounceAwards() then
+		SendChatMessage(text, channel)
+	else
+		ALC:Print(text)
+	end
+end
+
 -- Both sides accepted: remember what we give and to whom.
 function Trades:OnTradeAcceptUpdate(playerAccepted, targetAccepted)
 	if not (isOn(playerAccepted) and isOn(targetAccepted)) then return end
@@ -146,16 +159,24 @@ function Trades:OnTradeComplete()
 	offered = nil
 	if not snapshot or not snapshot.partner then return 0 end
 
+	-- Every item that left in the trade is looked up twice: in the queue, and in the award log, so
+	-- the delivery is known also when the queue was cleared or never held the item.
 	local delivered = 0
 	local pending = self:GetPending()
 	for _, itemID in ipairs(snapshot.items) do
+		local known = false
 		for index, entry in ipairs(pending) do
 			if entry.itemID == itemID and ALC:SameName(entry.winner, snapshot.partner) then
 				ALC.LootDetection:SetStatus(entry.id, status().AWARDED)
 				table.remove(pending, index)
-				delivered = delivered + 1
+				known = true
 				break
 			end
+		end
+		if ALC.Awards:MarkDelivered(itemID, snapshot.partner) then known = true end
+		if known then
+			delivered = delivered + 1
+			Trades:AnnounceDelivery(itemID, snapshot.partner)
 		end
 	end
 	if delivered > 0 then

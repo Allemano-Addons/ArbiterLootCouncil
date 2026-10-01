@@ -525,6 +525,16 @@ return function(check, H)
 	check("a completed trade delivers the item", Trades:OnTradeComplete() == 1 and Trades:GetPendingCount() == 1)
 	check("to the right winner: Jonatan's item is still waiting", Trades:GetPending()[1].winner == "Jonatan Moo")
 	check("and says so", H.chat[#H.chat]:find("delivered to Veyra Moo", 1, true) ~= nil and #H.chat > chatCount)
+	local said = false
+	for _, line in ipairs(H.chat) do if line:find("handed to Veyra Moo", 1, true) then said = true end end
+	for _, line in ipairs(H.said) do if line.text:find("handed to Veyra Moo", 1, true) then said = true end end
+	check("each item is named in the chat", said)
+	local log = ALC.Settings:GetAwardLog()
+	local deliveredRecord
+	for i = #log, 1, -1 do
+		if log[i].itemID == 200 and ALC:SameName(log[i].winner, "Veyra Moo") and log[i].deliveredAt then deliveredRecord = log[i] break end
+	end
+	check("and the award log notes the delivery", deliveredRecord ~= nil)
 	check("the same trade cannot count twice", Trades:OnTradeComplete() == 0)
 
 	units.NPC = { "Kaelis", "Moo", "HUNTER" }
