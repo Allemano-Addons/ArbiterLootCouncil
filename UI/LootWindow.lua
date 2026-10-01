@@ -133,6 +133,7 @@ function LootWindow.EnsureRows(count)
 		local row = newRow(i)
 		row.iconFrame:SetSize(ICON, ICON)
 		row.start:SetSize(layoutCompact and 64 or 76, layoutCompact and 24 or 34)
+		row:Hide() -- a row shows itself when it has an item to show
 		LootWindow.rows[i] = row
 	end
 end

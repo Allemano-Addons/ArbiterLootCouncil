@@ -140,6 +140,7 @@ function ResponseWindow.EnsureRows(count)
 	for i = #ResponseWindow.rows + 1, math.min(POOL, count) do
 		local row = newRow(i)
 		layoutRowDensity(row, i)
+		row:Hide() -- a row shows itself when it has an item to show
 		ResponseWindow.rows[i] = row
 		setKey = "" -- the buttons are laid out again for the new row
 	end

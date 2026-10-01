@@ -311,6 +311,7 @@ function CouncilWindow.EnsureRows(count)
 	for i = #CouncilWindow.rows + 1, min(POOL, count) do
 		local row = newRow(i)
 		layoutRow(row, i, layoutCompact == true)
+		row:Hide() -- a row shows itself when it has a candidate to show
 		CouncilWindow.rows[i] = row
 	end
 end
