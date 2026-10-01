@@ -218,6 +218,15 @@ return function(check, H)
 	local names = {}
 	for _, entry in ipairs(Win:GetVisible()) do names[#names + 1] = entry.name end
 	check("the table lists item 1's candidates", table.concat(names, ",") == "Veyra Moo,Tester Moo")
+	-- Group members who have not answered the item are listed last, marked as waiting.
+	local realExists = UnitExists
+	UnitExists = function() return true end
+	local withWaiting = Win:GetVisible()
+	local waitingNames = {}
+	for _, entry in ipairs(withWaiting) do waitingNames[#waitingNames + 1] = entry.name .. (entry.waiting and "*" or "") end
+	check("who has not answered is listed last", table.concat(waitingNames, ",") == "Veyra Moo,Tester Moo,Jonatan Moo*")
+	check("and cannot be voted on", withWaiting[3].response == "WAITING" and withWaiting[3].votes == 0 and Win:GetRowMenu("Jonatan Moo")[1] == nil)
+	UnitExists = realExists
 	strip[2].scripts.OnClick(strip[2])
 	check("a click on the strip switches item", Win:GetFocus() == 2 and Win.rows[1].parent.name:GetText() == "Belt of Might")
 	names = {}

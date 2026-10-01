@@ -1022,6 +1022,13 @@ function CouncilWindow:GetVisible()
 		end
 	end
 	table.sort(list, COMPARE[self:GetSortMode()])
+	-- Those who have not answered yet come last, so the council sees who is missing.
+	if ALC.Sessions:IsItemOpen(focus) then
+		for _, silent in ipairs(ALC.Candidates:GetSilent(focus)) do
+			silent.response, silent.gear, silent.votes, silent.waiting = "WAITING", {}, 0, true
+			list[#list + 1] = silent
+		end
+	end
 	return list
 end
 
@@ -1164,6 +1171,7 @@ local function renderRow(row, entry, myVote, topVotes, isLM, compact, open, isWi
 	row.tag:SetShown(isWinner == true)
 	local classColor = UI.ClassColor(entry.class)
 	row.name:SetTextColor(classColor[1], classColor[2], classColor[3], 1)
+	if entry.waiting then row.name:SetTextColor(classColor[1], classColor[2], classColor[3], 0.55) end
 	row.name:SetText(entry.name)
 	row.class:SetText(localizedClass(entry.class))
 	row.rank:SetText(entry.rank or "")
@@ -1186,11 +1194,11 @@ local function renderRow(row, entry, myVote, topVotes, isLM, compact, open, isWi
 		row.recent:SetTextColor(c.muted[1], c.muted[2], c.muted[3], 1)
 	end
 
-	local response = ALC.Responses:Get(entry.response)
+	local response = not entry.waiting and ALC.Responses:Get(entry.response) or nil
 	local rc = response and response.color or c.muted
-	UI.SetTextureColor(row.chip.bg, rc, 0.22)
+	UI.SetTextureColor(row.chip.bg, rc, entry.waiting and 0.1 or 0.22)
 	row.chip.label:SetTextColor(rc[1], rc[2], rc[3], 1)
-	row.chip.label:SetText(response and response.label or entry.response)
+	row.chip.label:SetText(entry.waiting and L["Waiting"] or (response and response.label or entry.response))
 
 	for i, button in ipairs(row.gear) do
 		local itemString = entry.gear[i]
@@ -1206,7 +1214,7 @@ local function renderRow(row, entry, myVote, topVotes, isLM, compact, open, isWi
 			button:Hide()
 		end
 	end
-	if #entry.gear == 0 then
+	if #entry.gear == 0 and not entry.waiting then
 		row.gear[1].text:SetTextColor(c.muted[1], c.muted[2], c.muted[3], 1)
 		row.gear[1].text:SetText(L["Nothing equipped"])
 		row.gear[1]:Show()
@@ -1234,12 +1242,12 @@ local function renderRow(row, entry, myVote, topVotes, isLM, compact, open, isWi
 	row.vote:ClearAllPoints()
 	if isLM then
 		row.vote:SetPoint("RIGHT", row.award, "LEFT", -8, 0)
-		row.award:SetShown(open and entry.response ~= "PASS")
+		row.award:SetShown(open and entry.response ~= "PASS" and not entry.waiting)
 	else
 		row.vote:SetPoint("RIGHT", row, "RIGHT", -12, 0)
 		row.award:Hide()
 	end
-	row.vote:SetShown(open and entry.response ~= "PASS") -- nothing to vote on for a player who passed
+	row.vote:SetShown(open and entry.response ~= "PASS" and not entry.waiting) -- nothing to vote on for a player who passed or has not answered
 	row:Show()
 end
 

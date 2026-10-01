@@ -8,6 +8,7 @@
 - BoP timer: a looted Bind-on-Pickup item shows how long it can still be traded to the raid (2 hours), in the loot window and the trade queue; orange under 30 minutes, red under 10.
 - The loot threshold offers only Uncommon, Rare and Epic (the qualities that drop). An older saved Poor, Common or Legendary becomes the nearest one.
 - Settings > Council shows who is on the council (this session, or the last one). The trade queue tells council members that it is for the loot master only.
+- Council window: players in the group who have not answered an item yet are listed last, greyed, as "Waiting", so the council sees who is missing.
 - The loot window no longer shows the boss name in its title.
 - Every trade that goes through is named in the chat ("[Item] handed to Name", to the raid or party when announcing is on) and noted in the award log, also when the trade queue did not hold the item. An item handed out by the game itself is noted too.
 - History: council members now keep the history too (what the loot master awards is logged on their side, and an undo marks it).

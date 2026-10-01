@@ -152,6 +152,22 @@ function Candidates:GetCounts(item)
 	}
 end
 
+-- The group members who have not answered an item yet, by name: { name, class, rank, rankIndex }.
+function Candidates:GetSilent(item)
+	local answered = {}
+	for _, entry in ipairs(lists[item or 1] or {}) do answered[string.lower(entry.name)] = true end
+	local out = {}
+	for _, unit in ipairs(ALC:GroupUnits()) do
+		local name = ALC:UnitFullName(unit)
+		if name and not answered[string.lower(name)] and not (UnitExists and not UnitExists(unit)) then
+			local rank, rankIndex = ALC:GetGuildRank(unit)
+			out[#out + 1] = { name = name, class = select(2, UnitClass(unit)) or "WARRIOR", rank = rank, rankIndex = rankIndex }
+		end
+	end
+	table.sort(out, function(a, b) return a.name < b.name end)
+	return out
+end
+
 -- How many items of the session this player answered (for a "3 of 8 answered" line).
 function Candidates:CountAnsweredBy(name)
 	local count = 0
