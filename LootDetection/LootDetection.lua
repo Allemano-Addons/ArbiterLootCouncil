@@ -422,26 +422,50 @@ local function allFinished()
 	return true
 end
 
--- Gives the loot slots to ourselves (loot master with master loot), so the items are in our bags
--- when the session starts. Returns how many were handed over.
-function LootDetection:TakeLootSlots(slots)
-	if #slots == 0 or not ALC.Council.IsPlayerMasterLooter() then return 0 end
+-- Gives the open loot window's slots with these items to ourselves (loot master with master loot), so
+-- the items are in our bags when the session starts. `wanted` is itemID -> how many. The slots are looked
+-- up now, so it also works after the player has looted something else meanwhile.
+-- Returns how many were handed over.
+function LootDetection:TakeLoot(wanted)
+	if not next(wanted) or not ALC.Council.IsPlayerMasterLooter() then return 0 end
 	local me = ALC:PlayerName()
 	local first = me and string.lower(me):match("^(%S+)")
 	local taken = 0
-	for _, slot in ipairs(slots) do
-		local index
-		for i = 1, 40 do
-			local ok, name = pcall(GetMasterLootCandidate, slot, i)
-			if ok and name and (ALC:SameName(name, me) or string.lower(name) == first) then index = i break end
+	for slot = 1, GetNumLootItems() do
+		local link = GetLootSlotLink(slot)
+		local _, itemID = ALC:ParseItem(link)
+		if itemID and (wanted[itemID] or 0) > 0 then
+			local index
+			for i = 1, 40 do
+				local ok, name = pcall(GetMasterLootCandidate, slot, i)
+				if ok and name and (ALC:SameName(name, me) or string.lower(name) == first) then index = i break end
+			end
+			if index and pcall(GiveMasterLoot, slot, index) then
+				taken = taken + 1
+				wanted[itemID] = wanted[itemID] - 1
+			end
 		end
-		if index and pcall(GiveMasterLoot, slot, index) then taken = taken + 1 end
 	end
 	if taken > 0 then
 		Debug:Log("LootDetection", "%d item(s) taken for ourselves", taken)
 		ALC:Print(L["Took %d item(s) for yourself. Award them from the council window."], taken)
 	end
 	return taken
+end
+
+-- Asks "take all of it?" before the loot is taken (when the setting asks), else takes it at once.
+function LootDetection:OfferToTake(wanted, count)
+	if ALC.Settings:GetAutoLootConfirm() and StaticPopup_Show and StaticPopupDialogs then
+		StaticPopupDialogs["ALC_CONFIRM_AUTOLOOT"] = StaticPopupDialogs["ALC_CONFIRM_AUTOLOOT"] or {
+			text = L["Loot all %d item(s) for yourself? You can award them from the council window afterwards."],
+			button1 = YES or "Yes", button2 = NO or "No",
+			OnAccept = function(_, data) LootDetection:TakeLoot(data) end,
+			timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
+		}
+		StaticPopup_Show("ALC_CONFIRM_AUTOLOOT", count, nil, wanted)
+	else
+		self:TakeLoot(wanted)
+	end
 end
 
 function LootDetection:OnLootOpened()
@@ -486,9 +510,9 @@ function LootDetection:OnLootOpened()
 		changed()
 		ALC.Events:Fire("ALC_LOOT_ADDED", #fresh)
 		if ALC.Settings:GetAutoLoot() then
-			local slots = {}
-			for _, item in ipairs(fresh) do slots[#slots + 1] = item.slot end
-			self:TakeLootSlots(slots)
+			local wanted = {}
+			for _, item in ipairs(fresh) do wanted[item.itemID] = (wanted[item.itemID] or 0) + 1 end
+			self:OfferToTake(wanted, #fresh)
 		end
 	else
 		changed()
@@ -515,6 +539,9 @@ end
 function LootDetection:Init()
 	restore()
 	self:RegisterEvent("LOOT_OPENED", function() LootDetection:OnLootOpened() end)
+	self:RegisterEvent("LOOT_CLOSED", function()
+		if StaticPopup_Hide then StaticPopup_Hide("ALC_CONFIRM_AUTOLOOT") end -- the corpse is gone: nothing to take
+	end)
 	self:RegisterEvent("ENCOUNTER_END", function(_, _, name, _, _, success)
 		LootDetection:OnEncounterEnd(name, success)
 	end)

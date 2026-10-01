@@ -338,6 +338,12 @@ local function build()
 	frame.autoLoot:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
 	y = y + 32
 
+	frame.autoLootConfirm = into("lm", UI.NewCheckbox(frame, L["Ask first (\"Loot all?\")"], function(checked)
+		ALC.Settings:SetAutoLootConfirm(checked)
+	end))
+	frame.autoLootConfirm:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD + 24, -y)
+	y = y + 32
+
 	frame.autoTrade = into("lm", UI.NewCheckbox(frame, L["Put won items in the trade window when the winner trades with you"], function(checked)
 		ALC.Settings:SetAutoTrade(checked)
 	end))
@@ -831,6 +837,7 @@ function SettingsWindow:Refresh()
 	frame.autoOpen:SetChecked(settings:GetAutoOpenLootWindow())
 	frame.announce:SetChecked(settings:GetAnnounceAwards())
 	frame.autoLoot:SetChecked(settings:GetAutoLoot())
+	frame.autoLootConfirm:SetChecked(settings:GetAutoLootConfirm())
 	frame.autoTrade:SetChecked(settings:GetAutoTrade())
 	frame.timerCheck:SetChecked(settings:GetTimerEnabled())
 	frame.timerCheck.label:SetText(settings:GetTimerEnabled()

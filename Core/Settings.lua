@@ -276,6 +276,16 @@ function Settings:SetAutoLoot(enabled)
 	changed("autoLoot")
 end
 
+-- Ask "loot all?" before taking the loot for yourself: on by default.
+function Settings:GetAutoLootConfirm()
+	return db.profile.autoLootConfirm ~= false
+end
+
+function Settings:SetAutoLootConfirm(enabled)
+	db.profile.autoLootConfirm = enabled and true or false
+	changed("autoLootConfirm")
+end
+
 -- Put won items into the trade window by itself (loot master): on by default.
 function Settings:GetAutoTrade()
 	return db.profile.autoTrade ~= false

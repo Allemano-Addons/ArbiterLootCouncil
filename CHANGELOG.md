@@ -3,7 +3,7 @@
 ## 0.3.2-beta
 - Fix: messages from the loot master could overtake each other on the way (an award passing a vote count, say) and the later-numbered one then made the earlier be thrown away. That is likely why council members did not see an award ("Awarded to ...") or the end of the session, and why their history stayed empty. A number is now accepted once while it is near the newest, and an old count never replaces a newer one.
 - The game's own loot threshold (the one on the player frame) now follows ALC's threshold when the group leader changes it.
-- Auto loot: when you open a corpse as master looter, the items at or above the threshold are given to yourself at once, so they are in your bags before the session starts and you do not have to assign each one. Settings > Loot master has a checkbox for it (on by default).
+- Auto loot: when you open a corpse as master looter, the items at or above the threshold can be given to yourself so they are in your bags before the session starts. A box asks "Loot all N item(s) for yourself?" first. Settings > Loot master has a checkbox for auto loot (on by default) and one for the question (on by default).
 - The BoP trade timer also works for items added by hand and for items whose data the game has not given (it reads the tooltip then).
 
 ## 0.3.1-beta

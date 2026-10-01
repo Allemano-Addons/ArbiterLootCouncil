@@ -202,6 +202,28 @@ return function(check, H)
 	corpse("Creature-G", 200)
 	LD:OnLootOpened()
 	check("and not when auto loot is off", #given == 1)
+	-- With "Ask first" the loot is only taken after the player says yes.
+	local popup
+	StaticPopupDialogs = {}
+	StaticPopup_Show = function(name, count, _, data) popup = { name = name, count = count, data = data } end
+	StaticPopup_Hide = function() popup = nil end
+	ALC.Settings:SetAutoLoot(true)
+	ALC.Settings:SetAutoLootConfirm(true)
+	local givenBefore = #given
+	reset()
+	corpse("Creature-H", 200)
+	LD:OnLootOpened()
+	check("a question comes first, nothing is taken yet", popup ~= nil and popup.name == "ALC_CONFIRM_AUTOLOOT" and popup.count == 1 and #given == givenBefore)
+	StaticPopupDialogs["ALC_CONFIRM_AUTOLOOT"].OnAccept(nil, popup.data)
+	check("yes takes it", #given == givenBefore + 1)
+	ALC.Settings:SetAutoLootConfirm(false)
+	popup = nil
+	reset()
+	corpse("Creature-I", 200)
+	LD:OnLootOpened()
+	check("without asking it is taken at once", popup == nil and #given == givenBefore + 2)
+	ALC.Settings:SetAutoLootConfirm(true)
+	StaticPopupDialogs, StaticPopup_Show, StaticPopup_Hide = nil, nil, nil
 	ALC.Settings:SetAutoLoot(true)
 	ALC.Council.IsPlayerMasterLooter = realMaster
 	GetMasterLootCandidate, GiveMasterLoot = nil, nil
