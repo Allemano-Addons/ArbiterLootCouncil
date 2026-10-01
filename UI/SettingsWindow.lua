@@ -326,27 +326,27 @@ local function build()
 	frame.autoOpen:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
 	y = y + 32
 
-	frame.announce = into("lm", UI.NewCheckbox(frame, L["Announce awards in chat (raid chat in a raid, party chat in a party)"], function(checked)
+	frame.announce = into("lm", UI.NewCheckbox(frame, L["Announce awards"], function(checked)
 		ALC.Settings:SetAnnounceAwards(checked)
-	end))
+	end, L["Say who got which item in raid chat (party chat in a party), and when a trade went through."]))
 	frame.announce:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
 	y = y + 32
 
-	frame.autoLoot = into("lm", UI.NewCheckbox(frame, L["Take the loot for myself when I open a corpse (so I can award it later)"], function(checked)
+	frame.autoLoot = into("lm", UI.NewCheckbox(frame, L["Auto loot"], function(checked)
 		ALC.Settings:SetAutoLoot(checked)
-	end))
+	end, L["When you open a corpse as master looter, the items over the threshold are given to you, so you can award them later without assigning each one."]))
 	frame.autoLoot:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
 	y = y + 32
 
 	frame.autoLootConfirm = into("lm", UI.NewCheckbox(frame, L["Ask first (\"Loot all?\")"], function(checked)
 		ALC.Settings:SetAutoLootConfirm(checked)
-	end))
+	end, L["Show a question before the loot is taken for you."]))
 	frame.autoLootConfirm:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD + 24, -y)
 	y = y + 32
 
-	frame.autoTrade = into("lm", UI.NewCheckbox(frame, L["Put won items in the trade window when the winner trades with you"], function(checked)
+	frame.autoTrade = into("lm", UI.NewCheckbox(frame, L["Auto trade"], function(checked)
 		ALC.Settings:SetAutoTrade(checked)
-	end))
+	end, L["When you award an item, the trade window opens with the winner and the item is put in it. A winner who is far away is asked by whisper to come."]))
 	frame.autoTrade:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
 	y = y + 32
 

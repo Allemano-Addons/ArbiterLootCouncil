@@ -455,7 +455,9 @@ end
 
 -- Asks "take all of it?" before the loot is taken (when the setting asks), else takes it at once.
 function LootDetection:OfferToTake(wanted, count)
-	if ALC.Settings:GetAutoLootConfirm() and StaticPopup_Show and StaticPopupDialogs then
+	local ask = ALC.Settings:GetAutoLootConfirm() and StaticPopup_Show ~= nil and StaticPopupDialogs ~= nil
+	Debug:Log("LootDetection", "auto loot of %d item(s): %s", count, ask and "asking first" or "taking at once")
+	if ask then
 		StaticPopupDialogs["ALC_CONFIRM_AUTOLOOT"] = StaticPopupDialogs["ALC_CONFIRM_AUTOLOOT"] or {
 			text = L["Loot all %d item(s) for yourself? You can award them from the council window afterwards."],
 			button1 = YES or "Yes", button2 = NO or "No",

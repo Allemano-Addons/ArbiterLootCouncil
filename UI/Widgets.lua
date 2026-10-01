@@ -337,7 +337,8 @@ end
 
 -- A checkbox with a label. `onToggle(checked)` runs when the player clicks it;
 -- `checkbox:SetChecked(bool)` only changes how it looks.
-function UI.NewCheckbox(parent, label, onToggle)
+-- `tooltip` (optional) is a longer explanation shown when the pointer is over the switch.
+function UI.NewCheckbox(parent, label, onToggle, tooltip)
 	local box = CreateFrame("Button", nil, parent)
 	box:SetSize(320, 26)
 	box:RegisterForClicks("LeftButtonUp")
@@ -360,8 +361,19 @@ function UI.NewCheckbox(parent, label, onToggle)
 	box.label:SetText(label)
 
 	box.checked = false
-	box:SetScript("OnEnter", function(self) self.square.border:SetColor(UI.color.gold) end)
-	box:SetScript("OnLeave", function(self) self.square.border:SetColor(UI.color.border) end)
+	box:SetScript("OnEnter", function(self)
+		self.square.border:SetColor(UI.color.gold)
+		if tooltip and GameTooltip then
+			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+			GameTooltip:SetText(label)
+			GameTooltip:AddLine(tooltip, UI.color.muted[1], UI.color.muted[2], UI.color.muted[3], true)
+			GameTooltip:Show()
+		end
+	end)
+	box:SetScript("OnLeave", function(self)
+		self.square.border:SetColor(UI.color.border)
+		if tooltip and GameTooltip then GameTooltip:Hide() end
+	end)
 	box:SetScript("OnClick", function(self)
 		local checked = not self.checked
 		self:SetChecked(checked)
