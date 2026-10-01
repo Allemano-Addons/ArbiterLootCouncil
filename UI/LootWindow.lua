@@ -16,8 +16,6 @@ local POOL, DEFAULT_ROWS, MIN_ROWS = 24, 8, 3 -- rows built, rows shown by defau
 local INITIAL_ROWS = 6 -- rows made when the window is built
 local ICON = 40
 local REMOVE_SIZE = 28
-local CHAT_BOX_H = 44
-local CHAT_COLOR = { 0.98, 0.55, 0.36, 1 } -- raid chat orange
 local UNKNOWN_ICON = "Interface\\Icons\\INV_Misc_QuestionMark"
 
 local LootWindow = {}
@@ -26,7 +24,6 @@ LibStub("AceEvent-3.0"):Embed(LootWindow)
 LootWindow.rows = {}
 
 local frame, offset = nil, 0
-local chatExtra = 0 -- height of the raid chat preview while it is shown
 local c = UI.color
 
 -- How many rows the window shows at most; the player changes it with the grip.
@@ -239,20 +236,6 @@ local function build()
 	frame.empty:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PAD, -(HEADER_H + LABEL_H + 14))
 	frame.empty:SetWordWrap(true)
 	frame.empty:SetText(L["No items yet. Loot a boss as loot master, or add one with /alc add [item]."])
-
-	-- The last announcement in raid or party chat, as a preview under the list.
-	frame.chatLabel = UI.NewText(frame, 11, c.muted)
-	frame.chatLabel:SetText(strupper(L["Raid chat"]))
-	frame.chatBox = CreateFrame("Frame", nil, frame)
-	frame.chatBox:SetHeight(CHAT_BOX_H)
-	frame.chatBox.bg = UI.NewFill(frame.chatBox, 8)
-	UI.SetTextureColor(frame.chatBox.bg, c.panel)
-	UI.AddBorder(frame.chatBox, c.border, 1, 8)
-	frame.chatText = UI.NewText(frame.chatBox, 12, CHAT_COLOR)
-	frame.chatText:SetPoint("LEFT", frame.chatBox, "LEFT", 14, 0)
-	frame.chatText:SetPoint("RIGHT", frame.chatBox, "RIGHT", -14, 0)
-	frame.chatLabel:Hide()
-	frame.chatBox:Hide()
 
 	-- Footer.
 	frame.footerDivider = frame:CreateTexture(nil, "BORDER")
@@ -485,28 +468,7 @@ function LootWindow:Refresh()
 	frame.scroll:SetHeight(max(shown, 1) * (ROW_H + ROW_GAP) - ROW_GAP)
 	frame.scroll:Update(count, rowsAllowed, offset)
 
-	-- The chat preview sits under the list once something has been announced.
-	frame.chatLabel:SetText(strupper(IsInRaid() and (ALC.Settings:GetAnnounceAwards() and L["Raid chat"] or L["Raid chat (not announced)"])
-		or (ALC.Settings:GetAnnounceAwards() and L["Party chat"] or L["Party chat (not announced)"])))
-	local announcement = ALC.Awards:GetLastAnnouncement()
-	local extra = 0
-	frame.chatLabel:ClearAllPoints()
-	frame.chatBox:ClearAllPoints()
-	if announcement then
-		local top = HEADER_H + LABEL_H + body + 18
-		frame.chatLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -top)
-		frame.chatBox:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -(top + 20))
-		frame.chatBox:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PAD, -(top + 20))
-		frame.chatText:SetText(announcement)
-		frame.chatLabel:Show()
-		frame.chatBox:Show()
-		extra = 20 + CHAT_BOX_H + 10
-	else
-		frame.chatLabel:Hide()
-		frame.chatBox:Hide()
-	end
-	chatExtra = extra
-	frame:SetHeight(HEADER_H + LABEL_H + body + 14 + extra + FOOTER_H)
+	frame:SetHeight(HEADER_H + LABEL_H + body + 14 + FOOTER_H)
 end
 
 --------------------------------------------------------------------------------
@@ -516,7 +478,7 @@ end
 local function resizeStep()
 	local _, cursorY = GetCursorPosition()
 	cursorY = cursorY / frame:GetEffectiveScale()
-	local body = (frame:GetTop() - cursorY) - (HEADER_H + LABEL_H + 14 + chatExtra + FOOTER_H)
+	local body = (frame:GetTop() - cursorY) - (HEADER_H + LABEL_H + 14 + FOOTER_H)
 	local rows = max(MIN_ROWS, min(POOL, math.floor(body / (ROW_H + ROW_GAP) + 0.5)))
 	if rows ~= maxRows() then
 		ALC.Settings:SetWindowOption("loot", "maxRows", rows)

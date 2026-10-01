@@ -315,11 +315,8 @@ return function(check, H)
 	Loot:Show()
 	local lootFrame = Loot.rows[1].parent
 	local before = lootFrame:GetHeight()
-	check("the preview shows the last announcement", lootFrame.chatBox:IsShown() and lootFrame.chatText:GetText() == Awards:GetLastAnnouncement())
-	check("in the orange of raid chat", lootFrame.chatText.textColor[1] > 0.9 and lootFrame.chatText.textColor[3] < 0.5)
 	sid = newSession()
 	Awards:Award("Jonatan Moo")
-	check("a new award updates it", lootFrame.chatText:GetText():find("Jonatan Moo", 1, true) ~= nil)
 	check("the row shows the winner", (function()
 		for _, e in ipairs(LD:GetItems()) do if e.sid == sid then return e.winner == "Jonatan Moo" end end
 	end)())

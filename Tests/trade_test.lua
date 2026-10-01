@@ -151,6 +151,31 @@ return function(check, H)
 	chat = #H.chat
 	check("a full window is reported", Trades:FillTrade() == 0 and #H.chat > chat)
 
+	-- A stack of two: only one goes into the trade.
+	local stack = 2
+	tradeSlots = {}
+	bags = { [0] = { [2] = 200 } }
+	C_Container.GetContainerItemInfo = function(bag, slot)
+		local id = bags[bag] and bags[bag][slot]
+		return id and { itemID = id, isLocked = false, stackCount = stack } or nil
+	end
+	local split
+	C_Container.SplitContainerItem = function(bag, slot, amount)
+		split = amount
+		cursor = { bag = bag, slot = slot, id = bags[bag][slot], amount = amount }
+	end
+	ClickTradeButton = function(slot)
+		if cursor then
+			tradeSlots[slot] = cursor.id
+			if cursor.amount and stack > cursor.amount then stack = stack - cursor.amount else bags[cursor.bag][cursor.slot] = nil end
+			cursor = nil
+		end
+	end
+	check("one item of a stack goes in", Trades:FillTrade() == 1 and split == 1 and tradeSlots[1] == 200 and stack == 1 and bags[0][2] == 200)
+	stack, split, tradeSlots = 1, nil, {}
+	check("a single item is taken as it is", Trades:FillTrade() == 1 and split == nil and tradeSlots[1] == 200)
+	C_Container.SplitContainerItem = nil
+
 	-- In combat
 	tradeSlots = {}
 	InCombatLockdown = function() return true end

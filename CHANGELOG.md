@@ -1,6 +1,8 @@
 # Changelog
 
 ## 0.3.3-beta
+- Trade: from a stack (two Shadowgems, say) only one item is put into the trade for each award, not the whole stack.
+- The loot window no longer shows the box with the last chat announcement.
 - Fix: "script ran too long" when a window was opened the first time. The loot, response and voting windows now make only the rows they need at once (a handful) and the rest of their rows a few at a time in the background, instead of everything in one long script.
 
 ## 0.3.2-beta

@@ -241,24 +241,24 @@ end
 --------------------------------------------------------------------------------
 local PLACE_DELAY = 0.3 -- seconds after the window opens before the items are put in
 
--- What sits in a bag slot: itemID and whether it is locked. Handles both client shapes of the
--- container API (a table, or several return values).
+-- What sits in a bag slot: itemID, whether it is locked, and how many are stacked there. Handles both
+-- client shapes of the container API (a table, or several return values).
 local function slotInfo(bag, slot)
 	local get = (C_Container and C_Container.GetContainerItemInfo) or GetContainerItemInfo
 	if not get then return nil end
-	local info, _, _, _, _, _, _, _, _, itemID = get(bag, slot)
-	if type(info) == "table" then return info.itemID, info.isLocked end
-	return itemID, nil
+	local info, count, _, _, _, _, _, _, _, itemID = get(bag, slot)
+	if type(info) == "table" then return info.itemID, info.isLocked, info.stackCount or 1 end
+	return itemID, nil, count or 1
 end
 
--- The first bag slot holding the item that we have not used yet, or nil.
+-- The first bag slot holding the item that we have not used yet, and how many are stacked there; or nil.
 local function findInBags(itemID, used)
 	local numSlots = (C_Container and C_Container.GetContainerNumSlots) or GetContainerNumSlots
 	if not numSlots then return nil end
 	for bag = 0, (NUM_BAG_SLOTS or 4) do
 		for slot = 1, (numSlots(bag) or 0) do
-			local id, locked = slotInfo(bag, slot)
-			if id == itemID and not locked and not used[bag .. ":" .. slot] then return bag, slot end
+			local id, locked, count = slotInfo(bag, slot)
+			if id == itemID and not locked and not used[bag .. ":" .. slot] then return bag, slot, count end
 		end
 	end
 end
@@ -289,14 +289,16 @@ function Trades:FillTrade()
 			elseif nextSlot > TRADE_SLOTS then
 				ALC:Print(L["The trade window is full: %s is still waiting."], link)
 			else
-				local bag, slot = findInBags(entry.itemID, used)
+				local bag, slot, stack = findInBags(entry.itemID, used)
 				if not bag then
 					ALC:Print(L["%s is not in your bags: it cannot be added to the trade."], link)
 				else
 					used[bag .. ":" .. slot] = true
 					local pickup = (C_Container and C_Container.PickupContainerItem) or PickupContainerItem
+					local split = (C_Container and C_Container.SplitContainerItem) or SplitContainerItem
 					local ok = pcall(function()
-						pickup(bag, slot)
+						-- An award is one item: from a stack, one is split off instead of the whole stack.
+						if (stack or 1) > 1 and split then split(bag, slot, 1) else pickup(bag, slot) end
 						ClickTradeButton(nextSlot)
 					end)
 					if ok and not (CursorHasItem and CursorHasItem()) then

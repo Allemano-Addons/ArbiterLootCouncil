@@ -86,9 +86,6 @@ return function(check, H)
 	ALC.Events.UnregisterAll(listener)
 	Loot:Show()
 	local lootFrame = Loot.rows[1].parent
-	check("the loot window says it was not announced", lootFrame.chatLabel:GetText() == "PARTY CHAT (NOT ANNOUNCED)")
-	Settings:SetAnnounceAwards(true)
-	check("and the label goes back", lootFrame.chatLabel:GetText() == "PARTY CHAT")
 	Loot:Hide()
 	check("the session is over", not Sessions:IsActive())
 
