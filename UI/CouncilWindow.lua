@@ -530,7 +530,7 @@ end
 -- The grip in the bottom right corner (Council tab): drag it to show more or fewer rows.
 local STRIP_BUTTON, STRIP_GAP, STRIP_COLUMN = 44, 6, 8
 
--- The item strip is part of the window but hangs outside its left edge, like RCLC's.
+-- The item strip is part of the window but hangs outside its left edge.
 local function buildStrip()
 	CouncilWindow.strip = {}
 	-- A small panel of its own, attached to the window's left edge.
