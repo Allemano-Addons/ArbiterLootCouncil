@@ -23,7 +23,13 @@ jobs:
         run: luarocks install luacheck
 
       - name: Luacheck
-        run: luacheck .
+        run: |
+          luacheck . --no-color --codes > luacheck.txt || {
+            cat luacheck.txt
+            # also as annotations, so they show on the commit and in pull requests
+            grep -E "^ +[^ ].*:[0-9]+:[0-9]+:" luacheck.txt | head -30 | while IFS= read -r line; do echo "::error::$line"; done
+            exit 1
+          }
 
       - name: Tests
         run: |
