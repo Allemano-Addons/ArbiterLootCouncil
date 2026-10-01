@@ -10,6 +10,13 @@ return function(check, H)
 	local dir = interpreter:match("^(.*)[/\\]")
 	local luac = (dir and (dir .. "/luac") or "luac")
 	local probe = io.open(luac .. ".exe", "rb") or io.open(luac, "rb")
+if not probe and not dir then
+	-- luac on the PATH (as on the CI machine)
+	local pipe = io.popen("luac -v 2>&1")
+	local out = pipe and pipe:read("*l") or ""
+	if pipe then pipe:close() end
+	if out:match("^Lua") then probe = { close = function() end } end
+end
 	if not probe then
 		print("(limits_test skipped: no luac next to " .. interpreter .. ")")
 		return

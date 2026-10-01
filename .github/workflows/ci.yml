@@ -1,0 +1,38 @@
+name: CI
+
+# On every push and pull request: luacheck over the whole addon, and the offline tests
+# (Tests/run.lua if there is one, else every Tests/*_test.lua). Releases are a separate workflow (release.yml).
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: leafo/gh-actions-lua@v10
+        with:
+          luaVersion: "5.4"
+
+      - uses: leafo/gh-actions-luarocks@v4
+
+      - name: Install luacheck
+        run: luarocks install luacheck
+
+      - name: Luacheck
+        run: luacheck .
+
+      - name: Tests
+        run: |
+          if [ -f Tests/run.lua ]; then
+            lua Tests/run.lua
+          else
+            for t in Tests/*_test.lua; do
+              [ -e "$t" ] || continue
+              echo "== $t"
+              lua "$t" || exit 1
+            done
+          fi
