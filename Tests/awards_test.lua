@@ -633,7 +633,7 @@ return function(check, H)
 	check("the grip is offered on the voting tab", hframe.grip:IsShown())
 	hframe.grip.scripts.OnMouseDown(hframe.grip)
 	check("dragging anchors the window by its top edge", hframe.point[1] == "TOPLEFT" and hframe.point[3] == "BOTTOMLEFT")
-	local fixed = 60 + 92 + 34 + 52 -- header, item, headings and footer
+	local fixed = 60 + 64 + 34 + 52 -- header, item, headings and footer
 	H.cursor = { 0, hframe:GetTop() - fixed - 4 * 56 }
 	hframe.grip.scripts.OnUpdate(hframe.grip)
 	check("the mouse decides how many rows: four", ALC.Settings:GetWindowOption("council", "maxRows", 10) == 4)

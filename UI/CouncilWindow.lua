@@ -14,10 +14,10 @@ local strupper = string.upper
 local min, max = math.min, math.max
 
 local WIDTH, PAD = 1010, 20
-local HEADER_H, ITEM_H, TABLE_HEAD_H, FOOTER_H = 60, 92, 34, 52
+local HEADER_H, ITEM_H, TABLE_HEAD_H, FOOTER_H = 60, 64, 34, 52
 local ROW_H, COMPACT_ROW_H = 56, 32
 local POOL, DEFAULT_ROWS, MIN_ROWS = 30, 10, 3
-local ICON = 52
+local ICON = 40
 local BUTTON_W = 92
 local NAME_X, RANK_X, RESPONSE_X, GEAR_X, RECENT_X, NOTE_X, VOTES_X = 16, 172, 268, 376, 536, 590, 712
 local GEAR_W, RECENT_W, NOTE_W, RANK_W = 150, 44, 116, 90
@@ -746,7 +746,7 @@ local function build()
 	-- Council tab ------------------------------------------------------------
 	local itemBox = CreateFrame("Frame", nil, frame)
 	itemBox:SetSize(ICON, ICON)
-	itemBox:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -(HEADER_H + 20))
+	itemBox:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -(HEADER_H + 12))
 	itemBox:EnableMouse(true)
 	frame.icon = itemBox:CreateTexture(nil, "ARTWORK")
 	frame.icon:SetPoint("TOPLEFT", 2, -2)
@@ -758,18 +758,18 @@ local function build()
 	end)
 	itemBox:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
-	frame.name = UI.NewText(frame, 20, c.text)
-	frame.name:SetPoint("TOPLEFT", itemBox, "TOPRIGHT", 16, -2)
+	frame.name = UI.NewText(frame, 17, c.text)
+	frame.name:SetPoint("TOPLEFT", itemBox, "TOPRIGHT", 12, 0)
 	frame.name:SetWidth(340)
 	frame.sub = UI.NewText(frame, 12, c.muted)
-	frame.sub:SetPoint("BOTTOMLEFT", itemBox, "BOTTOMRIGHT", 16, 2)
+	frame.sub:SetPoint("BOTTOMLEFT", itemBox, "BOTTOMRIGHT", 12, 0)
 	frame.sub:SetWidth(340)
 
 	frame.progress = UI.NewText(frame, 13, c.muted, "RIGHT")
-	frame.progress:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PAD, -(HEADER_H + 24))
+	frame.progress:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PAD, -(HEADER_H + 38))
 	frame.barBg = frame:CreateTexture(nil, "ARTWORK")
 	frame.barBg:SetSize(220, 6)
-	frame.barBg:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PAD, -(HEADER_H + 50))
+	frame.barBg:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PAD, -(HEADER_H + 55))
 	UI.SetTextureColor(frame.barBg, c.panelHover)
 	frame.barFill = frame:CreateTexture(nil, "OVERLAY")
 	frame.barFill:SetHeight(6)
@@ -809,19 +809,19 @@ local function build()
 	frame.sort:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -(PAD + 12), -(HEADER_H + ITEM_H + 5))
 
 	-- Stopping the session (loot master). The first click asks, the second stops.
-	frame.stop = UI.NewButton(frame, 120, 28, L["Stop session"], function() CouncilWindow:StopSession() end)
-	frame.stop:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -(PAD + 240), -(HEADER_H + 22))
+	frame.stop = UI.NewButton(frame, 112, 24, L["Stop session"], function() CouncilWindow:StopSession() end)
+	frame.stop:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PAD, -(HEADER_H + 8))
 	-- Pause / Resume (loot master): no new answers, votes or awards while paused.
-	frame.pause = UI.NewButton(frame, 100, 28, L["Pause"], function()
+	frame.pause = UI.NewButton(frame, 84, 24, L["Pause"], function()
 		local ok, message = ALC.Sessions:SetPaused(not ALC.Sessions:IsPaused())
 		if not ok and message then ALC:Print(message) end
 	end)
-	frame.pause:SetPoint("RIGHT", frame.stop, "LEFT", -8, 0)
+	frame.pause:SetPoint("RIGHT", frame.stop, "LEFT", -6, 0)
 	-- Disenchant (loot master): gives the item shown to the disenchanter of the settings.
-	frame.disenchant = UI.NewButton(frame, 120, 28, L["Disenchant"], function()
+	frame.disenchant = UI.NewButton(frame, 104, 24, L["Disenchant"], function()
 		ALC.AwardDialog:AskDisenchant(focus)
 	end)
-	frame.disenchant:SetPoint("TOP", frame.stop, "BOTTOM", 0, -6)
+	frame.disenchant:SetPoint("RIGHT", frame.pause, "LEFT", -6, 0)
 	frame.disenchant.label:SetTextColor(0.65, 0.45, 0.90, 1)
 	frame.disenchant:HookScript("OnEnter", function(self)
 		if not self.reason then return end
@@ -831,7 +831,7 @@ local function build()
 	end)
 	frame.disenchant:HookScript("OnLeave", function() GameTooltip:Hide() end)
 	frame.pausedTag = UI.NewText(frame, 13, c.danger, "RIGHT")
-	frame.pausedTag:SetPoint("RIGHT", frame.pause, "LEFT", -12, 0)
+	frame.pausedTag:SetPoint("RIGHT", frame.disenchant, "LEFT", -12, 0)
 	frame.pausedTag:SetText(strupper(L["Paused"]))
 
 	councilStatic = { itemBox, frame.name, frame.sub, frame.progress, frame.barBg, frame.barFill, itemDivider, tableDivider,

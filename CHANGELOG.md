@@ -5,6 +5,7 @@
 - The game's own loot threshold (the one on the player frame) now follows ALC's threshold when the group leader changes it.
 - Auto loot: when you open a corpse as master looter, the items at or above the threshold can be given to yourself so they are in your bags before the session starts. A box asks "Loot all N item(s) for yourself?" first. Settings > Loot master has a checkbox for auto loot (on by default) and one for the question (on by default).
 - Much tighter Compact windows: lower rows in the loot, response and voting windows, and the History shows one tight line per award. Settings > Everyone has a new Window size (70, 80, 90 or 100%) that scales every window.
+- Voting window: the item panel at the top is about 30 px lower (smaller icon, the buttons Disenchant, Pause and Stop session in one row, the answer counter and bar beneath them).
 - Loot window: a thin countdown bar along each Bind-on-Pickup item shows how much of its trade window is left (the text is shorter: "BoP 3h 52m").
 - Fix: the answer counter ("3/4 responded") counted yourself twice in a raid, so it said 3/4 in a raid of three.
 - The BoP trade window is 4 hours (it was 2). The time left is now read from the item's own tooltip in your bags, so it counts from when the item was looted (not from when it was listed). An item that is not in your bags has no timer yet.
