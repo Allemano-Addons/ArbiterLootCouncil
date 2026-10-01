@@ -80,17 +80,19 @@ end
 
 -- Full names of everyone in the group, including ourselves. Replaceable in tests.
 function Comm.GetGroupNames()
-	local names = { me() }
+	local names, seen = {}, {}
+	local function add(name)
+		local key = name and strlower(name)
+		if key and not seen[key] then
+			seen[key] = true
+			names[#names + 1] = name
+		end
+	end
+	add(me())
 	if IsInRaid() then
-		for i = 1, GetNumGroupMembers() do
-			local name = ALC:UnitFullName("raid" .. i)
-			if name then names[#names + 1] = name end
-		end
+		for i = 1, GetNumGroupMembers() do add(ALC:UnitFullName("raid" .. i)) end -- includes ourselves: counted once
 	elseif IsInGroup() then
-		for i = 1, 4 do
-			local name = ALC:UnitFullName("party" .. i)
-			if name then names[#names + 1] = name end
-		end
+		for i = 1, 4 do add(ALC:UnitFullName("party" .. i)) end
 	end
 	return names
 end

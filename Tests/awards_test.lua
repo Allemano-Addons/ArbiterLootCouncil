@@ -565,6 +565,23 @@ return function(check, H)
 	check("an old note is dropped after a moment", Trades:OnTradeComplete() == 0 and Trades:GetPendingCount() == 1)
 	H.deferTimers = false
 
+	-- No accept event and no "complete" message: the bags show that the item left in the trade.
+	units.NPC = { "Jonatan", "Moo", "PRIEST" }
+	local bagStack = 1
+	local realContainer = C_Container
+	C_Container = {
+		GetContainerNumSlots = function(bag) return bag == 0 and 1 or 0 end,
+		GetContainerItemInfo = function() if bagStack > 0 then return { itemID = 200, stackCount = bagStack } end end,
+	}
+	H.deferTimers = true
+	Trades:OnTradeShow()
+	bagStack = 0
+	Trades:OnTradeClosed()
+	H.runTimers()
+	H.deferTimers = false
+	check("a delivery is seen in the bags when the events fail", Trades:GetPendingCount() == 0)
+	C_Container = realContainer
+
 	-- More items than fit: the list says how many are left.
 	Win:SetTab("council")
 	LD:Clear()

@@ -29,7 +29,7 @@ local STATUS = { PENDING = "pending", SESSION = "session", AWARDED = "awarded", 
 LootDetection.STATUS = STATUS
 
 local MAX_AGE = 8 * 3600      -- a saved list older than this is dropped
-local BOP_TRADE_SECONDS = 2 * 3600 -- how long a looted Bind-on-Pickup item can still be traded to the raid
+local BOP_TRADE_SECONDS = 4 * 3600 -- how long a looted Bind-on-Pickup item can still be traded to the raid (4 hours on WoW Forever)
 local MAX_SEEN = 300          -- remembered loot slots, to ignore a re-opened corpse
 local ENCOUNTER_MEMORY = 900  -- seconds an encounter name is used for loot
 
@@ -91,7 +91,7 @@ local function isBindOnPickup(entry)
 	return result == true
 end
 
--- Seconds left to trade a Bind-on-Pickup item to the group (the game allows 2 hours after the
+-- Seconds left to trade a Bind-on-Pickup item to the group (the game allows 4 hours after the
 -- loot), or nil for other items. Counted from the moment the loot window listed the item (for an
 -- item added by hand: from when it was added, which can only be an estimate).
 function LootDetection:GetTradeTimeLeft(entry)

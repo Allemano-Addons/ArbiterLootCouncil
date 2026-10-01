@@ -857,6 +857,10 @@ local function build()
 	frame.historyFooterLine = footerLine()
 	frame.historyCount = UI.NewText(frame, 13, c.muted)
 	frame.historyCount:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", PAD, 18)
+	-- The history is the council's: players outside it never open this window.
+	frame.historyNote = UI.NewText(frame, 12, c.muted)
+	frame.historyNote:SetPoint("LEFT", frame.historyCount, "RIGHT", 14, 0)
+	frame.historyNote:SetText(L["Only the council sees the history"])
 	-- Export the shown awards as text, or clear the picked dates (with a chance to export first).
 	frame.historyClear = UI.NewButton(frame, 90, 26, L["Clear"], function()
 		ALC.HistoryDialogs:AskClear(CouncilWindow:GetSelectedDates())
@@ -868,7 +872,7 @@ local function build()
 	end)
 	frame.historyExport:SetPoint("RIGHT", frame.historyClear, "LEFT", -6, 0)
 	historyStatic = { historyHeadings[1], historyHeadings[2], historyHeadings[3], historyHeadings[4], historyHeadings[5],
-		historyDivider, frame.historyEmpty, frame.historyFooterLine, frame.historyCount, frame.historyExport, frame.historyClear }
+		historyDivider, frame.historyEmpty, frame.historyFooterLine, frame.historyCount, frame.historyNote, frame.historyExport, frame.historyClear }
 	for _, widget in ipairs(buildDatePanel()) do historyStatic[#historyStatic + 1] = widget end
 	for i = 1, HISTORY_ROWS do
 		CouncilWindow.historyRows[i] = newHistoryRow(i)

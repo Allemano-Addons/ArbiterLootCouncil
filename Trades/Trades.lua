@@ -24,6 +24,7 @@ local TRADE_SLOTS = 6   -- items you can offer in a trade
 
 local offered -- { partner, items = { itemID, ... }, counts = { [itemID] = in bags } } for the trade both sides accepted
 local lastAsked = {} -- queue entry id -> when the winner was last asked by whisper to come
+local tradeContext -- { partner, counts = { [itemID] = in bags } } for the trade window that is open
 
 local function status() return ALC.LootDetection.STATUS end
 
@@ -138,6 +139,54 @@ function Trades:AnnounceDelivery(itemID, partner)
 	end
 end
 
+-- The name of the player we trade with: the unit, else the name in the trade window.
+local function partnerName()
+	local name = ALC:UnitFullName("NPC")
+	if name then return name end
+	local text = TradeFrameRecipientNameText and TradeFrameRecipientNameText.GetText and TradeFrameRecipientNameText:GetText()
+	return ALC:NormalizeName(text)
+end
+
+-- The trade window opened: note who we trade with and how many of their waiting items are in our bags.
+-- That is the second way to notice a delivery, if the accept events or the "complete" message fail.
+function Trades:OnTradeShow()
+	local partner = partnerName()
+	tradeContext = { partner = partner, counts = {} }
+	if not partner then return end
+	for _, entry in ipairs(self:GetPending()) do
+		if ALC:SameName(entry.winner, partner) then tradeContext.counts[entry.itemID] = bagCount(entry.itemID) end
+	end
+	Debug:Log("Trades", "trade window opened with %s, %d waiting item(s) of theirs", partner, (function()
+		local n = 0
+		for _ in pairs(tradeContext.counts) do n = n + 1 end
+		return n
+	end)())
+end
+
+-- After the window closed: waiting items of the partner that left our bags were traded to them.
+local function checkBags(context)
+	if not context or context.handled or not context.partner then return end
+	local delivered = 0
+	for itemID, before in pairs(context.counts) do
+		local gone = before - bagCount(itemID)
+		for _, entry in ipairs(Trades:GetPending()) do
+			if gone <= 0 then break end
+			if entry.itemID == itemID and ALC:SameName(entry.winner, context.partner) then
+				ALC.LootDetection:SetStatus(entry.id, status().AWARDED)
+				ALC.Awards:MarkDelivered(itemID, context.partner)
+				Trades:AnnounceDelivery(itemID, context.partner)
+				delivered = delivered + 1
+				gone = gone - 1
+			end
+		end
+	end
+	if delivered > 0 then
+		context.handled = true
+		Debug:Log("Trades", "%d item(s) delivered to %s (seen in the bags)", delivered, context.partner)
+		ALC:Print(L["Trade complete: %d item(s) delivered to %s."], delivered, context.partner)
+	end
+end
+
 -- Both sides accepted: remember what we give and to whom.
 function Trades:OnTradeAcceptUpdate(playerAccepted, targetAccepted)
 	if not (isOn(playerAccepted) and isOn(targetAccepted)) then return end
@@ -180,6 +229,7 @@ function Trades:OnTradeComplete()
 		end
 	end
 	if delivered > 0 then
+		if tradeContext then tradeContext.handled = true end
 		Debug:Log("Trades", "%d item(s) delivered to %s", delivered, snapshot.partner)
 		ALC:Print(L["Trade complete: %d item(s) delivered to %s."], delivered, snapshot.partner)
 	end
@@ -270,6 +320,9 @@ end
 -- The window closed: keep the note a moment, since the "complete" message may follow. When no
 -- message came, the bags tell: if the offered items left them, the trade went through.
 function Trades:OnTradeClosed()
+	local context = tradeContext
+	tradeContext = nil
+	if context then C_Timer.After(1.5, function() checkBags(context) end) end
 	local snapshot = offered
 	if not snapshot then return end
 	C_Timer.After(1.5, function()
@@ -290,6 +343,7 @@ end
 function Trades:Init()
 	self:RegisterEvent("TRADE_ACCEPT_UPDATE", function(_, player, target) Trades:OnTradeAcceptUpdate(player, target) end)
 	self:RegisterEvent("TRADE_SHOW", function()
+		Trades:OnTradeShow()
 		C_Timer.After(PLACE_DELAY, function() Trades:FillTrade() end)
 	end)
 	self:RegisterEvent("TRADE_CLOSED", function() Trades:OnTradeClosed() end)
