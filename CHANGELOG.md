@@ -7,10 +7,10 @@
 - Much tighter Compact windows: lower rows in the loot, response and voting windows, and the History shows one tight line per award. Settings > Everyone has a new Window size (70, 80, 90 or 100%) that scales every window.
 - Loot window: a thin countdown bar along each Bind-on-Pickup item shows how much of its trade window is left (the text is shorter: "BoP 3h 52m").
 - Fix: the answer counter ("3/4 responded") counted yourself twice in a raid, so it said 3/4 in a raid of three.
-- The BoP trade window is 4 hours (it was 2).
+- The BoP trade window is 4 hours (it was 2). The time left is now read from the item's own tooltip in your bags, so it counts from when the item was looted (not from when it was listed). An item that is not in your bags has no timer yet.
 - The trade queue now notices a delivery also when the game gives no accept events or "Trade complete" message: it compares your bags before and after the trade. Everything about a trade goes to /alc debug log.
 - The History tab says that only the council sees the history.
-- The BoP trade timer also works for items added by hand and for items whose data the game has not given (it reads the tooltip then).
+- The BoP trade timer also works for items added by hand, as long as they are in your bags.
 
 ## 0.3.1-beta
 - Fix: the loot window failed to open for the loot master when the boss name was a "secret" text (WoW Forever hides some names). The name is now only used when it is readable; otherwise the zone names the loot.

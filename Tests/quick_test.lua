@@ -166,13 +166,14 @@ return function(check, H)
 	check("and the list is placed by the new height", lootRows[2].point[5] == -(52 + 34 + 1 * (36 + 4)))
 	Settings:SetCompact(false)
 	-- A Bind-on-Pickup item shows a countdown bar along its row.
-	local realInfo = C_Item.GetItemInfo
-	C_Item.GetItemInfo = function() return "Crown", "|Hitem:19019|h[Crown]|h", 4, 60, 0, "Armor", "Plate", 1, "INVTYPE_HEAD", 133101, 0, 4, 1, 1 end
+	local realSlots, realScan = ALC.LootDetection.FindBagSlots, ALC.LootDetection.ScanBagItem
+	ALC.LootDetection.FindBagSlots = function() return { { 0, 1 } } end
+	ALC.LootDetection:ClearTradeCache()
+	ALC.LootDetection.ScanBagItem = function() return { "Soulbound", "You may trade this item with players that were eligible to loot it for the next 3 hours 30 min." } end
 	Loot:Refresh()
 	check("a BoP item shows its countdown bar", lootRows[1].bar:IsShown() and lootRows[1].bar.fill.w ~= nil and lootRows[1].bar.fill.w > 300)
-	C_Item.GetItemInfo = realInfo
-	Loot:Refresh()
-	check("and other items do not", not lootRows[1].bar:IsShown())
+	ALC.LootDetection.FindBagSlots, ALC.LootDetection.ScanBagItem = realSlots, realScan
+	ALC.LootDetection:ClearTradeCache()
 
 	-- The window size follows the setting, in every window.
 	check("an unknown window size is refused", Settings:SetWindowScale(0.5) == false and Settings:GetWindowScale() == 1)

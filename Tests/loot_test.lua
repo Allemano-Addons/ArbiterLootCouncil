@@ -147,26 +147,40 @@ return function(check, H)
 	check("a secret encounter name is not used as the boss", LD:GetBossName() == "Molten Core")
 	issecretvalue, UnitExists, UnitIsDead, UnitName = realSecret, realExists, realDead, realName
 
-	-- A looted Bind-on-Pickup item can be traded for four hours: the loot window counts it down.
-	local realInfo = C_Item.GetItemInfo
-	local bind = 1
-	C_Item.GetItemInfo = function() return "Crown", "|Hitem:200|h[Crown]|h", 4, 60, 0, "Armor", "Plate", 1, "INVTYPE_HEAD", 133101, 0, 4, 1, bind end
+	-- A looted Bind-on-Pickup item can be traded for a while: the time is read from its tooltip in the bags.
+	local realSlots, realScan = LD.FindBagSlots, LD.ScanBagItem
+	local inBags, lines = true, {}
+	LD.FindBagSlots = function() return inBags and { { 0, 1 } } or {} end
+	LD.ScanBagItem = function() return lines end
 	local bopEntry = LD:GetItems()[1]
-	bopEntry.addedAt = time() - 600
+	local function fresh() LD:ClearTradeCache() end
+	lines = { "Crown", "Soulbound", "You may trade this item with players that were eligible to loot it for the next 1 hour 58 min." }
+	fresh()
 	local left = LD:GetTradeTimeLeft(bopEntry)
-	check("a looted BoP item has about 3h 50m left", left ~= nil and left > 13700 and left <= 13800)
-	bopEntry.addedAt = time() - 15000
-	check("an expired window counts down to zero", LD:GetTradeTimeLeft(bopEntry) == 0)
-	bind = 2
-	check("other items get no timer", LD:GetTradeTimeLeft(bopEntry) == nil)
-	bind = 1
-	bopEntry.source = "manual"
-	check("items added by hand get one too, counted from when they were added", LD:GetTradeTimeLeft(bopEntry) ~= nil)
-	bopEntry.source = "loot"
+	check("the time left is read from the tooltip", left ~= nil and left > 7070 and left <= 7080)
+	lines = { "Crown", "Soulbound", "You may trade this item with players that were eligible to loot it for the next 42 min." }
+	fresh()
+	check("minutes alone", LD:GetTradeTimeLeft(bopEntry) == 42 * 60)
+	lines = { "Crown", "Soulbound", "You may trade this item with players that were eligible to loot it for the next 30 sec." }
+	fresh()
+	check("seconds alone", LD:GetTradeTimeLeft(bopEntry) == 30)
+	lines = { "Crown", "Soulbound" }
+	fresh()
+	check("bound with no trade window left counts as expired", LD:GetTradeTimeLeft(bopEntry) == 0)
+	lines = { "Crown", "Binds when picked up" }
+	fresh()
+	check("an item that says nothing gets no timer", LD:GetTradeTimeLeft(bopEntry) == nil)
+	lines = { "Crown", "Soulbound", "You may trade this item with players that were eligible to loot it for the next 1 hour." }
+	inBags = false
+	fresh()
+	check("an item that is not in the bags has no timer yet", LD:GetTradeTimeLeft(bopEntry) == nil)
+	inBags = true
+	fresh()
+	check("and one in the bags has", LD:GetTradeTimeLeft(bopEntry) == 3600)
 	local fmt = ALC.LootWindow.FormatTradeTime
 	check("the time reads as hours and minutes", fmt(6100):find("1h 41m", 1, true) ~= nil and fmt(1500):find("25m", 1, true) ~= nil and fmt(30):find("<1m", 1, true) ~= nil)
 	check("expired is said so", fmt(0):find("expired", 1, true) ~= nil)
-	C_Item.GetItemInfo = realInfo
+	LD.FindBagSlots, LD.ScanBagItem = realSlots, realScan
 
 	-- The game's own loot threshold follows ALC's when the group leader changes it.
 	local gameSet, gameNow = nil, 2

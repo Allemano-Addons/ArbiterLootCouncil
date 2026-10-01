@@ -66,40 +66,91 @@ local SLOT_NAMES = _G -- INVTYPE_* strings live in the global table
 -- What the window shows for an item; asks the client for data it does not have yet.
 LootDetection.BOP_TRADE_SECONDS = BOP_TRADE_SECONDS
 
--- Whether an item is Bind on Pickup (or already soulbound), from the item data, else from its tooltip.
-local scanTip
-local bopCache = {}
-local function isBindOnPickup(entry)
-	local bindType = select(14, ALC:GetItemInfo(entry.itemString))
-	if type(bindType) == "number" then return bindType == 1 end -- 1 = bound when picked up
-	local cached = bopCache[entry.itemID]
-	if cached ~= nil then return cached end
-	local result
-	if CreateFrame and entry.itemString then
-		pcall(function()
-			scanTip = scanTip or CreateFrame("GameTooltip", "ALCScanTooltip", nil, "GameTooltipTemplate")
-			scanTip:SetOwner(UIParent, "ANCHOR_NONE")
-			scanTip:ClearLines()
-			scanTip:SetHyperlink(entry.itemString)
-			for i = 2, scanTip:NumLines() do
-				local line = _G["ALCScanTooltipTextLeft" .. i]
-				local text = line and line:GetText()
-				if text and (text == ITEM_BIND_ON_PICKUP or text == ITEM_SOULBOUND) then result = true end
-			end
-			if scanTip:NumLines() > 0 then result = result or false end
-		end)
+-- The trade window of a Bind-on-Pickup item is read from the item's own tooltip in the bags
+-- ("You may trade this item with players that were eligible to loot it for the next 1 hour 58 min."),
+-- so it counts from the moment the item was looted, as the game does.
+
+-- Every bag slot that holds the item, in bag order: { { bag, slot }, ... }. Replaceable in tests.
+function LootDetection.FindBagSlots(itemID)
+	local get = (C_Container and C_Container.GetContainerItemInfo) or GetContainerItemInfo
+	local numSlots = (C_Container and C_Container.GetContainerNumSlots) or GetContainerNumSlots
+	local found = {}
+	if not get or not numSlots then return found end
+	for bag = 0, (NUM_BAG_SLOTS or 4) do
+		for slot = 1, (numSlots(bag) or 0) do
+			local info, _, _, _, _, _, _, _, _, id = get(bag, slot)
+			if (type(info) == "table" and info.itemID or id) == itemID then found[#found + 1] = { bag, slot } end
+		end
 	end
-	if result ~= nil then bopCache[entry.itemID] = result end
-	return result == true
+	return found
 end
 
--- Seconds left to trade a Bind-on-Pickup item to the group (the game allows 4 hours after the
--- loot), or nil for other items. Counted from the moment the loot window listed the item (for an
--- item added by hand: from when it was added, which can only be an estimate).
+-- The text lines of the tooltip of a bag item. Replaceable in tests.
+local scanTip
+function LootDetection.ScanBagItem(bag, slot)
+	local lines = {}
+	pcall(function()
+		scanTip = scanTip or CreateFrame("GameTooltip", "ALCScanTooltip", nil, "GameTooltipTemplate")
+		scanTip:SetOwner(UIParent, "ANCHOR_NONE")
+		scanTip:ClearLines()
+		scanTip:SetBagItem(bag, slot)
+		for i = 1, scanTip:NumLines() do
+			local line = _G["ALCScanTooltipTextLeft" .. i]
+			local text = line and line:GetText()
+			if text then lines[#lines + 1] = text end
+		end
+	end)
+	return lines
+end
+
+-- "1 hour 58 min", "58 min" or "30 sec" as seconds; nil when no time is found in the text.
+local function parseDuration(text)
+	local hours = tonumber(text:match("(%d+)%s*[Hh]")) or 0
+	local minutes = tonumber(text:match("(%d+)%s*[Mm]")) or 0
+	local seconds = tonumber(text:match("(%d+)%s*[Ss]")) or 0
+	if hours + minutes + seconds == 0 then return nil end
+	return hours * 3600 + minutes * 60 + seconds
+end
+
+-- What the tooltip lines say: seconds left to trade, 0 for an item that is bound with no trade
+-- window left, nil when the lines say nothing about it.
+local function tradeTimeFromLines(lines)
+	local prefix = BIND_TRADE_TIME_REMAINING and BIND_TRADE_TIME_REMAINING:match("^(.-)%%s")
+	prefix = prefix or "You may trade this item with players that were eligible to loot it for the next "
+	local bound = false
+	for _, text in ipairs(lines) do
+		if text:sub(1, #prefix) == prefix then
+			return parseDuration(text:sub(#prefix + 1))
+		end
+		if text == ITEM_SOULBOUND or text == "Soulbound" then bound = true end
+	end
+	return bound and 0 or nil
+end
+
+local tradeCache = {} -- entry id -> { left = seconds at scan, at = GetTime() at scan }
+local CACHE_SECONDS = 20
+
+function LootDetection:ClearTradeCache() tradeCache = {} end
+
+-- Seconds left to trade a looted Bind-on-Pickup item to the group (4 hours on WoW Forever), read from
+-- its tooltip in our bags; nil when the item is not in the bags or says nothing about a trade window.
 function LootDetection:GetTradeTimeLeft(entry)
-	if not entry.addedAt or entry.status == STATUS.AWARDED then return nil end
-	if not isBindOnPickup(entry) then return nil end
-	return math.max(0, BOP_TRADE_SECONDS - (time() - entry.addedAt))
+	if entry.status == STATUS.AWARDED then return nil end
+	local now = GetTime()
+	local cached = tradeCache[entry.id]
+	if not cached or now - cached.checked > CACHE_SECONDS then
+		-- The copies of one item sit in the bags in the order they were listed.
+		local ordinal = 1
+		for _, other in ipairs(store.items) do
+			if other.itemID == entry.itemID and other.id < entry.id and other.status ~= STATUS.AWARDED then ordinal = ordinal + 1 end
+		end
+		local slot = LootDetection.FindBagSlots(entry.itemID)[ordinal]
+		local left = slot and tradeTimeFromLines(LootDetection.ScanBagItem(slot[1], slot[2])) or nil
+		cached = { left = left, at = now, checked = now }
+		tradeCache[entry.id] = cached
+	end
+	if cached.left == nil then return nil end
+	return math.max(0, cached.left - (now - cached.at))
 end
 
 function LootDetection:GetItemDisplay(entry)
