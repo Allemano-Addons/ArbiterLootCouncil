@@ -354,15 +354,26 @@ end
 --------------------------------------------------------------------------------
 -- Loot windows
 --------------------------------------------------------------------------------
+-- Names can be "secret" strings on WoW Forever (a boss fight, an instance): they can be shown by the
+-- game but not joined, compared or saved, so only readable text is ever kept.
+local function readable(text)
+	if type(text) ~= "string" then return nil end
+	if issecretvalue and issecretvalue(text) then return nil end
+	return text
+end
+
 local function currentBossName()
 	if encounter and GetTime() - encounter.at < ENCOUNTER_MEMORY then return encounter.name end
-	if UnitExists("target") and UnitIsDead("target") then return UnitName("target") end
-	return GetZoneText and GetZoneText() or nil
+	if UnitExists("target") and UnitIsDead("target") then
+		local name = readable(UnitName("target"))
+		if name then return name end
+	end
+	return readable(GetZoneText and GetZoneText())
 end
 
 -- A boss kill names the loot that follows.
 function LootDetection:OnEncounterEnd(name, success)
-	if success == 1 and type(name) == "string" then encounter = { name = name, at = GetTime() } end
+	if success == 1 and readable(name) then encounter = { name = name, at = GetTime() } end
 end
 
 -- True when every item in the list has been handed out.

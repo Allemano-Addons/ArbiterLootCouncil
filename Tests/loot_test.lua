@@ -128,6 +128,25 @@ return function(check, H)
 	LD:OnLootOpened()
 	check("boss falls back to the zone", LD:GetBossName() == "Molten Core")
 
+	-- A secret boss name (target or encounter) is never kept: the zone names the loot instead.
+	local SECRET = {}
+	local realSecret, realExists, realDead, realName = issecretvalue, UnitExists, UnitIsDead, UnitName
+	issecretvalue = function(v) return v == SECRET end
+	UnitExists = function() return true end
+	UnitIsDead = function() return true end
+	UnitName = function(unit) if unit == "target" then return SECRET end return realName(unit) end
+	reset()
+	H.clock = H.clock + 5000
+	corpse("Creature-D", 200)
+	LD:OnLootOpened()
+	check("a secret target name is not used as the boss", LD:GetBossName() == "Molten Core")
+	LD:OnEncounterEnd(SECRET, 1)
+	reset()
+	corpse("Creature-E", 200)
+	LD:OnLootOpened()
+	check("a secret encounter name is not used as the boss", LD:GetBossName() == "Molten Core")
+	issecretvalue, UnitExists, UnitIsDead, UnitName = realSecret, realExists, realDead, realName
+
 	----------------------------------------------------------------------------
 	-- Adding by hand
 	----------------------------------------------------------------------------

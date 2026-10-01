@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.3.1-beta
+- Fix: the loot window failed to open for the loot master when the boss name was a "secret" text (WoW Forever hides some names). The name is now only used when it is readable; otherwise the zone names the loot.
+
 ## 0.3.0-beta
 Everybody in the raid who answers or votes should update to this version together.
 

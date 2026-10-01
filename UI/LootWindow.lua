@@ -391,6 +391,7 @@ function LootWindow:Refresh()
 	offset = max(0, min(offset, max(0, count - rowsAllowed)))
 
 	local boss = LootDetection:GetBossName()
+	if type(boss) ~= "string" or (issecretvalue and issecretvalue(boss)) then boss = nil end
 	frame.title:SetText(boss and (L["LOOT"] .. " \194\183 " .. strupper(boss)) or L["LOOT"])
 
 	local qualityName = _G["ITEM_QUALITY" .. ALC.Settings:GetQualityThreshold() .. "_DESC"] or L["Selected quality"]
