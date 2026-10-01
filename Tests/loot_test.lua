@@ -161,12 +161,30 @@ return function(check, H)
 	check("other items get no timer", LD:GetTradeTimeLeft(bopEntry) == nil)
 	bind = 1
 	bopEntry.source = "manual"
-	check("items added by hand get no timer", LD:GetTradeTimeLeft(bopEntry) == nil)
+	check("items added by hand get one too, counted from when they were added", LD:GetTradeTimeLeft(bopEntry) ~= nil)
 	bopEntry.source = "loot"
 	local fmt = ALC.LootWindow.FormatTradeTime
 	check("the time reads as hours and minutes", fmt(6100):find("1h 41m", 1, true) ~= nil and fmt(1500):find("25m", 1, true) ~= nil and fmt(30):find("<1m", 1, true) ~= nil)
 	check("expired is said so", fmt(0):find("expired", 1, true) ~= nil)
 	C_Item.GetItemInfo = realInfo
+
+	-- The game's own loot threshold follows ALC's when the group leader changes it.
+	local gameSet, gameNow = nil, 2
+	local realLeader = UnitIsGroupLeader
+	UnitIsGroupLeader = function() return true end
+	SetLootThreshold = function(q) gameSet = q end
+	GetLootThreshold = function() return gameNow end
+	ALC.Settings:SetQualityThreshold(3)
+	check("the game's threshold is set to the new one", gameSet == 3)
+	gameNow, gameSet = 4, nil
+	ALC.Settings:SetQualityThreshold(4)
+	check("and left alone when it already matches", gameSet == nil)
+	UnitIsGroupLeader = function() return false end
+	gameNow = 2
+	ALC.Settings:SetQualityThreshold(3)
+	check("only the group leader can change it", gameSet == nil)
+	ALC.Settings:SetQualityThreshold(4)
+	UnitIsGroupLeader, SetLootThreshold, GetLootThreshold = realLeader, nil, nil
 
 	----------------------------------------------------------------------------
 	-- Adding by hand

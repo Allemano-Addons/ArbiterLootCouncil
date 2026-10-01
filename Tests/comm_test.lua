@@ -104,7 +104,7 @@ return function(check, H)
 	rejects("fractional seq", env("AWARD", "sid1", 1.5, { winner = "Jonatan", itemID = 19019, response = "BIS" }), "RAID", "Ashvane")
 	check("accepted with realm suffix and higher seq",
 		Comm:Process(env("SESSION_CANCEL", "sid1", 3, { reason = "test" }), "PARTY", "Ashvane-SomeRealm") == true)
-	rejects("older seq after newer", env("AWARD", "sid1", 2, { winner = "Jonatan", itemID = 19019, response = "BIS" }), "RAID", "Ashvane")
+	rejects("the same seq twice", env("SESSION_CANCEL", "sid1", 3, { reason = "test" }), "PARTY", "Ashvane")
 	check("RESPONSE from a raider accepted",
 		Comm:Process(env("RESPONSE", "sid1", nil, { response = "BIS", gear = { "item:12345:0:0:0" } }), "WHISPER", "Jonatan") == true)
 	check("VOTE from council accepted",
@@ -161,6 +161,12 @@ return function(check, H)
 	local badSnap = start()
 	badSnap.candidates = { { item = 1, name = "Jonatan", class = "WARRIOR", response = "NOPE", gear = {} } }
 	rejects("snapshot with a bad candidate", env("STATE_SNAPSHOT", "sid1", 103, badSnap), "WHISPER", "Ashvane")
+
+	-- Messages can overtake each other on the way: a number is accepted once while it is near the newest.
+	check("a newer message arrives first", Comm:Process(env("SESSION_CANCEL", "sid1", 105, { reason = "test" }), "PARTY", "Ashvane") == true)
+	check("an older one that was overtaken is still accepted", Comm:Process(env("SESSION_CANCEL", "sid1", 104, { reason = "test" }), "PARTY", "Ashvane") == true)
+	rejects("but only once", env("SESSION_CANCEL", "sid1", 104, { reason = "test" }), "PARTY", "Ashvane")
+	rejects("and not when it is far behind", env("SESSION_CANCEL", "sid1", 30, { reason = "test" }), "PARTY", "Ashvane")
 
 	----------------------------------------------------------------------------
 	-- Decoding

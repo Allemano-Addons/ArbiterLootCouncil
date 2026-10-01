@@ -51,7 +51,10 @@ local function newMap(limit)
 	return map
 end
 
-local lastSeq = newMap(8)      -- sid -> last accepted seq from the loot master
+-- Messages from the loot master can overtake each other on the way (a broadcast and a whisper, or
+-- two priorities), so a number is accepted once while it is within SEQ_WINDOW of the highest one seen.
+local SEQ_WINDOW = 64
+local lastSeq = newMap(8)      -- sid -> { high = highest accepted seq, seen = { [seq] = true } }
 local nextSeq = newMap(8)      -- sid -> last seq we stamped when sending as loot master
 local rejectLog = newMap(200)  -- "sender|reason" -> time last logged
 local versionWarned = newMap(200)
@@ -303,7 +306,8 @@ function Comm:Process(env, distribution, sender)
 			reject(sender, t, "missing or invalid seq")
 			return false
 		end
-		if seq <= (lastSeq:get(sid) or 0) then
+		local window = lastSeq:get(sid)
+		if window and (seq <= window.high - SEQ_WINDOW or window.seen[seq]) then
 			reject(sender, t, "old seq")
 			return false
 		end
@@ -326,7 +330,17 @@ function Comm:Process(env, distribution, sender)
 	end
 
 	-- Accepted
-	if spec.seq then lastSeq:set(sid, seq) end
+	if spec.seq then
+		local window = lastSeq:get(sid)
+		if not window then window = { high = 0, seen = {} } lastSeq:set(sid, window) end
+		window.seen[seq] = true
+		if seq > window.high then
+			window.high = seq
+			for old in pairs(window.seen) do
+				if old <= seq - SEQ_WINDOW then window.seen[old] = nil end
+			end
+		end
+	end
 	Debug:Log("Comm", "recv %s from %s sid=%s seq=%s", t, sender, tostring(sid), tostring(seq))
 	ALC.Events:Fire("ALC_COMM_" .. t, sender, sid, env.p, seq, distribution)
 	return true

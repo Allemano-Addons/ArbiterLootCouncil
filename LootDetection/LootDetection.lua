@@ -64,13 +64,39 @@ end
 local SLOT_NAMES = _G -- INVTYPE_* strings live in the global table
 
 -- What the window shows for an item; asks the client for data it does not have yet.
--- Seconds left to trade a looted Bind-on-Pickup item to the group (the game allows 2 hours after the
--- loot), or nil for other items. Counted from the moment the loot master's loot window listed it.
--- Items added by hand have no known loot time and get no timer.
-function LootDetection:GetTradeTimeLeft(entry)
-	if entry.source ~= "loot" or not entry.addedAt or entry.status == STATUS.AWARDED then return nil end
+-- Whether an item is Bind on Pickup (or already soulbound), from the item data, else from its tooltip.
+local scanTip
+local bopCache = {}
+local function isBindOnPickup(entry)
 	local bindType = select(14, ALC:GetItemInfo(entry.itemString))
-	if bindType ~= 1 then return nil end -- 1 = bound when picked up
+	if type(bindType) == "number" then return bindType == 1 end -- 1 = bound when picked up
+	local cached = bopCache[entry.itemID]
+	if cached ~= nil then return cached end
+	local result
+	if CreateFrame and entry.itemString then
+		pcall(function()
+			scanTip = scanTip or CreateFrame("GameTooltip", "ALCScanTooltip", nil, "GameTooltipTemplate")
+			scanTip:SetOwner(UIParent, "ANCHOR_NONE")
+			scanTip:ClearLines()
+			scanTip:SetHyperlink(entry.itemString)
+			for i = 2, scanTip:NumLines() do
+				local line = _G["ALCScanTooltipTextLeft" .. i]
+				local text = line and line:GetText()
+				if text and (text == ITEM_BIND_ON_PICKUP or text == ITEM_SOULBOUND) then result = true end
+			end
+			if scanTip:NumLines() > 0 then result = result or false end
+		end)
+	end
+	if result ~= nil then bopCache[entry.itemID] = result end
+	return result == true
+end
+
+-- Seconds left to trade a Bind-on-Pickup item to the group (the game allows 2 hours after the
+-- loot), or nil for other items. Counted from the moment the loot window listed the item (for an
+-- item added by hand: from when it was added, which can only be an estimate).
+function LootDetection:GetTradeTimeLeft(entry)
+	if not entry.addedAt or entry.status == STATUS.AWARDED then return nil end
+	if not isBindOnPickup(entry) then return nil end
 	return math.max(0, BOP_TRADE_SECONDS - (time() - entry.addedAt))
 end
 

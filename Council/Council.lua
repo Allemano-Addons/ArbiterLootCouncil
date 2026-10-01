@@ -211,7 +211,26 @@ end
 --------------------------------------------------------------------------------
 -- Init
 --------------------------------------------------------------------------------
+-- The game has its own loot threshold (the group leader sets it on the player frame): items below it
+-- are not given to the master looter at all. It follows ALC's threshold when the leader changes that.
+-- Returns true when the game's threshold was changed.
+function Council:SyncGameThreshold()
+	if not IsInGroup() or not (UnitIsGroupLeader and UnitIsGroupLeader("player")) then return false end
+	local party = C_PartyInfo or {}
+	local set = SetLootThreshold or party.SetLootThreshold
+	local get = GetLootThreshold or party.GetLootThreshold
+	if not set then return false end
+	local wanted = ALC.Settings:GetQualityThreshold()
+	if get and get() == wanted then return false end
+	if not pcall(set, wanted) then return false end
+	ALC:Print(ALC.L["The game's loot threshold is now %s."], _G["ITEM_QUALITY" .. wanted .. "_DESC"] or wanted)
+	return true
+end
+
 function Council:Init()
+	ALC.Events.Register(self, "ALC_SETTINGS_CHANGED", function(_, key)
+		if key == "qualityThreshold" then Council:SyncGameThreshold() end
+	end)
 	local refresh = function() Council:Refresh() end
 	self:RegisterEvent("PLAYER_ENTERING_WORLD", refresh)
 	self:RegisterEvent("GROUP_ROSTER_UPDATE", refresh)

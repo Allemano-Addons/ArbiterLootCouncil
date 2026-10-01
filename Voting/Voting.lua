@@ -218,9 +218,15 @@ end
 --------------------------------------------------------------------------------
 -- Council: VOTE_UPDATE in
 --------------------------------------------------------------------------------
-local function onUpdate(_, _, _, p)
+-- Messages can overtake each other: a count older than one already shown is dropped.
+local appliedSeq = {} -- sid|item|candidate -> seq of the count shown
+
+local function onUpdate(_, _, sid, p, seq)
 	local session = ALC.Sessions:GetSession()
 	if not session or not session.isCouncil then return end
+	local key = sid .. "|" .. p.item .. "|" .. strlower(p.candidate)
+	if seq and appliedSeq[key] and seq < appliedSeq[key] then return end
+	appliedSeq[key] = seq
 	setTally(p.item, p.candidate, p.voters)
 	recomputeMine()
 	changed()

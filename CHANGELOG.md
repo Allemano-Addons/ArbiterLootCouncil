@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.2-beta
+- Fix: messages from the loot master could overtake each other on the way (an award passing a vote count, say) and the later-numbered one then made the earlier be thrown away. That is likely why council members did not see an award ("Awarded to ...") or the end of the session, and why their history stayed empty. A number is now accepted once while it is near the newest, and an old count never replaces a newer one.
+- The game's own loot threshold (the one on the player frame) now follows ALC's threshold when the group leader changes it.
+- The BoP trade timer also works for items added by hand and for items whose data the game has not given (it reads the tooltip then).
+
 ## 0.3.1-beta
 - Fix: the loot window failed to open for the loot master when the boss name was a "secret" text (WoW Forever hides some names). The name is now only used when it is readable; otherwise the zone names the loot.
 

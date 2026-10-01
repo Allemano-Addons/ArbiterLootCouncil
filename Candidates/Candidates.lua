@@ -264,9 +264,15 @@ end
 --------------------------------------------------------------------------------
 -- Council: CANDIDATE_UPDATE in
 --------------------------------------------------------------------------------
-local function onUpdate(_, _, _, p)
+-- Messages can overtake each other: an update older than one already applied is dropped.
+local appliedSeq = {} -- sid|item|name -> seq of the update shown
+
+local function onUpdate(_, _, sid, p, seq)
 	local session = ALC.Sessions:GetSession()
 	if not session or not session.isCouncil then return end
+	local key = sid .. "|" .. p.item .. "|" .. string.lower(p.name)
+	if seq and appliedSeq[key] and seq < appliedSeq[key] then return end
+	appliedSeq[key] = seq
 	upsert(p.item, p)
 end
 
