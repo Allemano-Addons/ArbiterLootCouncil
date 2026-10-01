@@ -162,17 +162,31 @@ return function(check, H)
 	check("tall loot rows by default", lootRows[1].h == 56 and lootRows[1].iconFrame.h == 40 and lootRows[1].start.h == 34)
 	local lootHeight = lootFrame and lootFrame:GetHeight() or 0
 	Settings:SetCompact(true)
-	check("compact loot rows are lower", lootRows[1].h == 44 and lootRows[1].iconFrame.h == 32 and lootRows[1].start.h == 28)
-	check("and the list is placed by the new height", lootRows[2].point[5] == -(52 + 34 + 1 * (44 + 6)))
+	check("compact loot rows are lower", lootRows[1].h == 36 and lootRows[1].iconFrame.h == 28 and lootRows[1].start.h == 24)
+	check("and the list is placed by the new height", lootRows[2].point[5] == -(52 + 34 + 1 * (36 + 4)))
 	Settings:SetCompact(false)
+	-- A Bind-on-Pickup item shows a countdown bar along its row.
+	local realInfo = C_Item.GetItemInfo
+	C_Item.GetItemInfo = function() return "Crown", "|Hitem:19019|h[Crown]|h", 4, 60, 0, "Armor", "Plate", 1, "INVTYPE_HEAD", 133101, 0, 4, 1, 1 end
+	Loot:Refresh()
+	check("a BoP item shows its countdown bar", lootRows[1].bar:IsShown() and lootRows[1].bar.fill.w ~= nil and lootRows[1].bar.fill.w > 300)
+	C_Item.GetItemInfo = realInfo
+	Loot:Refresh()
+	check("and other items do not", not lootRows[1].bar:IsShown())
+
+	-- The window size follows the setting, in every window.
+	check("an unknown window size is refused", Settings:SetWindowScale(0.5) == false and Settings:GetWindowScale() == 1)
+	check("a known one is accepted", Settings:SetWindowScale(0.8) == true and lootRows[1].parent:GetScale() == 0.8)
+	Settings:SetWindowScale(1)
+	check("and back to normal", lootRows[1].parent:GetScale() == 1)
 	check("back to the old sizes", lootRows[1].h == 56 and lootRows[2].point[5] == -(52 + 34 + 1 * (56 + 8)))
 	Settings:SetCompact(true)
 	Loot:Hide()
 
 	check("start a session", Sessions:StartItems({ 200, 201 }) == true)
 	local sid2 = Sessions:GetActiveSid()
-	check("the response window has compact rows", Resp:IsShown() and Resp.rows[1].h == 34 and Resp.rows[1].itemBox.h == 24 and Resp.rows[1].buttons[1].h == 22)
-	check("and they sit closer", Resp.rows[2].point[5] == -(52 + 10 + 1 * (34 + 3)))
+	check("the response window has compact rows", Resp:IsShown() and Resp.rows[1].h == 30 and Resp.rows[1].itemBox.h == 22 and Resp.rows[1].buttons[1].h == 20)
+	check("and they sit closer", Resp.rows[2].point[5] == -(52 + 10 + 1 * (30 + 2)))
 	local compactHeight = Resp.rows[1].parent:GetHeight()
 	Settings:SetCompact(false)
 	check("switching back gives the tall rows", Resp.rows[1].h == 46 and Resp.rows[1].itemBox.h == 34 and Resp.rows[1].buttons[1].h == 30)
@@ -183,7 +197,7 @@ return function(check, H)
 	Win:Show()
 	local crow
 	for _, row in ipairs(Win.rows) do if row:IsShown() and row.candidate == "Veyra Moo" then crow = row end end
-	check("the voting window's rows are compact too", crow.h == 40)
+	check("the voting window's rows are compact too", crow.h == 32)
 	local councilFrame = crow.parent
 	check("its own checkbox follows the setting", councilFrame.compact.checked == true)
 	councilFrame.compact.scripts.OnClick(councilFrame.compact)

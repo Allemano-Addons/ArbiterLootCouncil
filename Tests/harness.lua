@@ -81,6 +81,8 @@ local function newFrame(kind, parent)
 		CreateFontString = function(self) return newFrame("FontString", self) end,
 		SetFrameLevel = function(self, level) self.level = level end,
 		GetFrameLevel = function(self) return self.level or 1 end,
+		SetScale = function(self, v) self.scale = v end,
+		GetScale = function(self) return self.scale or 1 end,
 		SetToplevel = function(self, v) self.toplevel = v end,
 		SetMovable = function(self, v) self.movable = v end,
 		StartMoving = function(self) self.moving = true end,

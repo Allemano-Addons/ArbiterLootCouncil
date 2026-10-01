@@ -143,6 +143,7 @@ end
 
 local function build()
 	frame = CreateFrame("Frame", nil, UIParent)
+	UI.RegisterScaled(frame)
 	frame:SetSize(WIDTH, 700)
 	frame:SetFrameStrata("HIGH")
 	frame:SetFrameLevel(80)   -- each window has its own band of levels, so windows never mix
@@ -451,6 +452,23 @@ local function build()
 	end))
 	frame.compact:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
 	y = y + 38
+
+	-- How big the windows are: smaller windows take less of the screen.
+	local sizeLabel = into("everyone", UI.NewText(frame, 12, c.text))
+	sizeLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
+	sizeLabel:SetText(L["Window size"])
+	y = y + 22
+	SettingsWindow.scaleButtons = {}
+	local scaleWidth = math.floor((WIDTH - 2 * PAD - 3 * 6) / 4)
+	for i, scale in ipairs(ALC.Settings.WINDOW_SCALES) do
+		local button = into("everyone", UI.NewButton(frame, scaleWidth, 30, string.format("%d%%", scale * 100), function()
+			ALC.Settings:SetWindowScale(scale)
+		end))
+		button:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD + (i - 1) * (scaleWidth + 6), -y)
+		button.scale = scale
+		SettingsWindow.scaleButtons[i] = button
+	end
+	y = y + 46
 
 	-- The font of every window; opens a list where each font is shown as itself.
 	local fontLabel = into("everyone", UI.NewText(frame, 12, c.text))
@@ -845,6 +863,7 @@ function SettingsWindow:Refresh()
 	for _, button in ipairs(self.timerButtons) do button:SetSelected(button.seconds == settings:GetTimerSeconds()) end
 	frame.compact:SetChecked(settings:GetCompact())
 	for _, button in ipairs(self.recentButtons) do button:SetSelected(button.days == settings:GetRecentDays()) end
+	for _, button in ipairs(self.scaleButtons) do button:SetSelected(button.scale == settings:GetWindowScale()) end
 	frame.minimap:SetChecked(not settings:IsMinimapHidden())
 	frame.keepOpen:SetChecked(settings:GetKeepCouncilOpen())
 	frame.rolls:SetChecked(settings:GetRollsEnabled())
@@ -900,7 +919,10 @@ function SettingsWindow:OnEnteringWorld(isInitialLogin, isReloadingUi)
 end
 
 function SettingsWindow:Init()
-	ALC.Events.Register(self, "ALC_SETTINGS_CHANGED", function() SettingsWindow:Refresh() end)
+	ALC.Events.Register(self, "ALC_SETTINGS_CHANGED", function(_, key)
+		if key == "windowScale" then UI.ApplyScales() end
+		SettingsWindow:Refresh()
+	end)
 	ALC.Events.Register(self, "ALC_SESSION_STARTED", function(_, session)
 		if session and session.council then ALC.Settings:SetLastCouncil(session.lm, session.council) end
 		SettingsWindow:Refresh()

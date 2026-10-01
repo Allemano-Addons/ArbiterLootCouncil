@@ -68,6 +68,7 @@ end
 
 local function build()
 	frame = CreateFrame("Frame", nil, UIParent)
+	UI.RegisterScaled(frame)
 	frame:SetSize(WIDTH, 300)
 	frame:SetFrameStrata("HIGH")
 	frame:SetFrameLevel(30)

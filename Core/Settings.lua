@@ -225,6 +225,28 @@ function Settings:SetCompact(enabled)
 	changed("compact")
 end
 
+-- The size of every window as a share of normal (Everyone): 70, 80, 90 or 100 percent.
+Settings.WINDOW_SCALES = { 0.7, 0.8, 0.9, 1 }
+
+function Settings:GetWindowScale()
+	local value = db.profile.windowScale
+	for _, scale in ipairs(self.WINDOW_SCALES) do
+		if value == scale then return scale end
+	end
+	return 1
+end
+
+function Settings:SetWindowScale(scale)
+	for _, allowed in ipairs(self.WINDOW_SCALES) do
+		if scale == allowed then
+			db.profile.windowScale = scale
+			changed("windowScale")
+			return true
+		end
+	end
+	return false
+end
+
 -- Announce awards in raid or party chat (loot master): on by default.
 function Settings:GetAnnounceAwards()
 	return db.profile.announceAwards ~= false

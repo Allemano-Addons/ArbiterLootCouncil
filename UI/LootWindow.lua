@@ -107,6 +107,16 @@ local function newRow(index)
 	row.name:SetPoint("TOPLEFT", iconFrame, "TOPRIGHT", 12, -2)
 	row.name:SetPoint("RIGHT", row, "RIGHT", -(REMOVE_SIZE + 8 + 76 + 6 + 10), 0)
 
+	-- The countdown of a Bind-on-Pickup trade window: a thin bar along the bottom edge of the row.
+	row.bar = CreateFrame("Frame", nil, row)
+	row.bar:SetHeight(2)
+	row.bar:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 6, 1)
+	row.bar:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", -6, 1)
+	row.bar.fill = row.bar:CreateTexture(nil, "ARTWORK")
+	row.bar.fill:SetPoint("LEFT", row.bar, "LEFT", 0, 0)
+	row.bar.fill:SetHeight(2)
+	row.bar:Hide()
+
 	row.sub = UI.NewText(row, 11, c.muted)
 	row.sub:SetPoint("BOTTOMLEFT", iconFrame, "BOTTOMRIGHT", 12, 2)
 	row.sub:SetPoint("RIGHT", row, "RIGHT", -(REMOVE_SIZE + 8 + 76 + 6 + 10), 0)
@@ -124,7 +134,7 @@ local function applyDensity()
 	if layoutCompact == compact then return end
 	layoutCompact = compact
 	if compact then
-		ROW_H, ROW_GAP, ICON = 44, 6, 32
+		ROW_H, ROW_GAP, ICON = 36, 4, 28
 	else
 		ROW_H, ROW_GAP, ICON = 56, 8, 40
 	end
@@ -134,7 +144,7 @@ local function applyDensity()
 		row:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, rowTop(index))
 		row:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PAD, rowTop(index))
 		row.iconFrame:SetSize(ICON, ICON)
-		row.start:SetSize(76, compact and 28 or 34)
+		row.start:SetSize(compact and 64 or 76, compact and 24 or 34)
 	end
 end
 
@@ -155,6 +165,7 @@ end
 
 local function build()
 	frame = CreateFrame("Frame", nil, UIParent)
+	UI.RegisterScaled(frame)
 	frame:SetSize(WIDTH, 300)
 	frame:SetFrameStrata("HIGH")
 	frame:SetFrameLevel(20)
@@ -359,7 +370,15 @@ local function renderRow(row, entry, sessionActive, isLM)
 	end
 	local left = LootDetection:GetTradeTimeLeft(entry)
 	if left then
-		subtitle = (subtitle ~= "" and (subtitle .. " \194\183 ") or "") .. format(L["BoP: trade within %s"], LootWindow.FormatTradeTime(left))
+		subtitle = (subtitle ~= "" and (subtitle .. " \194\183 ") or "") .. format(L["BoP %s"], LootWindow.FormatTradeTime(left))
+		local share = math.min(1, left / LootDetection.BOP_TRADE_SECONDS)
+		local width = max(1, math.floor((WIDTH - 2 * PAD - 12) * share))
+		row.bar.fill:SetWidth(width)
+		local tone = left < 600 and { 1, 0.35, 0.35 } or left < 1800 and { 0.91, 0.64, 0.24 } or { 0.55, 0.58, 0.62 }
+		row.bar.fill:SetColorTexture(tone[1], tone[2], tone[3], 0.9)
+		row.bar:Show()
+	else
+		row.bar:Hide()
 	end
 	row.sub:SetText(subtitle)
 

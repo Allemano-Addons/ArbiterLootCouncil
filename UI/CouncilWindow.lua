@@ -15,7 +15,7 @@ local min, max = math.min, math.max
 
 local WIDTH, PAD = 1010, 20
 local HEADER_H, ITEM_H, TABLE_HEAD_H, FOOTER_H = 60, 92, 34, 52
-local ROW_H, COMPACT_ROW_H = 56, 40
+local ROW_H, COMPACT_ROW_H = 56, 32
 local POOL, DEFAULT_ROWS, MIN_ROWS = 30, 10, 3
 local ICON = 52
 local BUTTON_W = 92
@@ -26,7 +26,8 @@ local ROLL_X, ROLL_W, NOTE_NARROW_X, NOTE_NARROW_W = 588, 44, 640, 66
 local UNKNOWN_ICON = "Interface\\Icons\\INV_Misc_QuestionMark"
 
 -- The History tab: one row per award in the award log, newest first.
-local HISTORY_ROW_H, HISTORY_ROWS = 48, 12
+local HISTORY_ROW_H, HISTORY_ROWS = 48, 12 -- the row height is 30 in compact mode (layoutHistoryRow)
+local historyLayout -- whether the History rows are laid out compact now
 local TIME_X, HITEM_X, WINNER_X, HRESPONSE_X, HVOTES_X = 12, 112, 392, 560, 672
 local HITEM_W = 270
 -- The date list to the left of the History table: "All dates" and one row per day.
@@ -120,12 +121,12 @@ local function layoutRow(row, index, compact)
 	end
 	row.class:SetShown(not compact)
 
-	row.chip:SetSize(96, compact and 22 or 26)
+	row.chip:SetSize(96, compact and 20 or 26)
 
 	for i, button in ipairs(row.gear) do
 		button:ClearAllPoints()
 		if compact then
-			button:SetSize(GEAR_W - 30, 22)
+			button:SetSize(GEAR_W - 30, 20)
 			button:SetPoint("LEFT", row, "LEFT", GEAR_X, 0)
 			button.text:SetWidth(GEAR_W - 30)
 		else
@@ -137,7 +138,7 @@ local function layoutRow(row, index, compact)
 	row.more:ClearAllPoints()
 	row.more:SetPoint("LEFT", row, "LEFT", GEAR_X + GEAR_W - 28, 0)
 
-	local buttonHeight = compact and 26 or 34
+	local buttonHeight = compact and 22 or 34
 	row.vote:SetSize(BUTTON_W, buttonHeight)
 	row.award:SetSize(BUTTON_W, buttonHeight)
 	row.compact = compact
@@ -280,6 +281,30 @@ local function newRow(index)
 	return row
 end
 
+-- Lays a History row out: two lines per cell, or one tight line in compact mode.
+local function layoutHistoryRow(row, index, compact)
+	local height = compact and 30 or 48
+	row:SetHeight(height)
+	row:ClearAllPoints()
+	local top = -(HEADER_H + TABLE_HEAD_H + (index - 1) * height)
+	row:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD + HOFF, top)
+	row:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PAD, top)
+	row.time:ClearAllPoints()
+	row.winner:ClearAllPoints()
+	if compact then
+		row.time:SetPoint("LEFT", row, "LEFT", TIME_X, 0)
+		row.winner:SetPoint("LEFT", row, "LEFT", WINNER_X, 0)
+	else
+		row.time:SetPoint("TOPLEFT", row, "TOPLEFT", TIME_X, -9)
+		row.winner:SetPoint("TOPLEFT", row, "TOPLEFT", WINNER_X, -9)
+	end
+	row.zone:SetShown(not compact)
+	row.class:SetShown(not compact)
+	row.item:SetSize(HITEM_W, compact and 24 or 36)
+	row.item.iconBorder:SetSize(compact and 22 or 30, compact and 22 or 30)
+	row.chip:SetHeight(compact and 20 or 24)
+end
+
 -- A row of the History tab: when, what, to whom, with which answer, and the votes.
 local function newHistoryRow(index)
 	local row = CreateFrame("Frame", nil, frame)
@@ -328,6 +353,7 @@ local function newHistoryRow(index)
 	row.votes = UI.NewText(row, 15, c.text, "CENTER")
 	row.votes:SetPoint("LEFT", row, "LEFT", HVOTES_X - 8, 0)
 	row.votes:SetWidth(48)
+	layoutHistoryRow(row, index, false)
 	return row
 end
 
@@ -634,6 +660,7 @@ end
 
 local function build()
 	frame = CreateFrame("Frame", nil, UIParent)
+	UI.RegisterScaled(frame)
 	frame:SetSize(WIDTH, 400)
 	frame:SetFrameStrata("HIGH")
 	frame:SetFrameLevel(60)
@@ -1537,6 +1564,14 @@ local function renderHistory(self)
 	hideTrades(self)
 	setShown(historyStatic, true)
 
+	local compact = isCompact()
+	if historyLayout ~= compact then
+		for index, historyRow in ipairs(self.historyRows) do layoutHistoryRow(historyRow, index, compact) end
+		HISTORY_ROW_H = compact and 30 or 48
+		frame.historyScroll:SetHeight(HISTORY_ROWS * HISTORY_ROW_H)
+		historyLayout = compact
+	end
+
 	local list = self:GetHistory()
 	local count = #list
 	historyOffset = max(0, min(historyOffset, max(0, count - HISTORY_ROWS)))
@@ -1597,7 +1632,7 @@ local function renderTradeRow(row, entry)
 	local note = unit and "" or L["Not in the group right now"]
 	local left = ALC.LootDetection:GetTradeTimeLeft(entry)
 	if left then
-		note = (note ~= "" and (note .. " \194\183 ") or "") .. format(L["BoP: trade within %s"], ALC.LootWindow.FormatTradeTime(left))
+		note = (note ~= "" and (note .. " \194\183 ") or "") .. format(L["BoP %s"], ALC.LootWindow.FormatTradeTime(left))
 	end
 	row.note:SetText(note)
 	row.when:SetText(timeAgo(entry.awardedAt))

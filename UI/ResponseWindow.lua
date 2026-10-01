@@ -110,7 +110,7 @@ local function applyDensity()
 	if layoutCompact == compact then return end
 	layoutCompact = compact
 	if compact then
-		ROW_H, ROW_GAP, ICON, BUTTON_H, NAME_W = 34, 3, 24, 22, 150
+		ROW_H, ROW_GAP, ICON, BUTTON_H, NAME_W = 30, 2, 22, 20, 150
 	else
 		ROW_H, ROW_GAP, ICON, BUTTON_H, NAME_W = 46, 4, 34, 30, 170
 	end
@@ -188,6 +188,7 @@ end
 
 local function build()
 	frame = CreateFrame("Frame", nil, UIParent)
+	UI.RegisterScaled(frame)
 	frame:SetSize(WIDTH, 270)
 	frame:SetFrameStrata("HIGH")
 	frame:SetFrameLevel(40)

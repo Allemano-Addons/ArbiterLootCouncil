@@ -64,6 +64,8 @@ end
 local SLOT_NAMES = _G -- INVTYPE_* strings live in the global table
 
 -- What the window shows for an item; asks the client for data it does not have yet.
+LootDetection.BOP_TRADE_SECONDS = BOP_TRADE_SECONDS
+
 -- Whether an item is Bind on Pickup (or already soulbound), from the item data, else from its tooltip.
 local scanTip
 local bopCache = {}

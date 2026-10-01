@@ -337,6 +337,19 @@ end
 
 -- A checkbox with a label. `onToggle(checked)` runs when the player clicks it;
 -- `checkbox:SetChecked(bool)` only changes how it looks.
+-- Windows that follow the "Window size" setting (Settings, Everyone).
+local scaledFrames = {}
+
+function UI.RegisterScaled(frame)
+	scaledFrames[#scaledFrames + 1] = frame
+	frame:SetScale(ALC.Settings:GetWindowScale())
+end
+
+function UI.ApplyScales()
+	local scale = ALC.Settings:GetWindowScale()
+	for _, frame in ipairs(scaledFrames) do frame:SetScale(scale) end
+end
+
 -- `tooltip` (optional) is a longer explanation shown when the pointer is over the switch.
 function UI.NewCheckbox(parent, label, onToggle, tooltip)
 	local box = CreateFrame("Button", nil, parent)

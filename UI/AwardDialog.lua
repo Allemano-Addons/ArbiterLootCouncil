@@ -19,6 +19,7 @@ local c = UI.color
 
 local function build()
 	frame = CreateFrame("Frame", nil, UIParent)
+	UI.RegisterScaled(frame)
 	frame:SetSize(WIDTH, HEIGHT)
 	frame:SetFrameStrata("DIALOG")
 	frame:SetClampedToScreen(true)
