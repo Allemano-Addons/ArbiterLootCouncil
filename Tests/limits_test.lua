@@ -35,7 +35,10 @@ end
 		-- (cmd.exe wants backslashes in the name of the program)
 		local program = package.config:sub(1, 1) == "\\" and luac:gsub("/", "\\") or luac
 		-- (the whole command in one more pair of quotes: cmd.exe strips the outer ones)
-		local pipe = io.popen('""' .. program .. '" -l -l -p "' .. file .. '" 2>&1"')
+		local windows = package.config:sub(1, 1) == "\\"
+		local command = windows and ('""' .. program .. '" -l -l -p "' .. file .. '" 2>&1"')
+			or ('"' .. program .. '" -l -l -p "' .. file .. '" 2>&1')
+		local pipe = io.popen(command)
 		local listing = pipe:read("a")
 		pipe:close()
 		local name
