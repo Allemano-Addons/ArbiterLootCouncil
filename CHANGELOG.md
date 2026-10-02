@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0-beta
+- A small API for other addons to build on Arbiter Loot Council. Arbiter Soft Reserve is the first. **A normal Loot Council session works exactly as before**; everything below only appears when an addon built on ALC uses it.
+- Such an addon can start a session with its own answer buttons and attach a short tag and data to each item. The response window shows the tag (Soft Reserve: "SR" in front of the items you reserved). A session started this way does not open the voting window by itself (it can still be opened from the menu).
+- A new Result window (`/alc results`) shows everybody the outcome of items decided by rolls: every player's answer, roll and result, so the ones who lose can see it was fair. It opens by itself for the players when the first result arrives.
+- "Award all": one question that hands out a whole list of winners, one after the other, with the usual announcement, history and trade queue.
+- Players with an older version can still answer as before; they just do not see the new windows or tags.
+- No change to the protocol version: the new message is ignored by older versions.
+
 ## 0.3.4-beta
 - Credits and licenses added (a CREDITS.md in the addon, and the Ace3 license text next to the libraries). No changes to the addon itself: it works exactly as 0.3.3.
 
