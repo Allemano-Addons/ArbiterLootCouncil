@@ -25,6 +25,7 @@ LootDetection\LootDetection.lua
 Gear\Gear.lua
 Responses\Responses.lua
 Candidates\Candidates.lua
+Results\Results.lua
 Voting\Voting.lua
 Awards\Awards.lua
 Recent\Recent.lua
@@ -37,6 +38,7 @@ UI\CouncilWindow.lua
 UI\AwardDialog.lua
 UI\HistoryDialogs.lua
 UI\VersionWindow.lua
+UI\ResultWindow.lua
 UI\SettingsWindow.lua
 UI\Launcher.lua
 UI\MinimapButton.lua

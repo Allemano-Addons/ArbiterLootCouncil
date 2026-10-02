@@ -36,6 +36,46 @@ do
 end
 
 --------------------------------------------------------------------------------
+-- The API for other addons (Arbiter Soft Reserve is the first)
+-- ALC.API_VERSION goes up when something is added to what other addons may use; an addon asks for the
+-- version it needs with ALC.HasAPI(n) and says so to the player when ALC is too old. An addon announces
+-- itself with ALC.RegisterExtension(name, version), so ALC and the Versions window can tell what is installed.
+-- Nothing here changes what ALC does by itself.
+--------------------------------------------------------------------------------
+ALC.API_VERSION = 4
+
+do
+	local extensions = {} -- name -> { name, version }
+
+	function ALC.HasAPI(minVersion)
+		return type(minVersion) == "number" and ALC.API_VERSION >= minVersion
+	end
+
+	-- Returns true, or false and why not. Registering the same name again replaces the version.
+	function ALC.RegisterExtension(name, version)
+		if type(name) ~= "string" or name == "" then return false, "The extension needs a name." end
+		if type(version) ~= "string" and type(version) ~= "number" then return false, "The extension needs a version." end
+		extensions[name] = { name = name, version = tostring(version) }
+		ALC.Events:Fire("ALC_API_EXTENSION_REGISTERED", name, tostring(version))
+		return true
+	end
+
+	-- { name, version } of a registered extension, or nil.
+	function ALC.GetExtension(name)
+		local e = extensions[name]
+		return e and { name = e.name, version = e.version } or nil
+	end
+
+	-- All registered extensions, sorted by name.
+	function ALC.GetExtensions()
+		local list = {}
+		for _, e in pairs(extensions) do list[#list + 1] = { name = e.name, version = e.version } end
+		table.sort(list, function(a, b) return a.name < b.name end)
+		return list
+	end
+end
+
+--------------------------------------------------------------------------------
 -- Helpers
 --------------------------------------------------------------------------------
 
@@ -184,6 +224,7 @@ function ALC:OnInitialize()
 	self.LootWindow:Init()
 	self.Responses:Init()
 	self.Candidates:Init()
+	self.Results:Init()
 	self.Voting:Init()
 	self.Awards:Init()
 	self.Recent:Init()
@@ -192,6 +233,7 @@ function ALC:OnInitialize()
 	self.CouncilWindow:Init()
 	self.AwardDialog:Init()
 	self.VersionWindow:Init()
+	self.ResultWindow:Init()
 	self.SettingsWindow:Init()
 	self.MinimapButton:Init()
 	self.Debug:Log("Core", "Arbiter Loot Council %s loaded (protocol v%d)", self.version, self.PROTOCOL_VERSION)

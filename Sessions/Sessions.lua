@@ -60,11 +60,21 @@ local function copyList(list)
 	return copy
 end
 
--- The items of a session: { itemID, itemString [, winner] }. Only known fields are kept.
+-- What another addon attached to an item (see Protocol): copied one level deep, lists included.
+local function copyExtra(extra)
+	if type(extra) ~= "table" then return nil end
+	local copy = {}
+	for key, value in pairs(extra) do
+		copy[key] = type(value) == "table" and copyList(value) or value
+	end
+	return copy
+end
+
+-- The items of a session: { itemID, itemString [, winner] [, extra] }. Only known fields are kept.
 local function copyItems(items)
 	local copy = {}
 	for i, item in ipairs(items) do
-		copy[i] = { itemID = item.itemID, itemString = item.itemString, winner = item.winner }
+		copy[i] = { itemID = item.itemID, itemString = item.itemString, winner = item.winner, extra = copyExtra(item.extra) }
 	end
 	return copy
 end
@@ -96,6 +106,7 @@ local function makeSession(sid, p, restored)
 		pausedLeft = (timer and paused and not timeUp) and left or nil,
 		paused = paused,
 		rolls = p.rolls == true, -- the council gets a random roll per candidate
+		mode = p.mode,           -- what kind of session an addon built on ALC says it is (nil for a normal one)
 		timeUp = timeUp,
 		sid = sid,
 		items = copyItems(itemsOf(p)),
@@ -130,6 +141,7 @@ local function saveSession()
 		timer = session.timer,
 		paused = session.paused or nil,
 		rolls = session.rolls or nil,
+		mode = session.mode,
 		pausedLeft = session.pausedLeft,
 		endsAtEpoch = session.endsAt and (time() + math.ceil(session.endsAt - GetTime())) or nil,
 		sid = session.sid,
@@ -304,7 +316,12 @@ end
 
 -- Starts a session for a list of items (links, itemStrings or item ids), in that order.
 -- Returns true, sid or false, message.
-function Sessions:StartItems(list)
+-- `options` is for an addon that builds on ALC (Soft Reserve); a normal session passes none:
+--   mode       a short text for the kind of session ("SR"); shown nowhere by ALC itself
+--   extra      { [item number] = { key = value, ... } } data that travels with the items (see Protocol)
+--   responses  the answer buttons for this session, as a wire list { { id, label, color }, ... }, PASS last
+--   rolls      true or false: whether ALC rolls for a candidate when they answer (default: the setting)
+function Sessions:StartItems(list, options)
 	local name = me()
 	if not name or not ALC.Council:IsLootMaster(name) then
 		return false, L["You are not the loot master."]
@@ -325,18 +342,33 @@ function Sessions:StartItems(list)
 			return false, L["That is not a valid item."]
 		end
 		items[i] = { itemID = itemID, itemString = itemString }
+		if options and options.extra and options.extra[i] ~= nil then
+			if type(options.extra[i]) ~= "table" then return false, format(L["The session options are not valid (%s)."], "extra") end
+			items[i].extra = copyExtra(options.extra[i])
+		end
 	end
-	counter = counter + 1
-	local sid = format("%s-%d-%d", string.sub(name, 1, 30), time(), counter)
-	starting = true
-	local ok = ALC.Comm:SendRaid("SESSION_START", sid, {
+	local payload = {
 		items = items,
-		responses = ALC.Responses.ToWire(ALC.Responses:GetConfiguredSet()),
+		responses = (options and options.responses) or ALC.Responses.ToWire(ALC.Responses:GetConfiguredSet()),
 		council = ALC.Council:BuildSessionList(name),
 		lm = name,
 		timer = ALC.Settings:GetActiveTimer(),
 		rolls = ALC.Settings:GetRollsEnabled() or nil,
-	})
+		mode = options and options.mode or nil,
+	}
+	if options and options.rolls ~= nil then payload.rolls = options.rolls == true or nil end
+	-- What an addon passes is checked here the way every player will check it, so a mistake shows up now.
+	if options then
+		local valid, reason = ALC.Protocol.specs.SESSION_START.validate(payload, name)
+		if not valid then
+			Debug:Warn("Sessions", "the session was not started: %s", tostring(reason))
+			return false, format(L["The session options are not valid (%s)."], tostring(reason))
+		end
+	end
+	counter = counter + 1
+	local sid = format("%s-%d-%d", string.sub(name, 1, 30), time(), counter)
+	starting = true
+	local ok = ALC.Comm:SendRaid("SESSION_START", sid, payload)
 	if not ok then
 		starting = false
 		return false, L["Could not start the session. See /alc debug log."]
@@ -481,6 +513,7 @@ local function onStateRequest(_, sender)
 	end
 	if session.paused then payload.paused = true end
 	if session.rolls then payload.rolls = true end
+	if session.mode then payload.mode = session.mode end
 	ALC.Events:Fire("ALC_SESSION_SNAPSHOT_BUILD", payload, sender, isCouncil)
 	ALC.Comm:SendWhisper(sender, "STATE_SNAPSHOT", session.sid, payload)
 end

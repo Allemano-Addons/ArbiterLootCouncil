@@ -195,6 +195,21 @@ return function(check, H)
 	check("a pass is a candidate too", Candidates:Get("Jonatan Moo").response == "PASS")
 	local counts = Candidates:GetCounts()
 	check("counts: responded, passed, silent", counts.responded == 3 and counts.passed == 1 and counts.wanting == 2 and counts.silent == 1)
+	-- The loot master can set a roll later (Soft Reserve rolls when it resolves, not when a player answers).
+	check("no roll was made: rolls are off in this session", Candidates:Get("Jonatan Moo").roll == nil)
+	H.sent = {}
+	local before2 = candidateEvents
+	check("the loot master sets a roll", Candidates:SetRoll("Jonatan Moo", 77) == true and Candidates:Get("Jonatan Moo").roll == 77)
+	check("the council was told, only the council", whispersTo() == "Kaelis Moo,Veyra Moo" and candidateEvents > before2)
+	local _, rolled = AceSerializer:Deserialize(H.sent[1].text)
+	check("the update carries the roll", rolled.t == "CANDIDATE_UPDATE" and rolled.p.name == "Jonatan Moo" and rolled.p.roll == 77)
+	H.sent = {}
+	check("the same roll again tells nobody", Candidates:SetRoll("Jonatan Moo", 77) == true and whispersTo() == "")
+	check("a roll can be changed", Candidates:SetRoll("jonatan moo", 5) == true and Candidates:Get("Jonatan Moo").roll == 5)
+	check("a roll outside 1 to 100 is refused", Candidates:SetRoll("Jonatan Moo", 0) == false and Candidates:SetRoll("Jonatan Moo", 101) == false and Candidates:Get("Jonatan Moo").roll == 5)
+	check("a fraction or text is refused", Candidates:SetRoll("Jonatan Moo", 5.5) == false and Candidates:SetRoll("Jonatan Moo", "9") == false)
+	check("someone who did not answer has no roll to set", Candidates:SetRoll("Nobody Moo", 50) == false)
+	check("an item that is not in the session is refused", Candidates:SetRoll("Jonatan Moo", 50, 4) == false)
 
 	-- Snapshots for players who reload.
 	H.clock = H.clock + 100

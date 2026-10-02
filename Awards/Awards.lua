@@ -14,6 +14,7 @@
 --   ALC_AWARDS_CLEARED (count)    the history was cleared (or restored, count 0)
 --   ALC_AWARDS_REVOKED (entry)    an award was taken back (Undo award); the log line is marked `revoked`
 --   ALC_AWARDS_ANNOUNCED (text)   the winner was announced (or printed, when ungrouped)
+--   ALC_AWARDS_BATCH_DONE (awarded, failed)   an AwardMany finished: how many went well, and the messages of the rest
 
 local ALC = ALC
 local LibStub = LibStub
@@ -225,6 +226,92 @@ function Awards:Award(name, item, disenchant)
 		end)
 	end
 	return true
+end
+
+--------------------------------------------------------------------------------
+-- Award many (for an addon built on ALC: Soft Reserve hands out all its winners at once)
+--------------------------------------------------------------------------------
+local WAIT_STEP = 0.3 -- seconds between two awards of a batch, and between looks at the loot slot of the last one
+local batch           -- { sid, queue, awarded, failed } while a batch runs
+
+-- Checks a list of awards without doing anything: { { item = 2, name = "Veyra Moo" }, { item = 3, disenchant = true }, ... }.
+-- Returns true, or false and a message. Nothing is awarded unless every entry can be.
+function Awards:CheckMany(list)
+	local session = ALC.Sessions:GetSession()
+	if not session then return false, L["There is no active session."] end
+	if not session.isLM or not ALC.Council:AmLootMaster() then return false, L["Only the loot master can award items."] end
+	if session.paused then return false, L["The session is paused. Resume it to award."] end
+	if type(list) ~= "table" or #list == 0 then return false, L["There is nothing to award."] end
+	local seen = {}
+	for _, entry in ipairs(list) do
+		local item = entry.item
+		local target = type(item) == "number" and session.items[item]
+		if not target then return false, L["That item is not in the session."] end
+		if target.winner then return false, L["That item has already been awarded."] end
+		if seen[item] then return false, L["An item is in the list twice."] end
+		seen[item] = true
+		if entry.disenchant then
+			local ok, message = Awards:CanDisenchant()
+			if not ok then return false, message end
+		else
+			local candidate = ALC.Candidates:Get(entry.name, item)
+			if not candidate then return false, format(L["%s has not answered."], tostring(entry.name)) end
+			if candidate.response == "PASS" then return false, format(L["%s passed."], candidate.name) end
+		end
+	end
+	return true
+end
+
+function Awards:IsBatchRunning() return batch ~= nil end
+
+local function finishBatch()
+	local done = batch
+	batch = nil
+	for _, message in ipairs(done.failed) do ALC:Print(message) end
+	ALC.Events:Fire("ALC_AWARDS_BATCH_DONE", done.awarded, done.failed)
+end
+
+-- One award at a time: GiveMasterLoot is followed by a wait for the loot slot to empty, and only one such wait is
+-- tracked, so the next award starts when the last item has been handed over (or the wait ran out).
+local function batchStep()
+	if not batch then return end
+	local session = ALC.Sessions:GetSession()
+	if not session or session.sid ~= batch.sid then
+		batch.failed[#batch.failed + 1] = L["The session ended before everything was awarded."]
+		finishBatch()
+		return
+	end
+	if #batch.queue == 0 then
+		finishBatch()
+		return
+	end
+	if pendingGive then
+		C_Timer.After(WAIT_STEP, batchStep)
+		return
+	end
+	local entry = table.remove(batch.queue, 1)
+	local ok, message = Awards:Award(entry.name, entry.item, entry.disenchant)
+	if ok then
+		batch.awarded = batch.awarded + 1
+	else
+		batch.failed[#batch.failed + 1] = message or L["An award failed."]
+	end
+	C_Timer.After(WAIT_STEP, batchStep)
+end
+
+-- Awards a list of items in one go (the same as Award for each, one after the other). Returns true and how many were
+-- queued, or false and a message. ALC_AWARDS_BATCH_DONE (awarded, failed) fires when the last one is done.
+function Awards:AwardMany(list)
+	local ok, message = self:CheckMany(list)
+	if not ok then return false, message end
+	if batch then return false, L["A batch of awards is already running."] end
+	local session = ALC.Sessions:GetSession()
+	batch = { sid = session.sid, queue = {}, awarded = 0, failed = {} }
+	for i, entry in ipairs(list) do
+		batch.queue[i] = { item = entry.item, name = entry.name, disenchant = entry.disenchant and true or false }
+	end
+	batchStep()
+	return true, #list
 end
 
 --------------------------------------------------------------------------------

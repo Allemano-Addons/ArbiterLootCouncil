@@ -327,6 +327,89 @@ return function(check, H)
 	H.slash("debug lm")
 	H.slash("debug help")
 
+	----------------------------------------------------------------------------
+	-- Options for an addon that builds on ALC (Soft Reserve): a mode and data per item
+	----------------------------------------------------------------------------
+	setGroup({ "Veyra Moo", "Jonatan Moo" }, ME, "master", 0)
+	reset()
+	check("a normal session has no mode and no extra", Sessions:Start(19019) == true and Sessions:GetSession().mode == nil and Sessions:GetSession().items[1].extra == nil)
+	Sessions:Cancel("plain")
+
+	local srResponses = {
+		{ id = "MS", label = "MS", color = "4caf50" },
+		{ id = "OS", label = "OS", color = "ffb300" },
+		{ id = "PASS", label = "Pass", color = "888888" },
+	}
+	local okSR, sidSR = Sessions:StartItems({ 19019, 200 }, {
+		mode = "SR",
+		responses = srResponses,
+		rolls = false,
+		extra = { [1] = { sr = { "Veyra Moo", "Kaelis Moo" }, note = "tier token", reserved = true, copies = 2 } },
+	})
+	check("a session starts with options", okSR == true and Sessions:IsActive())
+	local sr = Sessions:GetSession()
+	check("the mode is kept", sr.mode == "SR")
+	check("the data travels with the item", sr.items[1].extra.sr[2] == "Kaelis Moo" and sr.items[1].extra.note == "tier token"
+		and sr.items[1].extra.reserved == true and sr.items[1].extra.copies == 2)
+	check("an item without data has none", sr.items[2].extra == nil)
+	check("the answer buttons are the ones given", #sr.responses == 3 and sr.responses[1].id == "MS" and sr.responses[3].id == "PASS")
+	check("rolls can be turned off for the session", sr.rolls == false)
+	sr.items[1].extra.sr[1] = "Mutated"
+	check("GetSession hands out a copy of the data", Sessions:GetSession().items[1].extra.sr[1] == "Veyra Moo")
+
+	-- the snapshot brings mode and data to a player who reloads
+	H.sent = {}
+	H.clock = H.clock + 100
+	Comm:Process(env("STATE_REQUEST", nil, nil, {}), "WHISPER", "Veyra Moo")
+	local _, srSnap = AceSerializer:Deserialize(H.sent[1].text)
+	check("the snapshot carries the mode", srSnap.p.mode == "SR")
+	check("and the data of the items", srSnap.p.items[1].extra.sr[1] == "Veyra Moo" and srSnap.p.items[2].extra == nil)
+
+	-- the loot master's own saved session keeps them over a /reload
+	local saved = ALC.Settings:GetSessionStore().session
+	check("the saved session keeps the mode and the data", saved and saved.mode == "SR" and saved.items[1].extra.copies == 2)
+	Sessions:Cancel("sr done")
+
+	-- a player's client builds the same session from the loot master's message
+	reset()
+	setGroup({ "Ashvane Moo", "Veyra Moo" }, "Ashvane Moo", "master", 1)
+	Council:Refresh()
+	local startSR = {
+		items = { { itemID = 19019, itemString = "item:19019:0", extra = { sr = { ME }, reserved = true } }, { itemID = 200, itemString = "item:200:0" } },
+		council = { "Ashvane Moo", "Veyra Moo" }, lm = "Ashvane Moo", mode = "SR", responses = srResponses,
+	}
+	check("a player accepts a session with a mode and data",
+		Comm:Process(env("SESSION_START", "sidSR", 1, startSR), "PARTY", "Ashvane Moo") == true and Sessions:GetActiveSid() == "sidSR")
+	local cl = Sessions:GetSession()
+	check("and sees them", cl.mode == "SR" and cl.items[1].extra.sr[1] == ME and cl.items[1].extra.reserved == true)
+	Sessions:Cancel("x")
+	Comm:Process(env("SESSION_CANCEL", "sidSR", 2, { reason = "done" }), "PARTY", "Ashvane Moo")
+	reset()
+
+	-- What is refused: the loot master's own check and every player's check are the same one
+	setGroup({}, nil)
+	H.sent = {}
+	local function refused(options) local ok, why = Sessions:StartItems({ 19019 }, options) return ok == false and why ~= nil and not Sessions:IsActive() end
+	check("a mode with a pipe is refused", refused({ mode = "S|R" }))
+	check("a mode that is too long is refused", refused({ mode = string.rep("A", 17) }))
+	check("data that is not a table is refused", refused({ extra = { [1] = "text" } }))
+	check("too many keys are refused", refused({ extra = { [1] = { a = 1, b = 1, c = 1, d = 1, e = 1, f = 1, g = 1, h = 1, i = 1 } } }))
+	check("a key with strange characters is refused", refused({ extra = { [1] = { ["a b"] = 1 } } }))
+	check("a text with an escape code is refused", refused({ extra = { [1] = { note = "|cffff0000red|r" } } }))
+	check("a nested table is refused", refused({ extra = { [1] = { sr = { { "deep" } } } } }))
+	check("a function is refused", refused({ extra = { [1] = { x = print } } }))
+	check("too long a list is refused", (function()
+		local names = {}
+		for i = 1, 41 do names[i] = "Player" .. i end
+		return refused({ extra = { [1] = { sr = names } } })
+	end)())
+	check("answers without PASS last are refused", refused({ responses = { { id = "PASS", label = "Pass", color = "888888" }, { id = "MS", label = "MS", color = "4caf50" } } }))
+	check("nothing was sent for any of them", #H.sent == 0)
+
+	-- A normal session is unchanged by all this
+	check("a normal session still starts", Sessions:Start(19019) == true)
+	Sessions:Cancel("end")
+
 	-- Put the environment back for the following tests.
 	ALC.Events.UnregisterAll(listener)
 	UnitName, IsInGroup = realUnitName, realIsInGroup

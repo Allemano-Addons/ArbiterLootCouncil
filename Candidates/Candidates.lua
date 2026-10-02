@@ -249,6 +249,28 @@ function Candidates:SetResponse(name, response, item)
 	return true
 end
 
+-- Loot master: sets a candidate's roll (1 to 100), for an addon that rolls at its own time (Soft Reserve rolls
+-- when the loot master presses Resolve, not when a player answers). The council gets the same CANDIDATE_UPDATE
+-- as for any change. Returns true, or false and a message.
+function Candidates:SetRoll(name, roll, item)
+	item = item or 1
+	local session = ALC.Sessions:GetSession()
+	if not session or not session.isLM then return false, L["Only the loot master can do that."] end
+	if type(roll) ~= "number" or roll ~= math.floor(roll) or roll < 1 or roll > 100 then
+		return false, L["A roll is a whole number from 1 to 100."]
+	end
+	local list = lists[item] or {}
+	local index = findIndex(list, name)
+	if not index then return false, L["That player is not a candidate."] end
+	if not ALC.Sessions:IsItemOpen(item) then return false, L["That item has already been awarded."] end
+	local entry = copyEntry(list[index], item)
+	entry.roll = roll
+	if not upsert(item, entry) then return true end
+	Debug:Log("Candidates", "item %d, %s: roll %d (set by the loot master)", item, entry.name, roll)
+	send(session, item, entry)
+	return true
+end
+
 -- Test mode: the loot master adds a made-up player to an item, as if they had answered.
 -- Only outside a group (in a raid, candidates come from the players' own answers).
 function Candidates:Inject(item, entry)

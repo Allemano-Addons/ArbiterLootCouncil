@@ -107,7 +107,9 @@ local function checkItemIndex(p)
 	return true
 end
 
--- The items of a session: { itemID, itemString [, winner] } each. `winner` is only set on
+local checkExtra -- defined below, after checkNameList
+
+-- The items of a session: { itemID, itemString [, winner] [, extra] } each. `winner` is only set on
 -- items that were already awarded (a snapshot for a player who joined late or reloaded).
 local function checkItems(items)
 	if not isArray(items, C.MAX_SESSION_ITEMS) or #items == 0 then return fail("bad items list") end
@@ -119,6 +121,10 @@ local function checkItems(items)
 			return fail("itemString does not match itemID")
 		end
 		if item.winner ~= nil and not isName(item.winner) then return fail("bad winner") end
+		if item.extra ~= nil then
+			local extraOk, extraReason = checkExtra(item.extra)
+			if not extraOk then return fail(extraReason) end
+		end
 	end
 	return true
 end
@@ -138,6 +144,31 @@ local function checkNameList(list, max, field)
 	end
 	return true
 end
+
+-- What another addon attaches to an item (optional): a few named values, each a short text, a number, a
+-- yes/no or a list of names. ALC passes it on and never looks inside; it only keeps it small and plain.
+checkExtra = function(extra)
+	if type(extra) ~= "table" then return fail("bad extra") end
+	local keys = 0
+	for key, value in pairs(extra) do
+		keys = keys + 1
+		if keys > C.MAX_EXTRA_KEYS then return fail("too many extra keys") end
+		if type(key) ~= "string" or not strmatch(key, "^%a[%w_]*$") or #key > 16 then return fail("bad extra key") end
+		local kind = type(value)
+		if kind == "string" then
+			if not isText(value, 1, C.MAX_EXTRA_TEXT) then return fail("bad extra text") end
+		elseif kind == "number" then
+			if value ~= value or value < -1e9 or value > 1e9 then return fail("bad extra number") end
+		elseif kind == "table" then
+			local ok, reason = checkNameList(value, C.MAX_EXTRA_LIST, "extra list")
+			if not ok then return fail(reason) end
+		elseif kind ~= "boolean" then
+			return fail("bad extra value")
+		end
+	end
+	return true
+end
+
 
 -- A note from a player (optional): plain text, no escape sequences.
 local function checkNote(p)
@@ -195,6 +226,8 @@ specs.SESSION_START = {
 		if p.timer ~= nil and not isInt(p.timer, C.TIMER_MIN, C.TIMER_MAX) then return fail("bad timer") end
 		if p.paused ~= nil and type(p.paused) ~= "boolean" then return fail("bad paused") end
 		if p.rolls ~= nil and type(p.rolls) ~= "boolean" then return fail("bad rolls") end
+		-- A short name for what kind of session this is, set by an addon that builds on ALC (Soft Reserve: "SR").
+		if p.mode ~= nil and not (isText(p.mode, 1, C.MAX_MODE_LENGTH) and strmatch(p.mode, "^[%w ]+$")) then return fail("bad mode") end
 		-- In a snapshot: what is left of it (0 = the time is up).
 		if p.timerLeft ~= nil and not isInt(p.timerLeft, 0, C.TIMER_MAX) then return fail("bad timerLeft") end
 		return true
@@ -283,6 +316,36 @@ specs.AWARD = {
 		if not isName(p.winner) then return fail("bad winner") end
 		-- An award to the disenchanter carries an answer that is not one of the buttons.
 		if p.response ~= C.DISENCHANT_ID and not isResponse(p.response) then return fail("bad response") end
+		return true
+	end,
+}
+
+-- The result of an item decided by rolls, for everybody (see Results). One message per item.
+local RESULT_OUTCOMES = { won = true, tied = true, lost = true, passed = true }
+local RESULT_VIA = { SR = true, MS = true, OS = true }
+
+specs.RESULT = {
+	allowed = "lm", channel = "GROUP", sid = "active", seq = true,
+	validate = function(p)
+		local ok, reason = checkItemIndex(p)
+		if not ok then return fail(reason) end
+		if p.state ~= "resolved" and p.state ~= "accepted" then return fail("bad result state") end
+		if not isArray(p.rows, C.MAX_RESULT_ROWS) then return fail("bad result rows") end
+		for _, r in ipairs(p.rows) do
+			if type(r) ~= "table" then return fail("bad result row") end
+			if not isName(r.name) then return fail("bad result name") end
+			if not isResponse(r.answer) then return fail("bad result answer") end
+			if r.roll ~= nil and not isInt(r.roll, 1, 100) then return fail("bad result roll") end
+			if r.rerolls ~= nil then
+				if not isArray(r.rerolls, C.MAX_REROLLS) then return fail("bad result rerolls") end
+				for _, n in ipairs(r.rerolls) do
+					if not isInt(n, 1, 100) then return fail("bad result reroll") end
+				end
+			end
+			if not RESULT_OUTCOMES[r.outcome] then return fail("bad result outcome") end
+			if r.via ~= nil and not RESULT_VIA[r.via] then return fail("bad result via") end
+			if r.reserved ~= nil and type(r.reserved) ~= "boolean" then return fail("bad result reserved") end
+		end
 		return true
 	end,
 }

@@ -136,6 +136,138 @@ function AwardDialog:Ask(name, item, disenchant)
 	frame:Show()
 end
 
+--------------------------------------------------------------------------------
+-- Award many: one question for a whole list
+--------------------------------------------------------------------------------
+local MANY_WIDTH, MANY_ROW, MANY_MAX = 520, 28, 12
+local manyFrame
+local manyList
+
+local function buildMany()
+	manyFrame = CreateFrame("Frame", nil, UIParent)
+	UI.RegisterScaled(manyFrame)
+	manyFrame:SetWidth(MANY_WIDTH)
+	manyFrame:SetFrameStrata("DIALOG")
+	manyFrame:SetClampedToScreen(true)
+	manyFrame:EnableMouse(true)
+	manyFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 120)
+	manyFrame:Hide()
+	local bg = UI.NewFill(manyFrame, 10)
+	UI.SetTextureColor(bg, c.bg)
+	UI.AddBorder(manyFrame, c.gold, 1, 10)
+
+	manyFrame.logo = UI.NewLogo(manyFrame, 26)
+	manyFrame.logo:SetPoint("TOPLEFT", manyFrame, "TOPLEFT", PAD, -PAD)
+	manyFrame.title = UI.NewText(manyFrame, 14, c.text)
+	manyFrame.title:SetPoint("LEFT", manyFrame.logo, "RIGHT", 10, 0)
+
+	manyFrame.rows = {}
+	for i = 1, MANY_MAX do
+		local row = CreateFrame("Frame", nil, manyFrame)
+		row:SetHeight(MANY_ROW)
+		row:SetPoint("TOPLEFT", manyFrame, "TOPLEFT", PAD, -(PAD + 44 + (i - 1) * MANY_ROW))
+		row:SetPoint("TOPRIGHT", manyFrame, "TOPRIGHT", -PAD, -(PAD + 44 + (i - 1) * MANY_ROW))
+		row.icon = row:CreateTexture(nil, "ARTWORK")
+		row.icon:SetSize(22, 22)
+		row.icon:SetPoint("LEFT", row, "LEFT", 0, 0)
+		row.item = UI.NewText(row, 13, c.text)
+		row.item:SetPoint("LEFT", row.icon, "RIGHT", 8, 0)
+		row.item:SetWidth(210)
+		row.winner = UI.NewText(row, 13, c.text)
+		row.winner:SetPoint("LEFT", row, "LEFT", 250, 0)
+		row.winner:SetWidth(110)
+		row.note = UI.NewText(row, 11, c.muted)
+		row.note:SetPoint("LEFT", row, "LEFT", 366, 0)
+		row.note:SetPoint("RIGHT", row, "RIGHT", 0, 0)
+		manyFrame.rows[i] = row
+	end
+	manyFrame.more = UI.NewText(manyFrame, 12, c.muted)
+	manyFrame.note = UI.NewText(manyFrame, 12, c.gold)
+	manyFrame.note:SetWordWrap(true)
+	manyFrame.note:SetJustifyV("TOP")
+
+	manyFrame.confirm = UI.NewButton(manyFrame, 150, 38, "", function() AwardDialog:ConfirmMany() end)
+	manyFrame.confirm:SetPoint("BOTTOMRIGHT", manyFrame, "BOTTOMRIGHT", -PAD, PAD)
+	manyFrame.confirm:SetSelected(true)
+	manyFrame.confirm.label:SetTextColor(c.gold[1], c.gold[2], c.gold[3], 1)
+	manyFrame.cancel = UI.NewButton(manyFrame, 110, 38, L["Cancel"], function() AwardDialog:HideMany() end)
+	manyFrame.cancel:SetPoint("RIGHT", manyFrame.confirm, "LEFT", -10, 0)
+	AwardDialog.manyFrame = manyFrame
+end
+
+-- Asks whether to award a list of items at once: { { item = 2, name = "Veyra Moo", note = "SR, roll 87" },
+-- { item = 3, disenchant = true } ... }. Nothing is awarded until the loot master confirms. Returns true, or false
+-- and a message (also printed).
+function AwardDialog:AskMany(list)
+	local ok, message = ALC.Awards:CheckMany(list)
+	if not ok then
+		ALC:Print(message)
+		return false, message
+	end
+	if not manyFrame then buildMany() end
+	manyList = {}
+	for i, entry in ipairs(list) do
+		manyList[i] = { item = entry.item, name = entry.name, disenchant = entry.disenchant and true or false, note = entry.note }
+	end
+	local session = ALC.Sessions:GetSession()
+	manyFrame.title:SetText(strupper(string.format(L["Award %d items"], #manyList)))
+	for i, row in ipairs(manyFrame.rows) do
+		local entry = manyList[i]
+		if entry then
+			local target = session.items[entry.item]
+			local display = ALC.LootDetection:GetItemDisplay({ itemString = target.itemString, itemID = target.itemID })
+			row.icon:SetTexture(display.icon or UNKNOWN_ICON)
+			local qc = UI.QualityColor(display.quality)
+			row.item:SetTextColor(qc[1], qc[2], qc[3], 1)
+			row.item:SetText(display.name or L["Loading..."])
+			if entry.disenchant then
+				row.winner:SetTextColor(c.muted[1], c.muted[2], c.muted[3], 1)
+				row.winner:SetText(L["Disenchant"])
+			else
+				local candidate = ALC.Candidates:Get(entry.name, entry.item)
+				local cc = UI.ClassColor(candidate.class)
+				row.winner:SetTextColor(cc[1], cc[2], cc[3], 1)
+				row.winner:SetText(candidate.name)
+			end
+			row.note:SetText(type(entry.note) == "string" and entry.note or "")
+			row:Show()
+		else
+			row:Hide()
+		end
+	end
+	local shown = math.min(#manyList, MANY_MAX)
+	local y = PAD + 44 + shown * MANY_ROW + 8
+	manyFrame.more:ClearAllPoints()
+	manyFrame.more:SetPoint("TOPLEFT", manyFrame, "TOPLEFT", PAD, -y)
+	manyFrame.more:SetText(#manyList > MANY_MAX and string.format(L["... and %d more"], #manyList - MANY_MAX) or "")
+	if #manyList > MANY_MAX then y = y + 18 end
+	manyFrame.note:ClearAllPoints()
+	manyFrame.note:SetPoint("TOPLEFT", manyFrame, "TOPLEFT", PAD, -y)
+	manyFrame.note:SetPoint("RIGHT", manyFrame, "RIGHT", -PAD, 0)
+	manyFrame.note:SetText(L["Items are handed out from the open loot window when it is open; the others are marked Awaiting trade."])
+	manyFrame.confirm:SetLabel(string.format(L["Award all (%d)"], #manyList))
+	manyFrame:SetHeight(y + 34 + 38 + PAD)
+	manyFrame:Show()
+	return true
+end
+
+function AwardDialog:ConfirmMany()
+	local list = manyList
+	self:HideMany()
+	if not list then return end
+	local ok, message = ALC.Awards:AwardMany(list)
+	if not ok and message then ALC:Print(message) end
+end
+
+function AwardDialog:HideMany()
+	if manyFrame then manyFrame:Hide() end
+	manyList = nil
+end
+
+function AwardDialog:IsManyShown()
+	return manyFrame ~= nil and manyFrame:IsShown()
+end
+
 function AwardDialog:Confirm()
 	local name, item, disenchant = self.candidate, self.item, self.disenchant
 	self:Hide()
@@ -160,7 +292,7 @@ end
 
 function AwardDialog:Init()
 	-- The question makes no sense once the session is over, or the item is awarded.
-	ALC.Events.Register(self, "ALC_SESSION_ENDED", function() AwardDialog:Hide() end)
+	ALC.Events.Register(self, "ALC_SESSION_ENDED", function() AwardDialog:Hide() AwardDialog:HideMany() end)
 	ALC.Events.Register(self, "ALC_SESSION_ITEM_AWARDED", function(_, item)
 		if AwardDialog.item == item then AwardDialog:Hide() end
 	end)

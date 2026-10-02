@@ -307,6 +307,23 @@ end
 --------------------------------------------------------------------------------
 -- Rendering
 --------------------------------------------------------------------------------
+-- A tag in front of the item's name for the players an addon built on ALC marks (Soft Reserve: "SR" for those who
+-- reserved the item). The addon sends `extra.mark` (the text) and `extra.markFor` (names). A name without a
+-- surname in the list matches every character with that first name.
+local function markFor(item)
+	local extra = item.extra
+	if type(extra) ~= "table" or type(extra.mark) ~= "string" or type(extra.markFor) ~= "table" then return nil end
+	local me = ALC:PlayerName()
+	if not me then return nil end
+	local first = string.lower(string.match(me, "^(%S+)") or me)
+	for _, name in ipairs(extra.markFor) do
+		if ALC:SameName(name, me) or (not string.find(name, " ", 1, true) and string.lower(name) == first) then
+			return string.sub(extra.mark, 1, 6)
+		end
+	end
+	return nil
+end
+
 local function renderRow(row, index, item)
 	row.item = index
 	row.itemString = item.itemString
@@ -315,7 +332,8 @@ local function renderRow(row, index, item)
 	local qc = UI.QualityColor(display.quality)
 	row.iconBorder:SetColor(qc)
 	row.name:SetTextColor(qc[1], qc[2], qc[3], 1)
-	row.name:SetText(display.name or L["Loading..."])
+	local mark = markFor(item)
+	row.name:SetText((mark and ("|cffE6A93C" .. mark .. "|r  ") or "") .. (display.name or L["Loading..."]))
 	row.sub:SetText(display.subtitle)
 
 	local mine = ALC.Responses:GetMyResponse(index)

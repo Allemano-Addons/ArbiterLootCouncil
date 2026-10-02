@@ -1976,7 +1976,9 @@ function CouncilWindow:Init()
 	end)
 	register(self, "ALC_SESSION_STARTED", function(_, session, restored)
 		focus = 1
-		if not restored and session.isCouncil then CouncilWindow:Show() end
+		-- A session an addon built on ALC runs with its own window (Soft Reserve has no voting): the council window
+		-- stays closed then, and can still be opened from the menu.
+		if not restored and session.isCouncil and not session.mode then CouncilWindow:Show() end
 	end)
 	-- An awarded item is done: the table moves on to the next item that is still open.
 	register(self, "ALC_SESSION_ITEM_AWARDED", function(_, item)

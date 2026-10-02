@@ -21,4 +21,15 @@ ALC.Constants = {
 	TIMER_MAX = 600,
 	MAX_RESPONSES = 8,
 	MAX_RESPONSE_LABEL = 12,
+
+	-- What another addon (Arbiter Soft Reserve) may attach to a session: a `mode` text, and per item an `extra`
+	-- table. ALC does not look at the content; it only keeps it small and plain.
+	MAX_MODE_LENGTH = 16,
+	MAX_EXTRA_KEYS = 8,
+	MAX_EXTRA_TEXT = 64,
+	MAX_EXTRA_LIST = 40,
+
+	-- The result of an item decided by rolls (see Results): rows per item, rerolls per row.
+	MAX_RESULT_ROWS = 60,
+	MAX_REROLLS = 10,
 }
