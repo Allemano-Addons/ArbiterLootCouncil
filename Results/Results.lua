@@ -28,7 +28,7 @@ local function copyRows(rows)
 			rerolls = {}
 			for j, n in ipairs(r.rerolls) do rerolls[j] = n end
 		end
-		copy[i] = { name = r.name, answer = r.answer, roll = r.roll, rerolls = rerolls, outcome = r.outcome, via = r.via, reserved = r.reserved, silent = r.silent }
+		copy[i] = { name = r.name, answer = r.answer, roll = r.roll, rerolls = rerolls, outcome = r.outcome, via = r.via, reserved = r.reserved, silent = r.silent, disenchant = r.disenchant }
 	end
 	return copy
 end

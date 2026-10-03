@@ -199,7 +199,26 @@ function Trades:OnTradeAcceptUpdate(playerAccepted, targetAccepted)
 			counts[itemID] = bagCount(itemID)
 		end
 	end
-	offered = { partner = ALC:UnitFullName("NPC"), items = items, counts = counts }
+	-- What we get from them (the other side of the window): a past winner may be giving an item back.
+	local received = {}
+	for slot = 1, TRADE_SLOTS do
+		local link = GetTradeTargetItemLink and GetTradeTargetItemLink(slot)
+		local _, itemID = ALC:ParseItem(link)
+		if itemID then received[#received + 1] = { itemID = itemID, link = link } end
+	end
+	offered = { partner = ALC:UnitFullName("NPC"), items = items, counts = counts, received = received }
+end
+
+-- An item a past winner gave back is offered to the loot master (the Loot window asks whether to list it again).
+function Trades:CheckReturned(snapshot)
+	if not snapshot or not snapshot.partner or not snapshot.received or #snapshot.received == 0 then return end
+	if not ALC.Council:AmLootMaster() then return end
+	for _, item in ipairs(snapshot.received) do
+		if ALC.LootDetection:OfferReturned(item.link, item.itemID, snapshot.partner) then
+			Debug:Log("Trades", "%s traded item %d back", snapshot.partner, item.itemID)
+			ALC:Print(L["%s traded %s back. The loot window can put it in the list again."], snapshot.partner, item.link)
+		end
+	end
 end
 
 -- The game says the trade went through: move the matching items out of the queue.
@@ -207,6 +226,7 @@ function Trades:OnTradeComplete()
 	local snapshot = offered
 	offered = nil
 	if not snapshot or not snapshot.partner then return 0 end
+	self:CheckReturned(snapshot)
 
 	-- Every item that left in the trade is looked up twice: in the queue, and in the award log, so
 	-- the delivery is known also when the queue was cleared or never held the item.

@@ -55,7 +55,7 @@ return function(check, H)
 	ALC.Council.AmCouncil = function() return false end
 	Win:Show()
 	frame = Win.rows[1].parent.parent
-	check("the window opens", Win:IsShown() and #Win.rows == 6)
+	check("the window opens", Win:IsShown() and #Win.rows == 3)
 	check("the council list shows the member", Win.rows[1].name:GetText() == "Veyra Moo" and Win.rows[1]:IsShown() and not Win.rows[2]:IsShown())
 	check("the count is shown", frame.count:GetText() == "1/39")
 	check("the empty hint is hidden", frame.empty:IsShown() == false)
@@ -129,12 +129,12 @@ return function(check, H)
 	Win.rows[1].remove.scripts.OnClick(Win.rows[1].remove)
 	check("the x removes a member", #Settings:GetCouncil() == 4 and Win.rows[1].name:GetText() == "Kaelis Moo")
 	for i = 1, 8 do Settings:AddCouncilMember("Extra" .. string.rep("z", i) .. " Moo") end
-	check("a long list shows six rows", Win.rows[6]:IsShown() and #Settings:GetCouncil() == 12)
+	check("a long list shows three rows", Win.rows[3]:IsShown() and Win.rows[4] == nil and #Settings:GetCouncil() == 12)
 	local first = Win.rows[1].name:GetText()
 	frame.scripts.OnMouseWheel(frame, -1)
 	check("scrolling moves the list", Win.rows[1].name:GetText() ~= first)
 	for _ = 1, 20 do frame.scripts.OnMouseWheel(frame, -1) end
-	check("scrolling stops at the end", Win.rows[6].name:GetText() == Settings:GetCouncil()[12])
+	check("scrolling stops at the end", Win.rows[3].name:GetText() == Settings:GetCouncil()[12])
 	for _ = 1, 20 do frame.scripts.OnMouseWheel(frame, 1) end
 	check("and at the top", Win.rows[1].name:GetText() == first)
 

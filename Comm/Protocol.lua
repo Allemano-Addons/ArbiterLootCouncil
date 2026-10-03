@@ -351,6 +351,8 @@ specs.RESULT = {
 			-- A player who reserved the item and never answered: sent as a Pass (so older versions show "Passed"),
 			-- and this flag lets newer ones say "Did not answer".
 			if r.silent ~= nil and type(r.silent) ~= "boolean" then return fail("bad result silent") end
+			-- The player the item was handed to for disenchanting (the row is a Pass when they did not answer).
+			if r.disenchant ~= nil and type(r.disenchant) ~= "boolean" then return fail("bad result disenchant") end
 		end
 		return true
 	end,

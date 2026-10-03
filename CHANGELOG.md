@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.2-beta
+- **An item a winner gives back can go in the list again.** When a player you awarded an item to trades it back to you (you are the loot master), the Loot window shows a bar: "<name> gave back <item>" with **Add** (puts it in the list as a new waiting item) and **x** (leave it). It only reacts to an item that player was awarded in the last week, once per award, and the chat tells you too. No command needed.
+- Windows are more compact: the title row of every window is lower (40 px, the voting window 46 px), the voting window's title is one line, the Settings window is shorter (the council list shows three names and scrolls) and the winner's name in the Loot window has its class colour.
+- The Result window says when an item was handed to a player for disenchanting: that player's row says "Disenchanted", and the item's line reads "Disenchanted by <name>" instead of "Nobody". It is a new optional flag on a result row, which versions without it ignore (they show the row as a Pass). Arbiter Soft Reserve sends it.
+
 ## 0.4.1-beta
 - **Start LC and Start SR.** When Arbiter Soft Reserve is installed, every item in the Loot window gets two buttons: **Start LC** (a normal Loot Council session, as always) and **Start SR** (a soft reserve session). The footer has **Start all LC** and **Start all SR** in the same way. Without Arbiter Soft Reserve the window looks and works exactly as before ("Start", "Start all").
 - A session started by Arbiter Soft Reserve now looks like it: the Loot Response window the players see says "SOFT RESERVE RESPONSE" with the purple mark, and the item in the loot master's Loot window gets a purple frame while it is in session. Players with an older version, or without Arbiter Soft Reserve, see the name and colour too (they travel with the session); a normal Loot Council session is unchanged.

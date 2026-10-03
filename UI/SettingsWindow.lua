@@ -10,8 +10,8 @@ local strupper, strtrim = string.upper, function(s) return (string.gsub(s, "^%s*
 local min, max = math.min, math.max
 
 local WIDTH, PAD = 480, 22
-local HEADER_H = 52
-local LIST_ROWS, LIST_ROW_H = 6, 28
+local HEADER_H = 40
+local LIST_ROWS, LIST_ROW_H = 3, 26 -- the council list shows three names; the mouse wheel scrolls the rest
 
 local SettingsWindow = {}
 ALC.SettingsWindow = SettingsWindow
@@ -172,14 +172,14 @@ local function build()
 		savePosition()
 	end)
 
-	frame.logo = UI.NewLogo(header, 28)
+	frame.logo = UI.NewLogo(header, 22)
 	frame.logo:SetPoint("LEFT", header, "LEFT", PAD, 0)
 	local title = UI.NewText(header, 15, c.text)
 	title:SetPoint("LEFT", frame.logo, "RIGHT", 10, 0)
 	title:SetText(strupper(L["Settings"]))
 
 	local close = CreateFrame("Button", nil, header)
-	close:SetSize(28, 28)
+	close:SetSize(24, 24)
 	close:SetPoint("RIGHT", header, "RIGHT", -12, 0)
 	close.text = UI.NewText(close, 22, c.muted, "CENTER")
 	close.text:SetPoint("CENTER", 0, 0)
@@ -234,16 +234,16 @@ local function build()
 	local tabWidth = math.floor((WIDTH - 2 * PAD - (#SettingsWindow.TABS - 1) * gap) / #SettingsWindow.TABS)
 	SettingsWindow.tabButtons = {}
 	for i, tab in ipairs(SettingsWindow.TABS) do
-		local button = UI.NewButton(frame, tabWidth, 30, tab.label, function() SettingsWindow:SetTab(tab.key) end)
+		local button = UI.NewButton(frame, tabWidth, 26, tab.label, function() SettingsWindow:SetTab(tab.key) end)
 		button:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD + (i - 1) * (tabWidth + gap), -tabY)
 		button.tab = tab.key
 		SettingsWindow.tabButtons[i] = button
 	end
 	frame.tabNote = UI.NewText(frame, 11, c.muted)
-	frame.tabNote:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -(tabY + 40))
+	frame.tabNote:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -(tabY + 34))
 	frame.tabNote:SetWidth(WIDTH - 2 * PAD)
 	frame.tabNote:SetWordWrap(true)
-	local contentY = tabY + 40 + 34
+	local contentY = tabY + 34 + 30
 	divider(contentY)
 	contentY = contentY + 18
 
@@ -325,31 +325,31 @@ local function build()
 		ALC.Settings:SetAutoOpenLootWindow(checked)
 	end))
 	frame.autoOpen:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
-	y = y + 32
+	y = y + 29
 
 	frame.announce = into("lm", UI.NewCheckbox(frame, L["Announce awards"], function(checked)
 		ALC.Settings:SetAnnounceAwards(checked)
 	end, L["Say who got which item in raid chat (party chat in a party), and when a trade went through."]))
 	frame.announce:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
-	y = y + 32
+	y = y + 29
 
 	frame.autoLoot = into("lm", UI.NewCheckbox(frame, L["Auto loot"], function(checked)
 		ALC.Settings:SetAutoLoot(checked)
 	end, L["When you open a corpse as master looter, the items over the threshold are given to you, so you can award them later without assigning each one."]))
 	frame.autoLoot:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
-	y = y + 32
+	y = y + 29
 
 	frame.autoLootConfirm = into("lm", UI.NewCheckbox(frame, L["Ask first (\"Loot all?\")"], function(checked)
 		ALC.Settings:SetAutoLootConfirm(checked)
 	end, L["Show a question before the loot is taken for you."]))
 	frame.autoLootConfirm:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD + 24, -y)
-	y = y + 32
+	y = y + 29
 
 	frame.autoTrade = into("lm", UI.NewCheckbox(frame, L["Auto trade"], function(checked)
 		ALC.Settings:SetAutoTrade(checked)
 	end, L["When you award an item, the trade window opens with the winner and the item is put in it. A winner who is far away is asked by whisper to come."]))
 	frame.autoTrade:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
-	y = y + 32
+	y = y + 29
 
 	-- A random roll per candidate and item, for the council to choose by when it cannot decide.
 	frame.rolls = into("lm", UI.NewCheckbox(frame, L["Random rolls for the council"], function(checked)
@@ -423,7 +423,7 @@ local function build()
 		ALC.Settings:SetKeepCouncilOpen(checked)
 	end))
 	frame.keepOpen:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
-	y = y + 32
+	y = y + 29
 	y = y + 8
 	frame.councilHint = paragraph("council", y, L["Sorting, compact rows and the number of rows are set in the voting window itself. Right-click a player there for more."])
 	y = y + 50
@@ -445,7 +445,7 @@ local function build()
 		ALC.Settings:SetMinimapHidden(not checked)
 	end))
 	frame.minimap:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
-	y = y + 32
+	y = y + 29
 
 	frame.compact = into("everyone", UI.NewCheckbox(frame, L["Compact windows (smaller rows and buttons)"], function(checked)
 		ALC.Settings:SetCompact(checked)

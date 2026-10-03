@@ -14,7 +14,7 @@ local strupper = string.upper
 local min, max = math.min, math.max
 
 local WIDTH, PAD = 1010, 20
-local HEADER_H, ITEM_H, TABLE_HEAD_H, FOOTER_H = 60, 64, 34, 52
+local HEADER_H, ITEM_H, TABLE_HEAD_H, FOOTER_H = 46, 64, 34, 52
 local ROW_H, COMPACT_ROW_H = 56, 32
 local POOL, DEFAULT_ROWS, MIN_ROWS = 30, 10, 3
 local INITIAL_ROWS = 6 -- candidate rows made when the window is built
@@ -700,17 +700,15 @@ local function build()
 		savePosition()
 	end)
 
-	frame.logo = UI.NewLogo(header, 30)
+	frame.logo = UI.NewLogo(header, 24)
 	frame.logo:SetPoint("LEFT", header, "LEFT", PAD, 0)
-	local title = UI.NewText(header, 15, c.text)
-	title:SetPoint("TOPLEFT", frame.logo, "TOPRIGHT", 12, -1)
+	-- One line, like the other windows: the title row is low now, and two lines of text did not fit in it.
+	local title = UI.NewText(header, 14, c.text)
+	title:SetPoint("LEFT", frame.logo, "RIGHT", 10, 0)
 	title:SetText(strupper(L["Arbiter Loot Council"]))
-	local subtitle = UI.NewText(header, 10, c.muted)
-	subtitle:SetPoint("BOTTOMLEFT", frame.logo, "BOTTOMRIGHT", 12, 1)
-	subtitle:SetText(strupper(L["Allemano Addons"]))
 
 	local close = CreateFrame("Button", nil, header)
-	close:SetSize(28, 28)
+	close:SetSize(24, 24)
 	close:SetPoint("RIGHT", header, "RIGHT", -14, 0)
 	close.text = UI.NewText(close, 22, c.muted, "CENTER")
 	close.text:SetPoint("CENTER", 0, 0)

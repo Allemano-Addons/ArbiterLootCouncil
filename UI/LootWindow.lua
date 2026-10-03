@@ -12,9 +12,10 @@ local min, max = math.min, math.max
 local BASE_WIDTH, PAD = 400, 16
 local WIDTH = BASE_WIDTH -- wider while an addon built on ALC has added a way to start a session (Start SR)
 local MODE_EXTRA = 90 -- the width one more way to start needs
-local HEADER_H, LABEL_H, FOOTER_H = 52, 34, 72
+local HEADER_H, LABEL_H, FOOTER_H = 40, 30, 70
 local ROW_H, ROW_GAP = 56, 8
 local POOL, DEFAULT_ROWS, MIN_ROWS = 24, 8, 3 -- rows built, rows shown by default, fewest rows
+local RETURNED_H = 34 -- the bar that offers an item a winner traded back
 local INITIAL_ROWS = 6 -- rows made when the window is built
 local ICON = 40
 local REMOVE_SIZE = 28
@@ -205,7 +206,7 @@ local function build()
 		savePosition()
 	end)
 
-	local logo = UI.NewLogo(header, 28)
+	local logo = UI.NewLogo(header, 22)
 	logo:SetPoint("LEFT", header, "LEFT", PAD, 0)
 	frame.logo = logo
 
@@ -213,7 +214,7 @@ local function build()
 	frame.title:SetPoint("LEFT", logo, "RIGHT", 10, 0)
 
 	local close = CreateFrame("Button", nil, header)
-	close:SetSize(28, 28)
+	close:SetSize(24, 24)
 	close:SetPoint("RIGHT", header, "RIGHT", -12, 0)
 	close.text = UI.NewText(close, 22, c.muted, "CENTER")
 	close.text:SetPoint("CENTER", 0, 0)
@@ -269,6 +270,36 @@ local function build()
 	frame.clearDone:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", PAD, 17)
 	frame.hint:ClearAllPoints()
 	frame.hint:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", PAD, 54)
+
+	-- A winner traded an item back: one bar above the buttons asks whether to put it in the list again.
+	local bar = CreateFrame("Frame", nil, frame)
+	bar:SetHeight(RETURNED_H)
+	bar:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", PAD, FOOTER_H + 6)
+	bar:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -PAD, FOOTER_H + 6)
+	bar.bg = UI.NewFill(bar, 6)
+	UI.SetTextureColor(bar.bg, c.goldTint)
+	bar.border = UI.AddBorder(bar, c.gold, 1, 6)
+	bar.dismiss = CreateFrame("Button", nil, bar)
+	bar.dismiss:SetSize(24, 24)
+	bar.dismiss:SetPoint("RIGHT", bar, "RIGHT", -6, 0)
+	bar.dismiss.text = UI.NewText(bar.dismiss, 18, c.muted, "CENTER")
+	bar.dismiss.text:SetPoint("CENTER", 0, 1)
+	bar.dismiss.text:SetText("\195\151")
+	bar.dismiss:SetScript("OnEnter", function(self) self.text:SetTextColor(c.danger[1], c.danger[2], c.danger[3], 1) end)
+	bar.dismiss:SetScript("OnLeave", function(self) self.text:SetTextColor(c.muted[1], c.muted[2], c.muted[3], 1) end)
+	bar.dismiss:SetScript("OnClick", function()
+		if bar.offerId then ALC.LootDetection:DismissReturned(bar.offerId) end
+	end)
+	bar.add = UI.NewButton(bar, 64, 24, L["Add"], function()
+		if bar.offerId then ALC.LootDetection:AcceptReturned(bar.offerId) end
+	end)
+	bar.add:SetPoint("RIGHT", bar.dismiss, "LEFT", -6, 0)
+	bar.text = UI.NewText(bar, 12, c.text)
+	bar.text:SetPoint("LEFT", bar, "LEFT", 10, 0)
+	bar.text:SetPoint("RIGHT", bar.add, "LEFT", -8, 0)
+	bar.text:SetWordWrap(false)
+	bar:Hide()
+	frame.returnedBar = bar
 
 	-- Rows are made as they are needed and the rest of the pool a few at a time (see CouncilWindow).
 	LootWindow.EnsureRows(INITIAL_ROWS)
@@ -384,6 +415,20 @@ local function layoutRowButtons(row, modes)
 	row.sub:SetPoint("RIGHT", row, "RIGHT", -reserved, 0)
 end
 
+-- The winner's name in their class colour, when we know the class (they are in the group, or answered the item).
+local function winnerText(entry)
+	local name = entry.winner
+	local unit = ALC:FindUnitByName(name)
+	local class = unit and select(2, UnitClass(unit))
+	if not class and entry.item and ALC.Candidates and ALC.Candidates.Get then
+		local candidate = ALC.Candidates:Get(name, entry.item)
+		class = candidate and candidate.class
+	end
+	if not class then return name end
+	local color = UI.ClassColor(class)
+	return string.format("|cff%02x%02x%02x%s|r", math.floor(color[1] * 255 + 0.5), math.floor(color[2] * 255 + 0.5), math.floor(color[3] * 255 + 0.5), name)
+end
+
 local function renderRow(row, entry, sessionActive, isLM, modes, brand)
 	local LootDetection = ALC.LootDetection
 	local status = LootDetection.STATUS
@@ -399,7 +444,7 @@ local function renderRow(row, entry, sessionActive, isLM, modes, brand)
 
 	local subtitle = display.subtitle
 	if (entry.status == status.AWARDED or entry.status == status.TRADE) and entry.winner then
-		subtitle = (subtitle ~= "" and (subtitle .. " \194\183 ") or "") .. entry.winner
+		subtitle = (subtitle ~= "" and (subtitle .. " \194\183 ") or "") .. winnerText(entry)
 	end
 	local left = LootDetection:GetTradeTimeLeft(entry)
 	if left then
@@ -543,6 +588,22 @@ function LootWindow:Refresh()
 		frame.startAll:SetSize(100, 30)
 	end
 
+	-- An item a winner traded back, waiting for the loot master's answer.
+	local offers = LootDetection:GetReturned()
+	local offer = offers[1]
+	local bar = frame.returnedBar
+	if offer and isLM then
+		local display = LootDetection:GetItemDisplay({ itemString = offer.itemString, itemID = offer.itemID })
+		bar.offerId = offer.id
+		bar.text:SetText(winnerText({ winner = offer.from }) .. " " .. L["gave back"] .. " " .. (display.name or "?")
+			.. (#offers > 1 and (" (+" .. (#offers - 1) .. ")") or ""))
+		bar:Show()
+	else
+		bar.offerId = nil
+		bar:Hide()
+	end
+	local extra = (offer and isLM) and (RETURNED_H + 8) or 0
+
 	local body = max(shown, 1) * (ROW_H + ROW_GAP) - ROW_GAP
 	if count == 0 then body = 64 end
 
@@ -550,7 +611,7 @@ function LootWindow:Refresh()
 	frame.scroll:SetHeight(max(shown, 1) * (ROW_H + ROW_GAP) - ROW_GAP)
 	frame.scroll:Update(count, rowsAllowed, offset)
 
-	frame:SetHeight(HEADER_H + LABEL_H + body + 14 + FOOTER_H)
+	frame:SetHeight(HEADER_H + LABEL_H + body + 14 + FOOTER_H + extra)
 end
 
 --------------------------------------------------------------------------------
@@ -627,6 +688,10 @@ function LootWindow:Init()
 	local register = ALC.Events.Register
 	local refresh = function() LootWindow:Refresh() end
 	register(self, "ALC_LOOT_CHANGED", refresh)
+	register(self, "ALC_LOOT_RETURNED", function()
+		if ALC.Settings:GetAutoOpenLootWindow() then LootWindow:Show() end
+		LootWindow:Refresh()
+	end)
 	register(self, "ALC_SESSION_STARTED", refresh)
 	register(self, "ALC_SESSION_ENDED", refresh)
 	register(self, "ALC_COUNCIL_LM_CHANGED", refresh)

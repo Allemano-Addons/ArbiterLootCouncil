@@ -12,7 +12,7 @@ local strupper = string.upper
 local min, max = math.min, math.max
 
 local WIDTH, HEIGHT, PAD = 780, 560, 16
-local HEADER_H, FOOTER_H = 52, 56
+local HEADER_H, FOOTER_H = 40, 52
 local ITEM_H, ITEM_GAP, ITEM_ROWS, LIST_W = 52, 4, 8, 250
 local ROW_H, ROWS = 26, 15
 local COL = { name = 12, answer = 190, roll = 250, result = 360 }
@@ -139,7 +139,7 @@ local function build()
 		frame:StopMovingOrSizing()
 		savePosition()
 	end)
-	local logo = UI.NewLogo(header, 28)
+	local logo = UI.NewLogo(header, 22)
 	logo:SetPoint("LEFT", header, "LEFT", PAD, 0)
 	local title = UI.NewText(header, 15, c.text)
 	title:SetPoint("LEFT", logo, "RIGHT", 10, 0)
@@ -147,7 +147,7 @@ local function build()
 	frame.state = UI.NewText(header, 12, c.gold, "RIGHT")
 
 	local close = CreateFrame("Button", nil, header)
-	close:SetSize(28, 28)
+	close:SetSize(24, 24)
 	close:SetPoint("RIGHT", header, "RIGHT", -12, 0)
 	close.text = UI.NewText(close, 22, c.muted, "CENTER")
 	close.text:SetPoint("CENTER", 0, 0)
@@ -258,6 +258,7 @@ local VIA = { SR = L["Soft reserve"], MS = L["Main spec"], OS = L["Off spec"] }
 
 local function outcomeText(row)
 	if row.silent then return L["Did not answer"] end
+	if row.disenchant then return L["Disenchanted"] end
 	if row.outcome == "won" then return L["Won"] .. (row.via and (" (" .. (VIA[row.via] or row.via) .. ")") or "") end
 	if row.outcome == "tied" then return L["Tied"] end
 	if row.outcome == "passed" then return L["Passed"] end
@@ -284,10 +285,18 @@ local function renderItemRow(row, item)
 	local rows = ALC.Results:Get(item) or {}
 	local winners = winnersOf(rows)
 	local tied = false
-	for _, r in ipairs(rows) do if r.outcome == "tied" then tied = true end end
+	local disenchanters = {}
+	for _, r in ipairs(rows) do
+		if r.outcome == "tied" then tied = true end
+		if r.disenchant then disenchanters[#disenchanters + 1] = r.name end
+	end
 	local tone = tied and c.gold or c.muted
 	row.status:SetTextColor(tone[1], tone[2], tone[3], 1)
-	row.status:SetText(tied and L["Tie: the loot master rerolls"] or (#winners > 0 and (L["Winner"] .. ": " .. table.concat(winners, ", ")) or L["Nobody"]))
+	local text = #winners > 0 and (L["Winner"] .. ": " .. table.concat(winners, ", ")) or L["Nobody"]
+	if #disenchanters > 0 then
+		text = #winners > 0 and (text .. " \194\183 " .. L["Disenchanted"] .. ": " .. table.concat(disenchanters, ", ")) or (L["Disenchanted by"] .. " " .. table.concat(disenchanters, ", "))
+	end
+	row.status:SetText(tied and L["Tie: the loot master rerolls"] or text)
 	row:Paint()
 	row:Show()
 end

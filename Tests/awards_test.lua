@@ -338,7 +338,7 @@ return function(check, H)
 	-- Compact mode: one tight line per award.
 	ALC.Settings:SetCompact(true)
 	Win:Refresh()
-	check("compact History rows are one tight line", Win.historyRows[1].h == 30 and Win.historyRows[2].point[5] == -(60 + 34 + 1 * 30) and not Win.historyRows[1].zone:IsShown())
+	check("compact History rows are one tight line", Win.historyRows[1].h == 30 and Win.historyRows[2].point[5] == -(46 + 34 + 1 * 30) and not Win.historyRows[1].zone:IsShown())
 	ALC.Settings:SetCompact(false)
 	Win:Refresh()
 	check("and tall again when compact is off", Win.historyRows[1].h == 48 and Win.historyRows[1].zone:IsShown())
@@ -557,6 +557,55 @@ return function(check, H)
 	H.runTimers()
 	H.deferTimers = false
 	check("the queue is empty", Win.tabs.trades.badge:IsShown() == false and hframe.tradeEmpty:IsShown() and hframe.tradeCount:GetText() == "0 waiting")
+
+	-- A winner changes their mind and trades the item back: the loot window offers to list it again
+	local awardLog = ALC.Settings:GetAwardLog()
+	awardLog[#awardLog + 1] = { itemID = 201, winner = "Jonatan Moo", itemString = "item:201", time = time(), response = "BIS" }
+	GetTradePlayerItemLink = function() return nil end
+	local function receive(partnerUnit, link)
+		units.NPC = partnerUnit
+		GetTradeTargetItemLink = function(slot) if slot == 1 then return link end end
+		Trades:OnTradeAcceptUpdate(true, true)
+		Trades:OnTradeComplete()
+	end
+	check("nothing is offered to begin with", #LD:GetReturned() == 0)
+	receive({ "Kaelis", "Moo", "HUNTER" }, "|Hitem:201|h[Belt]|h")
+	check("an item from somebody who was not awarded it is not offered", #LD:GetReturned() == 0)
+	receive({ "Jonatan", "Moo", "PRIEST" }, "|Hitem:202|h[Ring]|h")
+	check("another item from the winner is not either", #LD:GetReturned() == 0)
+	local realAm = ALC.Council.AmLootMaster
+	ALC.Council.AmLootMaster = function() return false end
+	receive({ "Jonatan", "Moo", "PRIEST" }, "|Hitem:201|h[Belt]|h")
+	check("only the loot master is asked", #LD:GetReturned() == 0)
+	ALC.Council.AmLootMaster = realAm
+	local said = #H.chat
+	receive({ "Jonatan", "Moo", "PRIEST" }, "|Hitem:201|h[Belt]|h")
+	local offers = LD:GetReturned()
+	check("the item its winner gives back is offered", #offers == 1 and offers[1].from == "Jonatan Moo" and offers[1].itemID == 201)
+	check("and the chat says so", #H.chat > said and H.chat[#H.chat]:find("traded", 1, true) ~= nil)
+	check("the award is marked, so the same trade is offered once", awardLog[#awardLog].returnedAt ~= nil)
+	receive({ "Jonatan", "Moo", "PRIEST" }, "|Hitem:201|h[Belt]|h")
+	check("a second trade back of that award is not offered again", #LD:GetReturned() == 1)
+
+	Loot:Show()
+	Loot:Refresh()
+	local lootBar = Loot.rows[1].parent.returnedBar
+	check("the loot window shows the bar with the winner's name", lootBar:IsShown() and lootBar.text:GetText():find("Jonatan Moo", 1, true) ~= nil and lootBar.text:GetText():find("gave back", 1, true) ~= nil)
+	local listed = #LD:GetItems()
+	lootBar.dismiss.scripts.OnClick(lootBar.dismiss)
+	check("Dismiss leaves the item out and removes the bar", #LD:GetReturned() == 0 and #LD:GetItems() == listed and not lootBar:IsShown())
+	awardLog[#awardLog + 1] = { itemID = 201, winner = "Jonatan Moo", itemString = "item:201", time = time(), response = "BIS" }
+	receive({ "Jonatan", "Moo", "PRIEST" }, "|Hitem:201|h[Belt]|h")
+	Loot:Refresh()
+	check("a new award can be offered back again", #LD:GetReturned() == 1 and lootBar:IsShown())
+	lootBar.add.scripts.OnClick(lootBar.add)
+	local newest = LD:GetItems()[#LD:GetItems()]
+	check("Add puts the item in the list as a new waiting item", #LD:GetItems() == listed + 1 and newest.itemID == 201 and newest.status == LD.STATUS.PENDING)
+	check("and the bar goes away", #LD:GetReturned() == 0 and not lootBar:IsShown())
+	check("an offer that is gone cannot be answered", LD:AcceptReturned(12345) == false and LD:DismissReturned(12345) == false)
+	Loot:Hide()
+	GetTradeTargetItemLink = nil
+	units.NPC = nil
 
 	LD:AddFromText("200")
 	local late = LD:GetItems()[#LD:GetItems()]

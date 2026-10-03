@@ -9,7 +9,7 @@ local strupper = string.upper
 local min, max = math.min, math.max
 
 local WIDTH, PAD = 600, 16
-local HEADER_H, FOOTER_H = 52, 56
+local HEADER_H, FOOTER_H = 40, 52
 local NOTE_W = 150 -- the note field at the right end of a row
 local ROW_H, ROW_GAP = 46, 4
 local ICON = 34
@@ -233,7 +233,7 @@ local function build()
 		savePosition()
 	end)
 
-	local logo = UI.NewLogo(header, 28)
+	local logo = UI.NewLogo(header, 22)
 	logo:SetPoint("LEFT", header, "LEFT", PAD, 0)
 	frame.logo = logo
 	local title = UI.NewText(header, 15, c.text)
@@ -244,7 +244,7 @@ local function build()
 	frame.timer = UI.NewText(header, 13, c.gold, "RIGHT") -- the answer timer, when the session has one
 
 	local close = CreateFrame("Button", nil, header)
-	close:SetSize(28, 28)
+	close:SetSize(24, 24)
 	close:SetPoint("RIGHT", header, "RIGHT", -12, 0)
 	close.text = UI.NewText(close, 22, c.muted, "CENTER")
 	close.text:SetPoint("CENTER", 0, 0)

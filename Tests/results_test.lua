@@ -87,6 +87,11 @@ return function(check, H)
 		return spec.validate(p, ME) == true
 	end)())
 	check("the silent flag must be true or false", bad(function(p) p.rows[1].silent = "yes" end))
+	check("a row can say the item was handed to that player for disenchanting", (function()
+		local p = { item = 1, state = "accepted", rows = { row("Veyra Moo", "PASS", nil, "passed", { disenchant = true }) } }
+		return spec.validate(p, ME) == true
+	end)())
+	check("the disenchant flag must be true or false", bad(function(p) p.rows[1].disenchant = 1 end))
 	check("a bad item is refused", bad(function(p) p.item = 0 end) and bad(function(p) p.item = 99 end))
 	check("a bad state is refused", bad(function(p) p.state = "done" end) and bad(function(p) p.state = nil end))
 	check("rows must be a list", bad(function(p) p.rows = "x" end) and bad(function(p) p.rows = { a = 1 } end))

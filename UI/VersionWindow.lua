@@ -10,7 +10,7 @@ local strupper = string.upper
 local min, max = math.min, math.max
 
 local WIDTH, PAD = 460, 16
-local HEADER_H, SUB_H, HEAD_H, FOOTER_H = 52, 48, 28, 54
+local HEADER_H, SUB_H, HEAD_H, FOOTER_H = 40, 44, 28, 54
 local ROW_H, ROWS = 30, 12
 local NAME_X, VERSION_X, STATUS_X = 12, 200, 310
 
@@ -96,14 +96,14 @@ local function build()
 	end)
 	frame.header = header
 
-	local logo = UI.NewLogo(header, 28)
+	local logo = UI.NewLogo(header, 22)
 	logo:SetPoint("LEFT", header, "LEFT", PAD, 0)
 	local title = UI.NewText(header, 15, c.text)
 	title:SetPoint("LEFT", logo, "RIGHT", 10, 0)
 	title:SetText(strupper(L["Versions"]))
 
 	local close = CreateFrame("Button", nil, header)
-	close:SetSize(28, 28)
+	close:SetSize(24, 24)
 	close:SetPoint("RIGHT", header, "RIGHT", -12, 0)
 	close.text = UI.NewText(close, 22, c.muted, "CENTER")
 	close.text:SetPoint("CENTER", 0, 0)

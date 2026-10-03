@@ -269,6 +269,66 @@ function LootDetection:AddFromText(text)
 	return #found
 end
 
+--------------------------------------------------------------------------------
+-- Items traded back
+--------------------------------------------------------------------------------
+-- A player who won an item changes their mind and trades it back: Trades notices what we received and offers it
+-- here. The loot master puts it in the list again (Add) or leaves it (Dismiss). Kept in memory only.
+local returned = {} -- { { id, itemString, itemID, from } }, oldest first
+local nextReturnedId = 0
+local RETURN_WINDOW = 7 * 86400 -- an award older than a week is not taken for a return
+
+-- The award record (not taken back) that gave this item to this player lately and has not been offered back yet.
+function LootDetection:FindAwardTo(partner, itemID)
+	local log = ALC.Settings:GetAwardLog()
+	local oldest = time() - RETURN_WINDOW
+	for i = #log, math.max(1, #log - 200), -1 do
+		local r = log[i]
+		if (r.time or 0) < oldest then break end
+		if not r.revoked and not r.returnedAt and r.itemID == itemID and ALC:SameName(r.winner, partner) then return r end
+	end
+end
+
+-- Offers an item that `from` gave back. Only when they were awarded it (see FindAwardTo); each award is offered once.
+-- Returns true when an offer was made.
+function LootDetection:OfferReturned(itemString, itemID, from)
+	local award = self:FindAwardTo(from, itemID)
+	if not award then return false end
+	award.returnedAt = time()
+	nextReturnedId = nextReturnedId + 1
+	returned[#returned + 1] = { id = nextReturnedId, itemString = itemString, itemID = itemID, from = from }
+	ALC.Events:Fire("ALC_LOOT_RETURNED", nextReturnedId)
+	return true
+end
+
+function LootDetection:GetReturned()
+	local list = {}
+	for i, offer in ipairs(returned) do list[i] = { id = offer.id, itemString = offer.itemString, itemID = offer.itemID, from = offer.from } end
+	return list
+end
+
+local function takeReturned(id)
+	for i, offer in ipairs(returned) do
+		if offer.id == id then return table.remove(returned, i) end
+	end
+end
+
+-- Puts the item in the list again, as a new waiting item. Returns true, or false when it is not offered any more.
+function LootDetection:AcceptReturned(id)
+	local offer = takeReturned(id)
+	if not offer then return false end
+	local added = self:AddFromText(offer.itemString)
+	if added == 0 then changed() end
+	return added > 0
+end
+
+-- Leaves the item out of the list.
+function LootDetection:DismissReturned(id)
+	if not takeReturned(id) then return false end
+	changed()
+	return true
+end
+
 function LootDetection:Remove(id)
 	local entry = find(id)
 	if not entry or entry.status == STATUS.SESSION then return false end
