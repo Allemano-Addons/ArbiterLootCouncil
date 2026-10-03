@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.4.4-beta
+- Fix: in a Soft Reserve session the mark in the Loot Response window was purple all over. It is now like the Soft Reserve mark: only the lower part of the A is purple and the upper part stays white. (A new picture, Media/Logo/alc_mark_accent_64.tga, made by Tools/make_accent.lua, holds the part that is tinted.)
+
 ## 0.4.3-beta
 - When every item of a session has been awarded the Loot window says "All awarded. The session closes by itself." instead of "In session": the session stays open for 90 seconds so that an award can be undone, which made it look as if it was still running.
 

@@ -24,6 +24,7 @@ UI.LOGO = UI.MEDIA .. "Logo\\alc_mark_64"
 UI.ICONS = UI.MEDIA .. "Icons\\" -- + name, white on transparent: tint with SetVertexColor
 
 UI.LOGO_WHITE = UI.MEDIA .. "Logo\\alc_mark_white_64" -- the same mark in white, for a colour of an addon built on ALC
+UI.LOGO_ACCENT = UI.MEDIA .. "Logo\\alc_mark_accent_64" -- only the lower (accent) part of the mark, in white: tint it
 
 -- The colour of "9B7BFF" as { r, g, b }, or nil when it is not six hex digits.
 function UI.HexColor(hex)
@@ -44,15 +45,22 @@ function UI.SessionBrand(session)
 	return session.modeName, color
 end
 
--- Puts the mark of the session's addon on a logo texture (ALC's own green mark for a normal session).
+-- Puts the mark of the session's addon on a logo texture: ALC's own mark for a normal session, and for an addon built
+-- on ALC the same mark with the green lower part in that addon's colour (the upper part stays white). The coloured
+-- part is a second texture, over the all-white mark (see Tools/make_accent.lua).
 function UI.ApplyBrand(logo, session)
 	local _, color = UI.SessionBrand(session)
 	if color then
 		logo:SetTexture(UI.LOGO_WHITE)
-		logo:SetVertexColor(color[1], color[2], color[3], 1)
+		logo:SetVertexColor(1, 1, 1, 1)
+		if logo.accent then
+			logo.accent:SetVertexColor(color[1], color[2], color[3], 1)
+			logo.accent:Show()
+		end
 	else
 		logo:SetTexture(UI.LOGO)
 		logo:SetVertexColor(1, 1, 1, 1)
+		if logo.accent then logo.accent:Hide() end
 	end
 end
 
@@ -61,6 +69,11 @@ function UI.NewLogo(parent, size)
 	local logo = parent:CreateTexture(nil, "ARTWORK")
 	logo:SetSize(size, size)
 	logo:SetTexture(UI.LOGO)
+	-- the part that another addon's colour replaces (see ApplyBrand); hidden for ALC's own mark
+	logo.accent = parent:CreateTexture(nil, "OVERLAY")
+	logo.accent:SetAllPoints(logo)
+	logo.accent:SetTexture(UI.LOGO_ACCENT)
+	logo.accent:Hide()
 	return logo
 end
 
