@@ -23,6 +23,39 @@ UI.MEDIA = "Interface\\AddOns\\ArbiterLootCouncil\\Media\\"
 UI.LOGO = UI.MEDIA .. "Logo\\alc_mark_64"
 UI.ICONS = UI.MEDIA .. "Icons\\" -- + name, white on transparent: tint with SetVertexColor
 
+UI.LOGO_WHITE = UI.MEDIA .. "Logo\\alc_mark_white_64" -- the same mark in white, for a colour of an addon built on ALC
+
+-- The colour of "9B7BFF" as { r, g, b }, or nil when it is not six hex digits.
+function UI.HexColor(hex)
+	if type(hex) ~= "string" or not string.match(hex, "^%x%x%x%x%x%x$") then return nil end
+	return {
+		tonumber(string.sub(hex, 1, 2), 16) / 255,
+		tonumber(string.sub(hex, 3, 4), 16) / 255,
+		tonumber(string.sub(hex, 5, 6), 16) / 255,
+	}
+end
+
+-- What an addon built on ALC called its session (Soft Reserve): its name and colour, or nil for a normal
+-- session (or one that did not send them).
+function UI.SessionBrand(session)
+	if not session or not session.modeName then return nil end
+	local color = UI.HexColor(session.modeColor)
+	if not color then return nil end
+	return session.modeName, color
+end
+
+-- Puts the mark of the session's addon on a logo texture (ALC's own green mark for a normal session).
+function UI.ApplyBrand(logo, session)
+	local _, color = UI.SessionBrand(session)
+	if color then
+		logo:SetTexture(UI.LOGO_WHITE)
+		logo:SetVertexColor(color[1], color[2], color[3], 1)
+	else
+		logo:SetTexture(UI.LOGO)
+		logo:SetVertexColor(1, 1, 1, 1)
+	end
+end
+
 -- The ALC mark as a square texture of `size` pixels.
 function UI.NewLogo(parent, size)
 	local logo = parent:CreateTexture(nil, "ARTWORK")

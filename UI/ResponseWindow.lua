@@ -239,6 +239,7 @@ local function build()
 	local title = UI.NewText(header, 15, c.text)
 	title:SetPoint("LEFT", logo, "RIGHT", 10, 0)
 	title:SetText(strupper(L["Loot response"]))
+	frame.title = title
 	frame.lm = UI.NewText(header, 12, c.muted, "RIGHT")
 	frame.timer = UI.NewText(header, 13, c.gold, "RIGHT") -- the answer timer, when the session has one
 
@@ -382,6 +383,10 @@ function ResponseWindow:Refresh()
 	end
 
 	applyDensity()
+	-- A session started by an addon built on ALC (Soft Reserve) shows that addon's name and colour.
+	local brandName = UI.SessionBrand(session)
+	UI.ApplyBrand(frame.logo, session)
+	frame.title:SetText(strupper(brandName and (brandName .. " " .. L["response"]) or L["Loot response"]))
 	applySet(session.responses)
 	local count = #session.items
 	local visible = min(count, MAX_VISIBLE)

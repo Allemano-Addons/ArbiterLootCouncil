@@ -107,6 +107,8 @@ local function makeSession(sid, p, restored)
 		paused = paused,
 		rolls = p.rolls == true, -- the council gets a random roll per candidate
 		mode = p.mode,           -- what kind of session an addon built on ALC says it is (nil for a normal one)
+		modeName = p.modeName,   -- its longer name and colour, for the window titles and marks
+		modeColor = p.modeColor,
 		timeUp = timeUp,
 		sid = sid,
 		items = copyItems(itemsOf(p)),
@@ -142,6 +144,8 @@ local function saveSession()
 		paused = session.paused or nil,
 		rolls = session.rolls or nil,
 		mode = session.mode,
+		modeName = session.modeName,
+		modeColor = session.modeColor,
 		pausedLeft = session.pausedLeft,
 		endsAtEpoch = session.endsAt and (time() + math.ceil(session.endsAt - GetTime())) or nil,
 		sid = session.sid,
@@ -317,7 +321,8 @@ end
 -- Starts a session for a list of items (links, itemStrings or item ids), in that order.
 -- Returns true, sid or false, message.
 -- `options` is for an addon that builds on ALC (Soft Reserve); a normal session passes none:
---   mode       a short text for the kind of session ("SR"); shown nowhere by ALC itself
+--   mode       a short text for the kind of session ("SR")
+--   modeName   its longer name ("Soft Reserve") and modeColor (6 hex digits): the windows show them as title and mark colour
 --   extra      { [item number] = { key = value, ... } } data that travels with the items (see Protocol)
 --   responses  the answer buttons for this session, as a wire list { { id, label, color }, ... }, PASS last
 --   rolls      true or false: whether ALC rolls for a candidate when they answer (default: the setting)
@@ -355,6 +360,8 @@ function Sessions:StartItems(list, options)
 		timer = ALC.Settings:GetActiveTimer(),
 		rolls = ALC.Settings:GetRollsEnabled() or nil,
 		mode = options and options.mode or nil,
+		modeName = options and options.modeName or nil,
+		modeColor = options and options.modeColor or nil,
 	}
 	if options and options.rolls ~= nil then payload.rolls = options.rolls == true or nil end
 	-- What an addon passes is checked here the way every player will check it, so a mistake shows up now.
@@ -514,6 +521,8 @@ local function onStateRequest(_, sender)
 	if session.paused then payload.paused = true end
 	if session.rolls then payload.rolls = true end
 	if session.mode then payload.mode = session.mode end
+	if session.modeName then payload.modeName = session.modeName end
+	if session.modeColor then payload.modeColor = session.modeColor end
 	ALC.Events:Fire("ALC_SESSION_SNAPSHOT_BUILD", payload, sender, isCouncil)
 	ALC.Comm:SendWhisper(sender, "STATE_SNAPSHOT", session.sid, payload)
 end

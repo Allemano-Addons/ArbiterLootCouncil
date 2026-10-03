@@ -25,6 +25,7 @@ ALC.Constants = {
 	-- What another addon (Arbiter Soft Reserve) may attach to a session: a `mode` text, and per item an `extra`
 	-- table. ALC does not look at the content; it only keeps it small and plain.
 	MAX_MODE_LENGTH = 16,
+	MAX_MODE_NAME = 24, -- the longer name of a mode ("Soft Reserve"), shown in the window titles
 	MAX_EXTRA_KEYS = 8,
 	MAX_EXTRA_TEXT = 64,
 	MAX_EXTRA_LIST = 40,

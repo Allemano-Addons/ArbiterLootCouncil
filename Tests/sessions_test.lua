@@ -341,7 +341,7 @@ return function(check, H)
 		{ id = "PASS", label = "Pass", color = "888888" },
 	}
 	local okSR, sidSR = Sessions:StartItems({ 19019, 200 }, {
-		mode = "SR",
+		mode = "SR", modeName = "Soft Reserve", modeColor = "9B7BFF",
 		responses = srResponses,
 		rolls = false,
 		extra = { [1] = { sr = { "Veyra Moo", "Kaelis Moo" }, note = "tier token", reserved = true, copies = 2 } },
@@ -349,6 +349,10 @@ return function(check, H)
 	check("a session starts with options", okSR == true and Sessions:IsActive())
 	local sr = Sessions:GetSession()
 	check("the mode is kept", sr.mode == "SR")
+	check("and its name and colour", sr.modeName == "Soft Reserve" and sr.modeColor == "9B7BFF")
+	local brandName, brandColor = ALC.UI.SessionBrand(sr)
+	check("the windows can read the brand", brandName == "Soft Reserve" and math.abs(brandColor[1] - 0x9B / 255) < 0.001)
+	check("a normal session has no brand", ALC.UI.SessionBrand({ mode = "SR" }) == nil and ALC.UI.SessionBrand(nil) == nil)
 	check("the data travels with the item", sr.items[1].extra.sr[2] == "Kaelis Moo" and sr.items[1].extra.note == "tier token"
 		and sr.items[1].extra.reserved == true and sr.items[1].extra.copies == 2)
 	check("an item without data has none", sr.items[2].extra == nil)
@@ -362,13 +366,15 @@ return function(check, H)
 	H.clock = H.clock + 100
 	Comm:Process(env("STATE_REQUEST", nil, nil, {}), "WHISPER", "Veyra Moo")
 	local _, srSnap = AceSerializer:Deserialize(H.sent[1].text)
-	check("the snapshot carries the mode", srSnap.p.mode == "SR")
+	check("the snapshot carries the mode", srSnap.p.mode == "SR" and srSnap.p.modeName == "Soft Reserve" and srSnap.p.modeColor == "9B7BFF")
 	check("and the data of the items", srSnap.p.items[1].extra.sr[1] == "Veyra Moo" and srSnap.p.items[2].extra == nil)
 
 	-- the loot master's own saved session keeps them over a /reload
 	local saved = ALC.Settings:GetSessionStore().session
-	check("the saved session keeps the mode and the data", saved and saved.mode == "SR" and saved.items[1].extra.copies == 2)
+	check("the saved session keeps the mode and the data", saved and saved.mode == "SR" and saved.modeName == "Soft Reserve" and saved.modeColor == "9B7BFF" and saved.items[1].extra.copies == 2)
 	Sessions:Cancel("sr done")
+	check("a bad colour is refused before anything is sent", (Sessions:StartItems({ 19019 }, { mode = "SR", modeName = "Soft Reserve", modeColor = "purple" })) == false and not Sessions:IsActive())
+	check("so is a name with strange characters", (Sessions:StartItems({ 19019 }, { mode = "SR", modeName = "Soft|cffff0000 Reserve", modeColor = "9B7BFF" })) == false)
 
 	-- a player's client builds the same session from the loot master's message
 	reset()

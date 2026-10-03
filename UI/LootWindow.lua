@@ -9,8 +9,10 @@ local L = ALC.L
 local strupper = string.upper
 local min, max = math.min, math.max
 
-local WIDTH, PAD = 400, 16
-local HEADER_H, LABEL_H, FOOTER_H = 52, 34, 64
+local BASE_WIDTH, PAD = 400, 16
+local WIDTH = BASE_WIDTH -- wider while an addon built on ALC has added a way to start a session (Start SR)
+local MODE_EXTRA = 90 -- the width one more way to start needs
+local HEADER_H, LABEL_H, FOOTER_H = 52, 34, 72
 local ROW_H, ROW_GAP = 56, 8
 local POOL, DEFAULT_ROWS, MIN_ROWS = 24, 8, 3 -- rows built, rows shown by default, fewest rows
 local INITIAL_ROWS = 6 -- rows made when the window is built
@@ -266,7 +268,7 @@ local function build()
 	end)
 	frame.clearDone:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", PAD, 17)
 	frame.hint:ClearAllPoints()
-	frame.hint:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", PAD, 48)
+	frame.hint:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", PAD, 54)
 
 	-- Rows are made as they are needed and the rest of the pool a few at a time (see CouncilWindow).
 	LootWindow.EnsureRows(INITIAL_ROWS)
@@ -352,12 +354,43 @@ function LootWindow.FormatTradeTime(seconds)
 	return "|cff" .. color .. text .. "|r"
 end
 
-local function renderRow(row, entry, sessionActive, isLM)
+-- The buttons of a row, right to left: remove, "Start" (the normal Loot Council session), then one per way an
+-- addon built on ALC added (see ALC.RegisterStartMode). The name and the line under it keep clear of them.
+local function layoutRowButtons(row, modes)
+	local w, h = layoutCompact and 64 or 76, layoutCompact and 24 or 34
+	row.start:SetSize(w, h)
+	row.start:SetLabel(#modes > 0 and L["Start LC"] or L["Start"])
+	row.modeButtons = row.modeButtons or {}
+	local previous = row.start
+	for i, mode in ipairs(modes) do
+		local button = row.modeButtons[i]
+		if not button then
+			button = UI.NewButton(row, w, h, "", function(self)
+				local ok, message = ALC.LootDetection:StartSession(row.entryId, self.modeId)
+				if not ok and message then ALC:Print(message) end
+			end)
+			row.modeButtons[i] = button
+		end
+		button.modeId = mode.id
+		button:SetSize(w, h)
+		button:SetLabel(L["Start"] .. " " .. mode.label)
+		button:ClearAllPoints()
+		button:SetPoint("RIGHT", previous, "LEFT", -6, 0)
+		previous = button
+	end
+	for i = #modes + 1, #row.modeButtons do row.modeButtons[i]:Hide() end
+	local reserved = REMOVE_SIZE + 8 + (#modes + 1) * (w + 6) + 10
+	row.name:SetPoint("RIGHT", row, "RIGHT", -reserved, 0)
+	row.sub:SetPoint("RIGHT", row, "RIGHT", -reserved, 0)
+end
+
+local function renderRow(row, entry, sessionActive, isLM, modes, brand)
 	local LootDetection = ALC.LootDetection
 	local status = LootDetection.STATUS
 	local display = LootDetection:GetItemDisplay(entry)
 
 	row.entry, row.entryId = entry, entry.id
+	layoutRowButtons(row, modes)
 	row.icon:SetTexture(display.icon or UNKNOWN_ICON)
 	local qc = UI.QualityColor(display.quality)
 	row.iconBorder:SetColor(qc)
@@ -383,24 +416,31 @@ local function renderRow(row, entry, sessionActive, isLM)
 	row.sub:SetText(subtitle)
 
 	local inSession = entry.status == status.SESSION
+	-- The accent of a row in a session is the colour of the addon that started it (Soft Reserve: purple).
+	local accent = (inSession and brand) or c.gold
 	if inSession then
-		UI.SetTextureColor(row.bg, c.goldTint)
-		row.border:SetColor(c.gold)
+		if brand then UI.SetTextureColor(row.bg, brand, 0.14) else UI.SetTextureColor(row.bg, c.goldTint) end
+		row.border:SetColor(accent)
 	else
 		UI.SetTextureColor(row.bg, c.panel)
 		row.border:SetColor(c.border)
 	end
 
 	row.start:Hide()
+	for _, button in ipairs(row.modeButtons or {}) do button:Hide() end
 	row.status:Hide()
 	row.remove:Hide()
 	if entry.status == status.PENDING then
 		row.start:Show()
 		row.start:SetAvailable(isLM and not sessionActive)
+		for i = 1, #modes do
+			row.modeButtons[i]:Show()
+			row.modeButtons[i]:SetAvailable(isLM and not sessionActive)
+		end
 		row.remove:Show()
 	elseif inSession then
 		anchorStatus(row, false)
-		row.status:SetTextColor(c.gold[1], c.gold[2], c.gold[3], 1)
+		row.status:SetTextColor(accent[1], accent[2], accent[3], 1)
 		row.status:SetText(L["In session"])
 		row.status:Show()
 	elseif entry.status == status.TRADE then
@@ -440,13 +480,19 @@ function LootWindow:Refresh()
 	local session = ALC.Sessions:GetSession()
 	local sessionActive = session ~= nil
 	local isLM = ALC.Council:AmLootMaster()
+	local modes = ALC.GetStartModes()
+	local _, brand = UI.SessionBrand(session)
+
+	-- More ways to start a session need more room: wider window, one more button per mode in the footer.
+	WIDTH = BASE_WIDTH + MODE_EXTRA * min(#modes, 2)
+	frame:SetWidth(WIDTH)
 
 	local shown = min(count - offset, rowsAllowed)
 	LootWindow.EnsureRows(shown)
 	for i = 1, #self.rows do
 		local row = self.rows[i]
 		local entry = items[offset + i]
-		if entry and i <= shown then renderRow(row, entry, sessionActive, isLM) else row.entry, row.entryId = nil, nil; row:Hide() end
+		if entry and i <= shown then renderRow(row, entry, sessionActive, isLM, modes, brand) else row.entry, row.entryId = nil, nil; row:Hide() end
 	end
 
 	frame.empty:SetShown(count == 0)
@@ -459,8 +505,43 @@ function LootWindow:Refresh()
 	frame.clearDone:SetAvailable(finished > 0)
 	frame.cancel:SetAvailable(sessionActive and session.isLM)
 	local waiting = #LootDetection:GetPending()
-	frame.startAll:SetLabel(waiting > 1 and string.format("%s (%d)", L["Start all"], waiting) or L["Start all"])
+	local allLabel = #modes > 0 and L["Start all LC"] or L["Start all"]
+	frame.startAll:SetLabel(waiting > 1 and string.format("%s (%d)", allLabel, waiting) or allLabel)
 	frame.startAll:SetAvailable(isLM and not sessionActive and waiting > 1)
+	-- With one way to start it keeps its amber frame; with two, neither is picked for you.
+	frame.startAll:SetSelected(#modes == 0)
+	-- One "Start all" for each way an addon built on ALC added (left of the normal one, the nearest to the corner first).
+	frame.modeAll = frame.modeAll or {}
+	local anchor = nil
+	for i = 1, min(#modes, 2) do
+		local mode = modes[i]
+		local button = frame.modeAll[i]
+		if not button then
+			button = UI.NewButton(frame, 104, 30, "", function(clicked)
+				local ok, message = ALC.LootDetection:StartAll(clicked.modeId)
+				if not ok and message then ALC:Print(message) end
+			end)
+			frame.modeAll[i] = button
+		end
+		button.modeId = mode.id
+		local label = L["Start all"] .. " " .. mode.label
+		button:SetLabel(waiting > 1 and string.format("%s (%d)", label, waiting) or label)
+		button:SetAvailable(isLM and not sessionActive and waiting > 1)
+		button:ClearAllPoints()
+		button:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -PAD - (i - 1) * 112, 17)
+		button:Show()
+		anchor = button
+	end
+	for i = min(#modes, 2) + 1, #frame.modeAll do frame.modeAll[i]:Hide() end
+	frame.startAll:ClearAllPoints()
+	if anchor then
+		-- The row of buttons: the "Start all" of each mode, then the normal one, then Cancel.
+		frame.startAll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -PAD - min(#modes, 2) * 112, 17)
+		frame.startAll:SetSize(112, 30)
+	else
+		frame.startAll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -PAD, 17)
+		frame.startAll:SetSize(100, 30)
+	end
 
 	local body = max(shown, 1) * (ROW_H + ROW_GAP) - ROW_GAP
 	if count == 0 then body = 64 end

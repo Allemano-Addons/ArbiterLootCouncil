@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.1-beta
+- **Start LC and Start SR.** When Arbiter Soft Reserve is installed, every item in the Loot window gets two buttons: **Start LC** (a normal Loot Council session, as always) and **Start SR** (a soft reserve session). The footer has **Start all LC** and **Start all SR** in the same way. Without Arbiter Soft Reserve the window looks and works exactly as before ("Start", "Start all").
+- A session started by Arbiter Soft Reserve now looks like it: the Loot Response window the players see says "SOFT RESERVE RESPONSE" with the purple mark, and the item in the loot master's Loot window gets a purple frame while it is in session. Players with an older version, or without Arbiter Soft Reserve, see the name and colour too (they travel with the session); a normal Loot Council session is unchanged.
+- The Result window can show a player who reserved an item and never answered ("Did not answer", no roll). Such a row travels as a Pass with a new flag, so versions without it show "Passed".
+- The window menu of the minimap button can hold the rows of other addons, under a heading of their own (Arbiter Soft Reserve adds Results, Session and Import list). Without such an addon the menu is unchanged.
+- For addons built on ALC (API 5): `ALC.RegisterLauncherEntry` adds a row to the window menu, and `ALC.RegisterStartMode` adds a way to start a session to the Loot window, and `Sessions:StartItems` takes `modeName` and `modeColor` next to `mode`.
+
 ## 0.4.0-beta
 - A small API for other addons to build on Arbiter Loot Council. Arbiter Soft Reserve is the first. **A normal Loot Council session works exactly as before**; everything below only appears when an addon built on ALC uses it.
 - Such an addon can start a session with its own answer buttons and attach a short tag and data to each item. The response window shows the tag (Soft Reserve: "SR" in front of the items you reserved). A session started this way does not open the voting window by itself (it can still be opened from the menu).

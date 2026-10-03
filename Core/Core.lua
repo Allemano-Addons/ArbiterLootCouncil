@@ -42,7 +42,100 @@ end
 -- itself with ALC.RegisterExtension(name, version), so ALC and the Versions window can tell what is installed.
 -- Nothing here changes what ALC does by itself.
 --------------------------------------------------------------------------------
-ALC.API_VERSION = 4
+ALC.API_VERSION = 5
+
+-- API 5: an addon can add entries to the window menu of the minimap button (Soft Reserve: Results, Session, Import).
+-- ALC.RegisterLauncherEntry({ id, label, icon, section, color, available, open }):
+--   id        a short key                                  label    the text of the row
+--   icon      the name of one of ALC's icons (Media/Icons, "summary", "note", ...)
+--   section   the heading the entries of one addon are grouped under ("Soft Reserve")
+--   color     6 hex digits: the colour of the heading and of the icons
+--   available function() -> true, or false and why not (the row is greyed out and says why)
+--   open      function(): what the row does
+do
+	local launcherEntries = {} -- in the order they were added
+
+	-- Returns true, or false and why not. Registering the same id again replaces the entry.
+	function ALC.RegisterLauncherEntry(def)
+		if type(def) ~= "table" or type(def.id) ~= "string" or def.id == "" then return false, "The entry needs an id." end
+		if type(def.label) ~= "string" or def.label == "" then return false, "The entry needs a label." end
+		if type(def.open) ~= "function" then return false, "The entry needs an open function." end
+		local entry = {
+			id = def.id, label = def.label, icon = type(def.icon) == "string" and def.icon or "loot",
+			section = type(def.section) == "string" and def.section or nil, color = type(def.color) == "string" and def.color or nil,
+			available = type(def.available) == "function" and def.available or function() return true end, open = def.open,
+		}
+		for i, e in ipairs(launcherEntries) do
+			if e.id == def.id then
+				launcherEntries[i] = entry
+				ALC.Events:Fire("ALC_LAUNCHER_CHANGED")
+				return true
+			end
+		end
+		launcherEntries[#launcherEntries + 1] = entry
+		ALC.Events:Fire("ALC_LAUNCHER_CHANGED")
+		return true
+	end
+
+	function ALC.UnregisterLauncherEntry(id)
+		for i, e in ipairs(launcherEntries) do
+			if e.id == id then
+				table.remove(launcherEntries, i)
+				ALC.Events:Fire("ALC_LAUNCHER_CHANGED")
+				return
+			end
+		end
+	end
+
+	-- The entries other addons added, in the order they were added.
+	function ALC.GetLauncherEntries()
+		local list = {}
+		for i, e in ipairs(launcherEntries) do list[i] = e end
+		return list
+	end
+end
+
+-- API 5: an addon can add a way to start a session (Soft Reserve: "Start SR") next to the normal "Start" of the
+-- Loot window. ALC.RegisterStartMode({ id, label, name, color, start }):
+--   id     a short key ("SR")                           label  the word on the buttons ("SR": "Start SR")
+--   name   the longer name ("Soft Reserve")             color  6 hex digits, the colour of its mark and accent
+--   start  function(itemStrings) -> true, or false and a message; it starts the session itself
+--          (Sessions:StartItems with the same mode, modeName and modeColor)
+do
+	local startModes = {} -- id -> mode
+
+	-- Returns true, or false and why not. Registering the same id again replaces it.
+	function ALC.RegisterStartMode(def)
+		if type(def) ~= "table" or type(def.id) ~= "string" or def.id == "" then return false, "The start mode needs an id." end
+		if type(def.label) ~= "string" or def.label == "" then return false, "The start mode needs a label." end
+		if type(def.start) ~= "function" then return false, "The start mode needs a start function." end
+		startModes[def.id] = {
+			id = def.id, label = def.label, name = type(def.name) == "string" and def.name or def.label,
+			color = type(def.color) == "string" and def.color or nil, start = def.start,
+		}
+		ALC.Events:Fire("ALC_START_MODES_CHANGED")
+		return true
+	end
+
+	function ALC.UnregisterStartMode(id)
+		if startModes[id] then
+			startModes[id] = nil
+			ALC.Events:Fire("ALC_START_MODES_CHANGED")
+		end
+	end
+
+	function ALC.GetStartMode(id)
+		return startModes[id]
+	end
+
+	-- The start modes added by other addons, sorted by label.
+	function ALC.GetStartModes()
+		local list = {}
+		for _, m in pairs(startModes) do list[#list + 1] = m end
+		table.sort(list, function(a, b) return a.label < b.label end)
+		return list
+	end
+end
 
 do
 	local extensions = {} -- name -> { name, version }

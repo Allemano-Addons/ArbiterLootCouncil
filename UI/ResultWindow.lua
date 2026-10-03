@@ -257,6 +257,7 @@ end
 local VIA = { SR = L["Soft reserve"], MS = L["Main spec"], OS = L["Off spec"] }
 
 local function outcomeText(row)
+	if row.silent then return L["Did not answer"] end
 	if row.outcome == "won" then return L["Won"] .. (row.via and (" (" .. (VIA[row.via] or row.via) .. ")") or "") end
 	if row.outcome == "tied" then return L["Tied"] end
 	if row.outcome == "passed" then return L["Passed"] end
@@ -298,10 +299,10 @@ local function renderPlayerRow(row, info)
 	local nc = class and UI.ClassColor(class) or c.text
 	row.name:SetTextColor(nc[1], nc[2], nc[3], 1)
 	row.name:SetText(info.name)
-	row.answer:SetText(answerLabel(info.answer))
+	row.answer:SetText(info.silent and "-" or answerLabel(info.answer))
 	row.roll:SetText(rollText(info))
 	local rc = c.muted
-	if info.outcome == "won" then rc = GREEN elseif info.outcome == "tied" then rc = c.gold end
+	if info.outcome == "won" then rc = GREEN elseif info.outcome == "tied" then rc = c.gold elseif info.silent then rc = c.danger end
 	row.result:SetTextColor(rc[1], rc[2], rc[3], 1)
 	row.result:SetText(outcomeText(info))
 	row:Show()

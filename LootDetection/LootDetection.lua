@@ -299,12 +299,22 @@ local function clearStarting()
 	for _, entry in ipairs(store.items) do entry.starting = nil end
 end
 
-function LootDetection:StartSession(id)
+-- Another way to start (an addon built on ALC, see ALC.RegisterStartMode) is named by modeId; a normal session passes none.
+local function startWith(modeId, strings)
+	if not modeId then
+		return ALC.Sessions:StartItems(strings)
+	end
+	local mode = ALC.GetStartMode(modeId)
+	if not mode then return false, L["That way to start a session is not available."] end
+	return mode.start(strings)
+end
+
+function LootDetection:StartSession(id, modeId)
 	local entry = find(id)
 	if not entry then return false, L["That item is no longer in the list."] end
 	if entry.status ~= STATUS.PENDING then return false, L["That item is not waiting for a session."] end
 	entry.starting = true
-	local ok, result = ALC.Sessions:Start(entry.itemString)
+	local ok, result = startWith(modeId, { entry.itemString })
 	if not ok then
 		entry.starting = nil
 		return false, result
@@ -322,7 +332,7 @@ function LootDetection:GetPending()
 end
 
 -- Starts one session for every item that waits (at most as many as a session holds).
-function LootDetection:StartAll()
+function LootDetection:StartAll(modeId)
 	local max = ALC.Constants.MAX_SESSION_ITEMS
 	local entries, strings = {}, {}
 	for _, entry in ipairs(store.items) do
@@ -333,7 +343,7 @@ function LootDetection:StartAll()
 	end
 	if #entries == 0 then return false, L["No items are waiting for a session."] end
 	for _, entry in ipairs(entries) do entry.starting = true end
-	local ok, result = ALC.Sessions:StartItems(strings)
+	local ok, result = startWith(modeId, strings)
 	if not ok then
 		clearStarting()
 		return false, result

@@ -4,7 +4,7 @@
 -- so everybody can see that the rolls were fair. ALC itself decides nothing here: it carries and shows the rows.
 --
 -- A row: { name, answer (a response id), roll (1-100), rerolls = { ... }, outcome = "won" | "tied" | "lost" | "passed",
--- via = "SR" | "MS" | "OS", reserved = true }. A result has a state: "resolved" (the loot master may still reroll) or
+-- via = "SR" | "MS" | "OS", reserved = true, silent = true (reserved the item, never answered; answer is PASS) }. A result has a state: "resolved" (the loot master may still reroll) or
 -- "accepted".
 --
 -- Events:
@@ -28,7 +28,7 @@ local function copyRows(rows)
 			rerolls = {}
 			for j, n in ipairs(r.rerolls) do rerolls[j] = n end
 		end
-		copy[i] = { name = r.name, answer = r.answer, roll = r.roll, rerolls = rerolls, outcome = r.outcome, via = r.via, reserved = r.reserved }
+		copy[i] = { name = r.name, answer = r.answer, roll = r.roll, rerolls = rerolls, outcome = r.outcome, via = r.via, reserved = r.reserved, silent = r.silent }
 	end
 	return copy
 end

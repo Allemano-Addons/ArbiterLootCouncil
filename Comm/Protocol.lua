@@ -228,6 +228,9 @@ specs.SESSION_START = {
 		if p.rolls ~= nil and type(p.rolls) ~= "boolean" then return fail("bad rolls") end
 		-- A short name for what kind of session this is, set by an addon that builds on ALC (Soft Reserve: "SR").
 		if p.mode ~= nil and not (isText(p.mode, 1, C.MAX_MODE_LENGTH) and strmatch(p.mode, "^[%w ]+$")) then return fail("bad mode") end
+		-- Its longer name and colour (6 hex digits), so every player's windows can show whose session this is.
+		if p.modeName ~= nil and not (isText(p.modeName, 1, C.MAX_MODE_NAME) and strmatch(p.modeName, "^[%w ]+$")) then return fail("bad modeName") end
+		if p.modeColor ~= nil and not (isText(p.modeColor, 6, 6) and strmatch(p.modeColor, "^%x+$")) then return fail("bad modeColor") end
 		-- In a snapshot: what is left of it (0 = the time is up).
 		if p.timerLeft ~= nil and not isInt(p.timerLeft, 0, C.TIMER_MAX) then return fail("bad timerLeft") end
 		return true
@@ -345,6 +348,9 @@ specs.RESULT = {
 			if not RESULT_OUTCOMES[r.outcome] then return fail("bad result outcome") end
 			if r.via ~= nil and not RESULT_VIA[r.via] then return fail("bad result via") end
 			if r.reserved ~= nil and type(r.reserved) ~= "boolean" then return fail("bad result reserved") end
+			-- A player who reserved the item and never answered: sent as a Pass (so older versions show "Passed"),
+			-- and this flag lets newer ones say "Did not answer".
+			if r.silent ~= nil and type(r.silent) ~= "boolean" then return fail("bad result silent") end
 		end
 		return true
 	end,

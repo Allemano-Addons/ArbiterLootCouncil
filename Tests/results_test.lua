@@ -82,6 +82,11 @@ return function(check, H)
 	check("RESULT is a loot master message to the group", spec ~= nil and spec.allowed == "lm" and spec.channel == "GROUP" and spec.sid == "active" and spec.seq == true)
 	check("a good result passes", spec.validate(good, ME) == true)
 	local function bad(change) local p = { item = 1, state = "resolved", rows = { row("Veyra Moo", "BIS", 40, "won") } } change(p) return spec.validate(p, ME) == false end
+	check("a reserver who never answered can be sent (as a Pass with the silent flag)", (function()
+		local p = { item = 1, state = "resolved", rows = { row("Veyra Moo", "PASS", nil, "passed", { reserved = true, silent = true }) } }
+		return spec.validate(p, ME) == true
+	end)())
+	check("the silent flag must be true or false", bad(function(p) p.rows[1].silent = "yes" end))
 	check("a bad item is refused", bad(function(p) p.item = 0 end) and bad(function(p) p.item = 99 end))
 	check("a bad state is refused", bad(function(p) p.state = "done" end) and bad(function(p) p.state = nil end))
 	check("rows must be a list", bad(function(p) p.rows = "x" end) and bad(function(p) p.rows = { a = 1 } end))

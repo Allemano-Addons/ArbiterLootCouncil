@@ -292,6 +292,35 @@ return function(check, H)
 	Sessions:Cancel("changed my mind")
 	check("cancelling puts the item back", LD:GetEntry(first.id).status == STATUS.PENDING)
 
+	-- Another way to start (Soft Reserve's "Start SR", see ALC.RegisterStartMode)
+	local seenStrings
+	ALC.RegisterStartMode({
+		id = "SR", label = "SR", name = "Soft Reserve", color = "9B7BFF",
+		start = function(strings)
+			seenStrings = strings
+			return Sessions:StartItems(strings, { mode = "SR", modeName = "Soft Reserve", modeColor = "9B7BFF" })
+		end,
+	})
+	local okMode = LD:StartSession(first.id, "SR")
+	check("a start mode starts the session itself", okMode == true and seenStrings and #seenStrings == 1 and seenStrings[1] == first.itemString)
+	check("the session has the mode's name and colour", Sessions:GetSession().modeName == "Soft Reserve" and Sessions:GetSession().modeColor == "9B7BFF")
+	check("and the entry is tied to it like any other", LD:GetEntry(first.id).status == STATUS.SESSION and LD:GetEntry(first.id).sid == Sessions:GetActiveSid())
+	Win:Show()
+	Win:Refresh() -- the window with the extra buttons and the mode's accent builds without errors
+	check("the window shows with a start mode", Win:IsShown())
+	Sessions:Cancel("again")
+	check("a start mode that is gone is refused", (function()
+		ALC.UnregisterStartMode("SR")
+		local ok, message = LD:StartSession(first.id, "SR")
+		return ok == false and message ~= nil and LD:GetEntry(first.id).status == STATUS.PENDING
+	end)())
+	check("a start-all with a mode that is gone is refused too", (function()
+		local ok = LD:StartAll("SR")
+		return ok == false and LD:GetEntry(first.id).status == STATUS.PENDING
+	end)())
+	Win:Refresh()
+	Win:Hide()
+
 	LD:StartSession(first.id)
 	check("award ends it as awarded", Comm:SendRaid("AWARD", Sessions:GetActiveSid(), { item = 1, winner = "Veyra Moo", itemID = 19019, response = "BIS" }) == true)
 	local awarded = LD:GetEntry(first.id)
