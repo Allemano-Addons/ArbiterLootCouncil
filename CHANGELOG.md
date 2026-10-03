@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.5-beta
+- **A Results button in the Loot Response window.** Every player can open the results from the window they answer in. With Arbiter Soft Reserve it opens its results of the last sessions; without, ALC's own Result window with the rolls of the running session. (For addons built on ALC: `ALC.RegisterResultsViewer` and `ALC.OpenResults`.)
+- **A warning about players without the addon.** When you start a session, ALC asks the group who has it and, a few seconds later, the chat says which players did not reply ("Kaelis Moo did not reply to the version check. They may not have Arbiter Loot Council, so they cannot answer."). Settings, Loot master: "Warn about players without the addon" (on by default). Nothing is said when you are alone.
+- **The Loot window shows what an addon knows about an item.** An addon built on ALC can give its start mode an `info` function: Soft Reserve's "SR x3" now sits on the item's line (in purple), and its **Start SR** button gets an amber frame, so it is clear which items go as soft reserve.
+- **"Your roll" in the player's Loot Response window.** After the loot master's addon has rolled (Soft Reserve), the row of an item shows what you rolled and who leads ("Your roll: 23. Allemano Moo won with 87."), "You won! Your roll: 87 (Soft reserve)", "You passed." or "You did not answer: no roll." instead of the answer buttons, which are closed by then. A reopened item gets its buttons back.
+- Other addons can add a section to the Settings window (API 5: `ALC.RegisterSettingsSection`): a heading in their colour and rows drawn in ALC's own style (switches, choices of buttons and action buttons, with an optional "click again" question), on the Everyone or the Loot master tab. Arbiter Soft Reserve uses it. Without such an addon the Settings window is unchanged.
+
 ## 0.4.4-beta
 - Fix: in a Soft Reserve session the mark in the Loot Response window was purple all over. It is now like the Soft Reserve mark: only the lower part of the A is purple and the upper part stays white. (A new picture, Media/Logo/alc_mark_accent_64.tga, made by Tools/make_accent.lua, holds the part that is tinted.)
 

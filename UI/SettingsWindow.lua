@@ -247,6 +247,79 @@ local function build()
 	divider(contentY)
 	contentY = contentY + 18
 
+	-- Sections that other addons add (ALC.RegisterSettingsSection): a heading in the addon's colour, then its rows for
+	-- this tab, drawn in the window's own style. Returns the y below them.
+	local extRefresh = {}
+	SettingsWindow.extRefresh = extRefresh
+	local function extensionRows(key, at)
+		for _, section in ipairs(ALC.GetSettingsSections()) do
+			local rows = {}
+			for _, row in ipairs(section.rows) do
+				if row.tab == key then rows[#rows + 1] = row end
+			end
+			if #rows > 0 then
+				local heading = into(key, UI.NewText(frame, 11, UI.HexColor(section.color) or c.muted))
+				heading:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -at)
+				heading:SetText(strupper(section.name))
+				at = at + 22
+				for _, row in ipairs(rows) do
+					if row.type == "check" then
+						local box = into(key, UI.NewCheckbox(frame, row.label, function(checked)
+							pcall(row.set, checked)
+						end, row.tip))
+						box:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -at)
+						extRefresh[#extRefresh + 1] = function()
+							local ok, value = pcall(row.get)
+							box:SetChecked(ok and value and true or false)
+						end
+						at = at + 29
+					elseif row.type == "choice" then
+						local label = into(key, UI.NewText(frame, 12, c.text))
+						label:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -at)
+						label:SetText(row.label)
+						at = at + 22
+						local n = #row.options
+						local width = math.floor((WIDTH - 2 * PAD - (n - 1) * 6) / n)
+						local buttons = {}
+						for i, option in ipairs(row.options) do
+							buttons[i] = into(key, UI.NewButton(frame, width, 30, option.label, function()
+								pcall(row.set, option.value)
+								SettingsWindow:Refresh()
+							end))
+							buttons[i]:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD + (i - 1) * (width + 6), -at)
+						end
+						extRefresh[#extRefresh + 1] = function()
+							local ok, value = pcall(row.get)
+							for i, option in ipairs(row.options) do buttons[i]:SetSelected(ok and value == option.value) end
+						end
+						at = at + 40
+					else -- an action; with `confirm` the first click asks and the second one does it
+						local armed
+						local button = into(key, UI.NewButton(frame, 240, 30, row.label, function(self)
+							if row.confirm and not armed then
+								armed = true
+								self:SetLabel(row.confirm)
+								C_Timer.After(4, function()
+									armed = nil
+									self:SetLabel(row.label)
+								end)
+								return
+							end
+							armed = nil
+							self:SetLabel(row.label)
+							pcall(row.onClick)
+							SettingsWindow:Refresh()
+						end))
+						button:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -at)
+						at = at + 38
+					end
+				end
+				at = at + 8
+			end
+		end
+		return at
+	end
+
 	-- Loot master: the council list ---------------------------------------------
 	local y = contentY
 	section("lm", y, L["Council"])
@@ -358,6 +431,13 @@ local function build()
 	frame.rolls:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
 	y = y + 38
 
+	-- A warning when a session starts about players who did not reply to the version check (no addon)
+	frame.warnMissing = into("lm", UI.NewCheckbox(frame, L["Warn about players without the addon"], function(checked)
+		ALC.Settings:SetWarnMissing(checked)
+	end, L["When a session starts, the chat says which players did not reply to the version check: they probably have no Arbiter Loot Council and cannot answer."]))
+	frame.warnMissing:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
+	y = y + 29
+
 	-- The disenchanter: gets the items nobody wants (the Disenchant button of the voting window).
 	local deLabel = into("lm", UI.NewText(frame, 12, c.text))
 	deLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
@@ -413,6 +493,7 @@ local function build()
 	y = y + 38
 	paragraph("lm", y, L["When the time is up the response window closes for everybody. The council can still vote and award."])
 	y = y + 40
+	y = extensionRows("lm", y)
 	heights.lm = y + 40
 
 	-- Council ---------------------------------------------------------------------
@@ -497,6 +578,7 @@ local function build()
 	end))
 	frame.clearLog:SetPoint("LEFT", frame.showLog, "RIGHT", 8, 0)
 	y = y + 46
+	y = extensionRows("everyone", y)
 	heights.everyone = y + 40
 	SettingsWindow.heights = heights
 
@@ -867,6 +949,7 @@ function SettingsWindow:Refresh()
 	frame.minimap:SetChecked(not settings:IsMinimapHidden())
 	frame.keepOpen:SetChecked(settings:GetKeepCouncilOpen())
 	frame.rolls:SetChecked(settings:GetRollsEnabled())
+	frame.warnMissing:SetChecked(settings:GetWarnMissing())
 	local disenchanter = settings:GetDisenchanter()
 	if deFeedback then
 		frame.deCurrent:SetTextColor(c.danger[1], c.danger[2], c.danger[3], 1)
@@ -877,6 +960,7 @@ function SettingsWindow:Refresh()
 	end
 	frame.deClear:SetAvailable(disenchanter ~= nil)
 	frame.debug:SetChecked(settings:IsDebug())
+	for _, refreshRow in ipairs(self.extRefresh or {}) do refreshRow() end
 	frame.fontButton:SetLabel(UI.FontName(settings:GetFont()))
 	refreshFontMenu()
 end

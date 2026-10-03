@@ -1,6 +1,6 @@
 -- The API for other addons: the version and the list of extensions. Nothing else in ALC depends on it.
 
-return function(check)
+return function(check, H)
 	check("the API has a version", type(ALC.API_VERSION) == "number" and ALC.API_VERSION >= 1)
 	check("HasAPI says yes to the version we have", ALC.HasAPI(ALC.API_VERSION) and ALC.HasAPI(1))
 	check("and no to a later one", not ALC.HasAPI(ALC.API_VERSION + 1))
@@ -44,6 +44,17 @@ return function(check)
 	ALC.RegisterStartMode({ id = "XX", label = "XX", start = function() end })
 	check("the name falls back to the label", ALC.GetStartMode("XX").name == "XX")
 	ALC.UnregisterStartMode("XX")
+
+	-- API 5: what the Results button opens
+	local viewed = 0
+	check("a results viewer must be a function", ALC.RegisterResultsViewer("x") == false)
+	check("a results viewer registers", ALC.RegisterResultsViewer(function() viewed = viewed + 1 end) == true)
+	check("and is what OpenResults opens", ALC.OpenResults() == true and viewed == 1)
+	ALC.RegisterResultsViewer(function() error("boom") end)
+	local before = #H.chat
+	check("a viewer that fails falls back to ALC's own window (here: nothing to show)", ALC.OpenResults() == false and #H.chat == before + 1)
+	ALC.UnregisterResultsViewer()
+	check("without a viewer it is ALC's own window", ALC.OpenResults() == false and #H.chat == before + 2)
 
 	-- API 5: entries in the window menu
 	check("no launcher entry to begin with", #ALC.GetLauncherEntries() == 0)

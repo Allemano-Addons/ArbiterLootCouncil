@@ -443,6 +443,19 @@ local function renderRow(row, entry, sessionActive, isLM, modes, brand)
 	row.name:SetText(display.name or L["Loading..."])
 
 	local subtitle = display.subtitle
+	-- What an addon built on ALC knows about the item ("SR x3"), and that mode's start button marked
+	local flagged = {}
+	if entry.status == status.PENDING then
+		for i, mode in ipairs(modes) do
+			local ok, text = false, nil
+			if mode.info then ok, text = pcall(mode.info, entry.itemID) end
+			if ok and text then
+				flagged[i] = true
+				local hex = mode.color and mode.color:match("^%x%x%x%x%x%x$")
+				subtitle = (subtitle ~= "" and (subtitle .. " \194\183 ") or "") .. (hex and ("|cff" .. hex .. text .. "|r") or text)
+			end
+		end
+	end
 	if (entry.status == status.AWARDED or entry.status == status.TRADE) and entry.winner then
 		subtitle = (subtitle ~= "" and (subtitle .. " \194\183 ") or "") .. winnerText(entry)
 	end
@@ -481,6 +494,7 @@ local function renderRow(row, entry, sessionActive, isLM, modes, brand)
 		for i = 1, #modes do
 			row.modeButtons[i]:Show()
 			row.modeButtons[i]:SetAvailable(isLM and not sessionActive)
+			row.modeButtons[i]:SetSelected(flagged[i] == true) -- the way to start that fits what the addon knows
 		end
 		row.remove:Show()
 	elseif inSession then

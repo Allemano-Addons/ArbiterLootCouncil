@@ -20,6 +20,7 @@ local defaults = {
 		debug = false,
 		autoOpenLootWindow = true,
 		keepCouncilOpen = false, -- keep the voting window open after an award
+		warnMissing = true,      -- say who has no answer from the addon when a session starts
 		responses = nil,      -- the loot master's answer buttons (Responses); nil = the default five
 		minimap = { hidden = false }, -- the launcher button; its position is saved once it has been moved
 		windows = {},         -- window key -> { point, relPoint, x, y }
@@ -99,6 +100,16 @@ end
 function Settings:SetResponseSet(set)
 	db.profile.responses = set
 	changed("responses")
+end
+
+-- Whether the loot master is told, when a session starts, which players did not reply to the version check.
+function Settings:GetWarnMissing()
+	return db.profile.warnMissing ~= false
+end
+
+function Settings:SetWarnMissing(enabled)
+	db.profile.warnMissing = enabled and true or false
+	changed("warnMissing")
 end
 
 function Settings:GetKeepCouncilOpen()

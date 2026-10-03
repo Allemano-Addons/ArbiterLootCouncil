@@ -535,6 +535,29 @@ function Comm:RequestVersions(silent)
 	return true
 end
 
+-- When a session starts: asks the group who has the addon and, a few seconds later, tells the loot master who did not
+-- reply (they probably have no Arbiter Loot Council and cannot answer) or runs another protocol. Nothing when alone.
+-- Returns true when the question was sent.
+function Comm:CheckAddonCoverage()
+	if not self:RequestVersions(true) then return false end
+	C_Timer.After(VERSION_WAIT + 0.5, function()
+		local missing = {}
+		for _, row in ipairs(Comm:GetVersionRows()) do
+			if row.status == "none" or row.status == "incompatible" then missing[#missing + 1] = row.name end
+		end
+		if #missing == 0 then
+			ALC.Events:Fire("ALC_ADDON_COVERAGE", missing)
+			return
+		end
+		local shown = {}
+		for i = 1, math.min(#missing, 6) do shown[i] = missing[i] end
+		local names = table.concat(shown, ", ") .. (#missing > 6 and string.format(ALC.L[" and %d more"], #missing - 6) or "")
+		ALC:Print(ALC.L["%s did not reply to the version check. They may not have Arbiter Loot Council, so they cannot answer."], names)
+		ALC.Events:Fire("ALC_ADDON_COVERAGE", missing)
+	end)
+	return true
+end
+
 -- How long replies are awaited after a request (for "waiting" in the version window).
 Comm.VERSION_WAIT = VERSION_WAIT
 
@@ -574,5 +597,9 @@ function Comm:Init()
 	end)
 	ALC.Events.Register(self, "ALC_COMM_VERSION", function(_, sender, _, p)
 		recordVersion(sender, p.addon, p.proto)
+	end)
+	-- A session the loot master starts (not one brought back after a reload): who cannot answer?
+	ALC.Events.Register(self, "ALC_SESSION_STARTED", function(_, session, restored)
+		if session and session.isLM and not restored and ALC.Settings:GetWarnMissing() then self:CheckAddonCoverage() end
 	end)
 end

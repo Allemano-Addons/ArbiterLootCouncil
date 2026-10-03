@@ -292,6 +292,25 @@ return function(check, H)
 	Sessions:Cancel("changed my mind")
 	check("cancelling puts the item back", LD:GetEntry(first.id).status == STATUS.PENDING)
 
+	-- What an addon built on ALC knows about an item ("SR x2") is on its line, and its start button is marked
+	ALC.RegisterStartMode({ id = "SR", label = "SR", name = "Soft Reserve", color = "9B7BFF", start = function() return true end,
+		info = function(itemID) if itemID == 19019 then return "SR x2" end end })
+	Win:Show()
+	Win:Refresh()
+	local infoRow
+	for _, r in ipairs(Win.rows) do if r.entry and r.entry.itemID == 19019 then infoRow = r end end
+	check("the item the addon knows about says so, in the mode's colour", infoRow and infoRow.sub:GetText():find("|cff9B7BFFSR x2|r", 1, true) ~= nil)
+	check("and its start button has the amber frame", infoRow.modeButtons[1].selected == true)
+	local otherRow
+	for _, r in ipairs(Win.rows) do if r.entry and r.entry.itemID ~= 19019 and r:IsShown() then otherRow = r end end
+	check("an item it knows nothing about has no text and no frame", otherRow == nil or (otherRow.sub:GetText():find("SR x", 1, true) == nil and otherRow.modeButtons[1].selected == false))
+	ALC.RegisterStartMode({ id = "SR", label = "SR", name = "Soft Reserve", color = "9B7BFF", start = function() return true end,
+		info = function() error("boom") end })
+	check("an info that fails does not break the window", pcall(function() Win:Refresh() end))
+	ALC.UnregisterStartMode("SR")
+	Win:Refresh()
+	Win:Hide()
+
 	-- Another way to start (Soft Reserve's "Start SR", see ALC.RegisterStartMode)
 	local seenStrings
 	ALC.RegisterStartMode({

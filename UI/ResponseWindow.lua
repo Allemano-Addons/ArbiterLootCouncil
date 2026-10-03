@@ -283,9 +283,13 @@ local function build()
 	frame.footerLine:SetHeight(1)
 	UI.SetTextureColor(frame.footerLine, c.border)
 
+	-- The results of the rolls (and, with Soft Reserve, of the earlier sessions): a click away for every player
+	frame.resultsButton = UI.NewButton(frame, 80, 26, L["Results"], function() ALC.OpenResults() end)
+	frame.resultsButton:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -PAD, 12)
+
 	frame.status = UI.NewText(frame, 12, c.muted)
 	frame.status:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", PAD, 14)
-	frame.status:SetPoint("RIGHT", frame, "RIGHT", -PAD, 0)
+	frame.status:SetPoint("RIGHT", frame.resultsButton, "LEFT", -10, 0)
 	frame.status:SetWordWrap(true) -- the longer messages take two lines
 	frame.status:SetJustifyV("BOTTOM")
 
@@ -325,6 +329,35 @@ local function markFor(item)
 	return nil
 end
 
+-- After the loot master's addon has rolled (Soft Reserve), what the player rolled and who leads, from the results every
+-- player gets. Returns the text and its colour, or nil when there is no result for the item.
+local VIA_TEXT = { SR = L["Soft reserve"], MS = L["Main spec"], OS = L["Off spec"] }
+local function myRoll(index)
+	if not (ALC.Results and ALC.Results.Get) then return nil end
+	local rows = ALC.Results:Get(index)
+	if not rows or #rows == 0 then return nil end
+	local me = ALC:PlayerName()
+	local mine, leader
+	for _, r in ipairs(rows) do
+		if me and ALC:SameName(r.name, me) then mine = r end
+		if not leader and r.outcome == "won" then leader = r end
+	end
+	local function shown(r)
+		if r.rerolls and #r.rerolls > 0 then return r.rerolls[#r.rerolls] end
+		return r.roll
+	end
+	if not mine then return L["You did not answer: no roll."], c.muted end
+	if mine.silent then return L["You reserved it but did not answer: no roll."], c.danger end
+	if mine.outcome == "passed" then return L["You passed."], c.muted end
+	if mine.outcome == "won" then
+		return string.format(L["You won! Your roll: %s (%s)"], tostring(shown(mine) or "-"), VIA_TEXT[mine.via] or L["Won"]), { 0.30, 0.75, 0.40 }
+	end
+	if mine.outcome == "tied" then return string.format(L["Your roll: %s. A tie: the loot master rerolls."], tostring(shown(mine) or "-")), c.gold end
+	local text = string.format(L["Your roll: %s."], tostring(shown(mine) or "-"))
+	if leader then text = text .. " " .. string.format(L["%s won with %s."], leader.name, tostring(shown(leader) or "-")) end
+	return text, c.muted
+end
+
 local function renderRow(row, index, item)
 	row.item = index
 	row.itemString = item.itemString
@@ -339,16 +372,24 @@ local function renderRow(row, index, item)
 
 	local mine = ALC.Responses:GetMyResponse(index)
 	local awarded = item.winner ~= nil
+	-- Rolled but not awarded yet: the answers are closed, so the buttons give way to what the player rolled
+	local rollText, rollColor
+	if not awarded then rollText, rollColor = myRoll(index) end
 	for i, button in ipairs(row.buttons) do
-		button:SetShown(not awarded and currentSet[i] ~= nil)
+		button:SetShown(not awarded and not rollText and currentSet[i] ~= nil)
 		button:SetSelected(button.responseId ~= nil and button.responseId == mine)
 	end
-	row.note:SetShown(not awarded)
+	row.note:SetShown(not awarded and not rollText)
 	if not row.note:HasFocus() then row.note:SetText(ALC.Responses:GetNote(index)) end -- not while it is being written
-	row.result:SetShown(awarded)
+	row.result:SetShown(awarded or rollText ~= nil)
 	if awarded then
+		row.result:SetTextColor(c.gold[1], c.gold[2], c.gold[3], 1)
 		row.result:SetText(string.format(L["Awarded to %s"], item.winner))
 		UI.SetTextureColor(row.bg, c.panel, 0.5)
+	elseif rollText then
+		row.result:SetTextColor(rollColor[1], rollColor[2], rollColor[3], 1)
+		row.result:SetText(rollText)
+		UI.SetTextureColor(row.bg, c.panel)
 	else
 		UI.SetTextureColor(row.bg, c.panel)
 	end
@@ -490,6 +531,7 @@ function ResponseWindow:Init()
 	register(self, "ALC_LOOT_CHANGED", refresh)
 	register(self, "ALC_SESSION_ITEM_AWARDED", refresh)
 	register(self, "ALC_SESSION_PAUSED", refresh)
+	register(self, "ALC_RESULTS_CHANGED", function() ResponseWindow:Refresh() end)
 	register(self, "ALC_SETTINGS_CHANGED", function(_, key)
 		if key == "compact" then ResponseWindow:Refresh() end
 	end)

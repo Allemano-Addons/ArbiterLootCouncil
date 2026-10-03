@@ -95,10 +95,94 @@ do
 	end
 end
 
+-- API 5: an addon can say what the "Results" button of the Loot Response window opens (Soft Reserve: its results of the
+-- last sessions). ALC.RegisterResultsViewer(function) and ALC.OpenResults(); without one the button opens ALC's own Result
+-- window, which shows the rolls of the session that is running.
+do
+	local resultsViewer
+	function ALC.RegisterResultsViewer(fn)
+		if type(fn) ~= "function" then return false end
+		resultsViewer = fn
+		return true
+	end
+	function ALC.UnregisterResultsViewer() resultsViewer = nil end
+	function ALC.OpenResults()
+		if resultsViewer and pcall(resultsViewer) then return true end
+		if ALC.Results and ALC.Results:HasAny() then
+			ALC.ResultWindow:Toggle()
+			return true
+		end
+		ALC:Print(ALC.L["There is no result to show."])
+		return false
+	end
+end
+
+-- API 5: an addon can add a section to the Settings window (Soft Reserve: the options of soft reserve sessions).
+-- ALC.RegisterSettingsSection({ id, name, color, rows }): the rows are drawn by ALC in its own style, under a heading in
+-- the addon's colour, at the end of the tab each row names. A row:
+--   { tab = "everyone" | "lm", type = "check",  label, tip, get = function() -> boolean, set = function(boolean) }
+--   { tab, type = "choice", label, options = { { label, value }, ... }, get = function() -> value, set = function(value) }
+--   { tab, type = "action", label, confirm = "text for a second click" (optional), onClick = function() }
+-- Register before the Settings window is first opened (at login); the window builds its rows once.
+do
+	local settingsSections = {} -- in the order they were added
+	local ROW_TYPES = { check = true, choice = true, action = true }
+
+	local function checkRow(row)
+		if type(row) ~= "table" or (row.tab ~= "everyone" and row.tab ~= "lm") then return false, "A row needs a tab (everyone or lm)." end
+		if not ROW_TYPES[row.type] then return false, "A row is a check, a choice or an action." end
+		if type(row.label) ~= "string" or row.label == "" then return false, "A row needs a label." end
+		if row.type == "check" and (type(row.get) ~= "function" or type(row.set) ~= "function") then return false, "A check needs get and set." end
+		if row.type == "action" and type(row.onClick) ~= "function" then return false, "An action needs onClick." end
+		if row.type == "choice" then
+			if type(row.get) ~= "function" or type(row.set) ~= "function" then return false, "A choice needs get and set." end
+			if type(row.options) ~= "table" or #row.options < 2 or #row.options > 6 then return false, "A choice needs 2 to 6 options." end
+			for _, option in ipairs(row.options) do
+				if type(option) ~= "table" or type(option.label) ~= "string" or option.value == nil then return false, "An option needs a label and a value." end
+			end
+		end
+		return true
+	end
+
+	-- Returns true, or false and why not. Registering the same id again replaces the section.
+	function ALC.RegisterSettingsSection(def)
+		if type(def) ~= "table" or type(def.id) ~= "string" or def.id == "" then return false, "The section needs an id." end
+		if type(def.name) ~= "string" or def.name == "" then return false, "The section needs a name." end
+		if type(def.rows) ~= "table" or #def.rows == 0 then return false, "The section needs rows." end
+		for _, row in ipairs(def.rows) do
+			local ok, why = checkRow(row)
+			if not ok then return false, why end
+		end
+		local section = { id = def.id, name = def.name, color = type(def.color) == "string" and def.color or nil, rows = def.rows }
+		for i, existing in ipairs(settingsSections) do
+			if existing.id == def.id then
+				settingsSections[i] = section
+				return true
+			end
+		end
+		settingsSections[#settingsSections + 1] = section
+		return true
+	end
+
+	function ALC.UnregisterSettingsSection(id)
+		for i, existing in ipairs(settingsSections) do
+			if existing.id == id then table.remove(settingsSections, i) return end
+		end
+	end
+
+	function ALC.GetSettingsSections()
+		local list = {}
+		for i, section in ipairs(settingsSections) do list[i] = section end
+		return list
+	end
+end
+
 -- API 5: an addon can add a way to start a session (Soft Reserve: "Start SR") next to the normal "Start" of the
 -- Loot window. ALC.RegisterStartMode({ id, label, name, color, start }):
 --   id     a short key ("SR")                           label  the word on the buttons ("SR": "Start SR")
 --   name   the longer name ("Soft Reserve")             color  6 hex digits, the colour of its mark and accent
+--   info   (optional) function(itemID) -> a short text or nil: what the addon knows about the item ("SR x3"). The Loot
+--          window shows it on the item's line, in the mode's colour, and gives that mode's button an amber frame.
 --   start  function(itemStrings) -> true, or false and a message; it starts the session itself
 --          (Sessions:StartItems with the same mode, modeName and modeColor)
 do
@@ -111,7 +195,7 @@ do
 		if type(def.start) ~= "function" then return false, "The start mode needs a start function." end
 		startModes[def.id] = {
 			id = def.id, label = def.label, name = type(def.name) == "string" and def.name or def.label,
-			color = type(def.color) == "string" and def.color or nil, start = def.start,
+			color = type(def.color) == "string" and def.color or nil, start = def.start, info = type(def.info) == "function" and def.info or nil,
 		}
 		ALC.Events:Fire("ALC_START_MODES_CHANGED")
 		return true

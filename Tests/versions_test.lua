@@ -130,6 +130,67 @@ return function(check, H)
 	Win:Hide()
 	check("the window closes", not Win:IsShown())
 
+	-- A session starts: who did not reply?
+	H.inGroup = true
+	Comm.GetGroupNames = function()
+		local names = {}
+		for _, unit in ipairs(ALC:GroupUnits()) do
+			local name = ALC:UnitFullName(unit)
+			if name then names[#names + 1] = name end
+		end
+		return names
+	end
+	Comm:InvalidateRoster()
+	local known = Comm:GetVersions()
+	known["veyra moo"], known["kaelis moo"] = nil, nil
+	H.runTimers() -- what is held back from before (a lost timer would leave the message queue stuck)
+	H.deferTimers = true
+	H.timers = {}
+	H.sent = {}
+	local said = #H.chat
+	check("the check asks the group", Comm:CheckAddonCoverage() == true and #H.sent >= 1)
+	Comm:Process(env("VERSION", nil, nil, { addon = "0.2.0-alpha2", proto = 2 }), "WHISPER", "Veyra Moo")
+	H.clock = H.clock + 10
+	H.runTimers()
+	check("and tells who did not reply", #H.chat > said and H.chat[#H.chat]:find("Kaelis Moo", 1, true) ~= nil and H.chat[#H.chat]:find("Veyra", 1, true) == nil)
+	Comm:Process(env("VERSION", nil, nil, { addon = "0.2.0-alpha2", proto = 2 }), "WHISPER", "Kaelis Moo")
+	said = #H.chat
+	Comm:CheckAddonCoverage()
+	H.clock = H.clock + 10
+	H.runTimers()
+	check("when everybody replied nothing is said", #H.chat == said)
+	-- starting a session does it
+	known["kaelis moo"] = nil
+	H.sent = {}
+	said = #H.chat
+	ALC.Sessions:StartItems({ 200 })
+	H.clock = H.clock + 10
+	H.runTimers() -- the session starts when its own message comes back
+	H.clock = H.clock + 10
+	H.runTimers() -- and the version check it asks for runs out
+	local warned = false
+	for i = said + 1, #H.chat do if H.chat[i]:find("did not reply", 1, true) and H.chat[i]:find("Kaelis Moo", 1, true) then warned = true end end
+	check("a session the loot master starts asks and warns", warned)
+	ALC.Sessions:Cancel("test")
+	H.runTimers()
+	ALC.Settings:SetWarnMissing(false)
+	known["kaelis moo"] = nil
+	H.sent = {}
+	said = #H.chat
+	ALC.Sessions:StartItems({ 200 })
+	H.clock = H.clock + 10
+	H.runTimers()
+	local asked = false
+	for _, sent in ipairs(H.sent) do if sent.text and sent.text:find("VERSION_REQUEST", 1, true) then asked = true end end
+	local warnedOff = false
+	for i = said + 1, #H.chat do if H.chat[i]:find("did not reply", 1, true) then warnedOff = true end end
+	check("with the warning turned off nothing is asked or said", not warnedOff and not asked)
+	ALC.Sessions:Cancel("test")
+	H.runTimers()
+	ALC.Settings:SetWarnMissing(true)
+	check("the setting is on by default and remembered", ALC.Settings:GetWarnMissing() == true)
+	H.deferTimers = false
+
 	-- Out of a group
 	H.inGroup = false
 	Comm.GetGroupNames = function() return {} end
