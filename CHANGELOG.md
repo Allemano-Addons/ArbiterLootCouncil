@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.4.3-beta
+- When every item of a session has been awarded the Loot window says "All awarded. The session closes by itself." instead of "In session": the session stays open for 90 seconds so that an award can be undone, which made it look as if it was still running.
+
 ## 0.4.2-beta
 - **An item a winner gives back can go in the list again.** When a player you awarded an item to trades it back to you (you are the loot master), the Loot window shows a bar: "<name> gave back <item>" with **Add** (puts it in the list as a new waiting item) and **x** (leave it). It only reacts to an item that player was awarded in the last week, once per award, and the chat tells you too. No command needed.
 - Windows are more compact: the title row of every window is lower (40 px, the voting window 46 px), the voting window's title is one line, the Settings window is shorter (the council list shows three names and scrolls) and the winner's name in the Loot window has its class colour.

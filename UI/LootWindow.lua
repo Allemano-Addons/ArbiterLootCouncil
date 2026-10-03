@@ -541,7 +541,7 @@ function LootWindow:Refresh()
 	end
 
 	frame.empty:SetShown(count == 0)
-	frame.hint:SetText(sessionActive and L["In session"] or "")
+	frame.hint:SetText(sessionActive and (session.finishing and L["All awarded. The session closes by itself."] or L["In session"]) or "")
 	local finished = 0
 	for _, entry in ipairs(items) do
 		if entry.status == LootDetection.STATUS.AWARDED then finished = finished + 1 end
