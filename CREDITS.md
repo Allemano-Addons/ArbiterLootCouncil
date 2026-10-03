@@ -1,6 +1,6 @@
 # Credits
 
-**Arbiter Loot Council (ALC)** is part of Allemano Addons (https://allemano-site.pages.dev).
+**Arbiter Loot Council (ALC)** is part of Allemano Addons (https://allemano.org).
 
 ## How it is made
 

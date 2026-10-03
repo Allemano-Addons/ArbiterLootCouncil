@@ -4,7 +4,7 @@
 # DISCORD_RELEASES_WEBHOOK; without it nothing is posted. DRY_RUN=1 prints the message instead of sending it.
 set -euo pipefail
 
-SITE_URL="https://allemano-site.pages.dev"   # change here when the site gets its own domain
+SITE_URL="https://allemano.org"   # change here when the site gets its own domain
 MAX_CHARS=3400                               # Discord allows 4096 in an embed description
 
 if [ -z "${DISCORD_WEBHOOK:-}" ] && [ -z "${DRY_RUN:-}" ]; then
