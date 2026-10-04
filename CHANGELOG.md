@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.5.2-beta
+- Fix: "Trade complete." could cause a Lua error ("attempt to compare ... a secret string value") when the game hid the message as a secret text, and the trade was then not marked as delivered in the Trade Queue. The message is now only compared when it is readable.
+
 ## 0.5.1-beta
 - Tells Allemano Hub what the session is doing (when the Hub is installed): a session started or ended, an award given or taken back, a pause, the answer timer running out, items added. The lines show up under "Recent activity" in the Hub's problem report, so a bug report says what happened before. Nothing changes when the Hub is not installed.
 

@@ -362,6 +362,14 @@ function Trades:OnTradeClosed()
 	end)
 end
 
+-- Whether a system message says the trade went through. A message can be a "secret" string on WoW Forever
+-- (while the player is in a fight or an instance): it cannot be compared, so it is read as "not this message".
+local function isTradeComplete(message)
+	if type(message) ~= "string" then return false end
+	if issecretvalue and issecretvalue(message) then return false end
+	return message == (ERR_TRADE_COMPLETE or "Trade complete.")
+end
+
 function Trades:Init()
 	self:RegisterEvent("TRADE_ACCEPT_UPDATE", function(_, player, target) Trades:OnTradeAcceptUpdate(player, target) end)
 	self:RegisterEvent("TRADE_SHOW", function()
@@ -370,9 +378,9 @@ function Trades:Init()
 	end)
 	self:RegisterEvent("TRADE_CLOSED", function() Trades:OnTradeClosed() end)
 	self:RegisterEvent("UI_INFO_MESSAGE", function(_, _, message)
-		if message == (ERR_TRADE_COMPLETE or "Trade complete.") then Trades:OnTradeComplete() end
+		if isTradeComplete(message) then Trades:OnTradeComplete() end
 	end)
 	self:RegisterEvent("CHAT_MSG_SYSTEM", function(_, message)
-		if message == (ERR_TRADE_COMPLETE or "Trade complete.") then Trades:OnTradeComplete() end
+		if isTradeComplete(message) then Trades:OnTradeComplete() end
 	end)
 end
