@@ -2,7 +2,7 @@
 
 **Run a loot council in WoW Forever without the spreadsheet.** ALC takes an item from the boss's corpse to the raider who deserves it: the loot master starts a session, every raider answers in a small window, the council votes, one click awards the item and the trade is queued and logged.
 
-> **Beta (0.4.5-beta).** ALC is new and being tested in real raids. **Everybody in the raid who should answer or vote needs the same version**, and this version cannot talk to 0.1.x. If someone has another version the addon says so in chat.
+> **Beta (0.5.0-beta).** ALC is new and being tested in real raids. **Everybody in the raid who should answer or vote needs the same version**, and this version cannot talk to 0.1.x. If someone has another version the addon says so in chat.
 
 ## How a loot decision works in ALC
 
@@ -20,13 +20,14 @@
 - **Multi-item sessions:** an item strip (item icons) to the left of the council window; click an icon to see that item's candidates, votes and award. Each item is awarded on its own.
 - **Loot master aware:** the loot master is the master looter if master loot is on, otherwise the raid leader. If the loot master reloads the UI during a session, ALC recovers the session.
 - **Council setup:** add council members by name once (`/alc council add <First Last>`) and they stay in your settings. Candidates' answers and votes are sent to the council only.
+- **Arbiter Context and Compare:** click a candidate and a box shows everything about them in one place: the full note, what they wear in that slot and the item level difference, whether they have already won loot in the same slot (or this very item), and their loot history with TONIGHT / this week tags. Ctrl-click a second candidate and the box becomes **Arbiter Compare**: two columns side by side, the better roll, votes and upgrade in green.
 - **Right-click menu** on a candidate: vote, award, change response, remove (counts as pass). **Show passed** brings the passes back into the list.
 - **Stop or cancel a session** safely (Stop session asks for a second click).
 - **Version check:** `/alc debug versions` shows who has the addon and which version, so you find the raider who forgot to update before the boss, not after.
 - **Try it alone:** `/alc test` runs a session with test items (`/alc test 5` uses the five best items in your bags), so you can practice the flow before raid night.
 
 ## Settings
-`/alc settings` (or the square button by the minimap, or the launcher): who is on the council, loot quality threshold, custom answer buttons, font and more. The settings are split into four tabs: Everyone, Council, Loot master and Buttons.
+`/alc settings` (or the square button by the minimap, or the launcher): who is on the council, loot quality threshold, custom answer buttons, font and more. The settings are split into five tabs: Everyone, Council, Loot (council list, loot threshold, disenchanter), Session (rolls, answer timer, award log) and Buttons.
 
 ## Commands
 - `/alc` lists all commands, `/alc menu` opens the window menu

@@ -57,6 +57,8 @@ local historyDates, historySearch, dateOffset = {}, "", 0 -- History: the dates 
 local activeTab = "council"     -- "council", "history" or "trades"
 local layoutCompact             -- how the candidate rows are laid out now
 local focus = 1                -- the item of the session the Council tab shows
+local selectedCandidate         -- the candidate whose Arbiter Context is open (a click on the row), or nil
+local compareCandidate          -- a second candidate (Ctrl-click): Arbiter Context turns into a side-by-side comparison
 local stopArmed = false         -- "Stop session" was clicked once and waits for a second click
 local disarmStop                -- resets the Stop session button (defined below)
 local councilStatic, historyStatic, tradeStatic, queueStatic = {}, {}, {}, {} -- widgets of one tab only
@@ -261,19 +263,26 @@ local function newRow(index)
 
 	row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
 	row:SetScript("OnClick", function(self, button)
-		if button == "RightButton" and self.candidate then CouncilWindow:OpenRowMenu(self.candidate) end
+		if not self.candidate then return end
+		if button == "RightButton" then
+			CouncilWindow:OpenRowMenu(self.candidate)
+		else
+			CouncilWindow:SelectCandidate(self.candidate, IsControlKeyDown and IsControlKeyDown()) -- Arbiter Context opens beside the window; Ctrl adds a second one to compare
+		end
 	end)
-	-- Hover lights the row; leaving returns it to its resting colour (gold for the winner).
+	-- Hover lights the row; leaving returns it to its resting colour (gold for the winner, a stronger grey for the picked one).
 	row:SetScript("OnEnter", function(self)
 		if self.isWinnerRow then
 			UI.SetTextureColor(self.bg, c.gold, 0.22)
 		else
-			UI.SetTextureColor(self.bg, c.panelHover, 0.5)
+			UI.SetTextureColor(self.bg, c.panelHover, 0.7)
 		end
 	end)
 	row:SetScript("OnLeave", function(self)
 		if self.isWinnerRow then
 			UI.SetTextureColor(self.bg, c.gold, 0.14)
+		elseif self.isPicked then
+			UI.SetTextureColor(self.bg, c.panelHover, 0.55)
 		else
 			UI.SetTextureColor(self.bg, c.bg, 0)
 		end
@@ -708,9 +717,9 @@ local function build()
 	title:SetText(strupper(L["Arbiter Loot Council"]))
 
 	local close = CreateFrame("Button", nil, header)
-	close:SetSize(24, 24)
+	close:SetSize(30, 30)
 	close:SetPoint("RIGHT", header, "RIGHT", -14, 0)
-	close.text = UI.NewText(close, 22, c.muted, "CENTER")
+	close.text = UI.NewText(close, 30, c.muted, "CENTER")
 	close.text:SetPoint("CENTER", 0, 0)
 	close.text:SetText("\195\151")
 	close:SetScript("OnEnter", function(self) self.text:SetTextColor(c.text[1], c.text[2], c.text[3], 1) end)
@@ -799,9 +808,9 @@ local function build()
 	-- The compact toggle: fewer pixels per candidate when there are many.
 	frame.compact = UI.NewCheckbox(frame, L["Compact rows"], function(checked)
 		ALC.Settings:SetCompact(checked) -- refreshes this window through the settings event
-	end)
-	frame.compact:SetSize(150, 24)
-	frame.compact:SetPoint("BOTTOM", frame, "BOTTOM", 60, 16)
+	end, nil, true)
+	frame.compact:SetSize(132, 22)
+	frame.compact:SetPoint("BOTTOM", frame, "BOTTOM", 76, 18)
 
 	-- Players who passed are hidden unless asked for: nothing to vote on, but they can be
 	-- taken back by the loot master (right-click).
@@ -809,9 +818,9 @@ local function build()
 		ALC.Settings:SetWindowOption("council", "showPassed", checked)
 		offset = 0
 		CouncilWindow:Refresh()
-	end)
-	frame.showPassed:SetSize(130, 24)
-	frame.showPassed:SetPoint("RIGHT", frame.compact, "LEFT", -6, 0)
+	end, nil, true)
+	frame.showPassed:SetSize(124, 22)
+	frame.showPassed:SetPoint("RIGHT", frame.compact, "LEFT", -28, 0)
 
 	-- Sorting: one button that steps through the orders.
 	frame.sort = UI.NewButton(frame, 150, 24, "", function() CouncilWindow:CycleSortMode() end)
@@ -1213,7 +1222,15 @@ local function renderRow(row, entry, myVote, topVotes, isLM, compact, open, isWi
 	row.candidate = entry.name
 	-- The player who got the item stays in the list, marked.
 	row.isWinnerRow = isWinner == true
-	UI.SetTextureColor(row.bg, isWinner and c.gold or c.bg, isWinner and 0.14 or 0)
+	row.isPicked = (selectedCandidate ~= nil and ALC:SameName(entry.name, selectedCandidate))
+		or (compareCandidate ~= nil and ALC:SameName(entry.name, compareCandidate))
+	if isWinner then
+		UI.SetTextureColor(row.bg, c.gold, 0.14)
+	elseif row.isPicked then
+		UI.SetTextureColor(row.bg, c.panelHover, 0.55)
+	else
+		UI.SetTextureColor(row.bg, c.bg, 0)
+	end
 	row.tag:SetShown(isWinner == true)
 	local classColor = UI.ClassColor(entry.class)
 	row.name:SetTextColor(classColor[1], classColor[2], classColor[3], 1)
@@ -1702,7 +1719,10 @@ local function updateTabs(self)
 end
 
 function CouncilWindow:Refresh()
-	if not frame or not frame:IsShown() then return end
+	if not frame or not frame:IsShown() then
+		if ALC.ContextWindow then ALC.ContextWindow:Sync() end -- the window closed: so does Arbiter Context
+		return
+	end
 	updateTabs(self)
 
 	if activeTab == "history" then
@@ -1713,8 +1733,9 @@ function CouncilWindow:Refresh()
 		hideHistory(self)
 		hideTrades(self)
 		local session = ALC.Sessions:GetSession()
-		if session then renderCouncil(self, session) else renderIdle(self) end
+		if session then renderCouncil(self, session) else selectedCandidate, compareCandidate = nil, nil renderIdle(self) end
 	end
+	if ALC.ContextWindow then ALC.ContextWindow:Sync() end
 end
 
 --------------------------------------------------------------------------------
@@ -1879,6 +1900,49 @@ function CouncilWindow:GetFocus()
 	return focus
 end
 
+-- The candidate whose Arbiter Context is open: a click on a row picks it, a click on the same row again lets go.
+-- With `add` (Ctrl held) a second candidate joins the first for a comparison; a Ctrl-click on one of the two lets it go.
+function CouncilWindow:SelectCandidate(name, add)
+	if not name then return end
+	if add and selectedCandidate and not ALC:SameName(selectedCandidate, name) then
+		if compareCandidate and ALC:SameName(compareCandidate, name) then
+			compareCandidate = nil
+		else
+			compareCandidate = name
+		end
+	elseif add and selectedCandidate then
+		selectedCandidate, compareCandidate = compareCandidate, nil -- the first one let go: the second becomes the only one
+	elseif selectedCandidate and ALC:SameName(selectedCandidate, name) then
+		selectedCandidate, compareCandidate = nil, nil
+	else
+		selectedCandidate, compareCandidate = name, nil
+	end
+	self:Refresh()
+end
+
+function CouncilWindow:ClearSelected()
+	selectedCandidate, compareCandidate = nil, nil
+	self:Refresh()
+end
+
+-- Back from the comparison to the single candidate.
+function CouncilWindow:ClearCompare()
+	compareCandidate = nil
+	self:Refresh()
+end
+
+function CouncilWindow:GetCompare()
+	return compareCandidate
+end
+
+function CouncilWindow:GetSelected()
+	return selectedCandidate
+end
+
+function CouncilWindow:GetFrame()
+	return frame
+end
+
 function CouncilWindow:SetFocus(item)
 	local count = ALC.Sessions:GetItemCount()
 	if count == 0 or not item or item < 1 or item > count then return false end
@@ -1932,6 +1996,7 @@ function CouncilWindow:ShowTrades() open(self, "trades") end
 function CouncilWindow:Hide()
 	if frame then frame:Hide() end
 	ALC.Settings:SetWindowShown("council", false)
+	if ALC.ContextWindow then ALC.ContextWindow:Sync() end
 end
 
 function CouncilWindow:IsShown()

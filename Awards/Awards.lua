@@ -207,6 +207,7 @@ function Awards:Award(name, item, disenchant)
 
 	-- Log first: the announcement refreshes windows that read the log (the history).
 	logAward(session, target, entry, votes, item)
+	Awards:CheckLogLimit()
 	announce(target, entry)
 	Debug:Log("Awards", "%s -> %s (%s, %d votes, %s)", target.itemString, entry.name, entry.response, votes,
 		slot and "given" or "awaiting trade")
@@ -395,6 +396,40 @@ function Awards:ClearLog(dates)
 	return #cleared
 end
 
+-- Keeps the newest `keep` awards and moves the older ones to the backup (a clear that can be taken back, see RestoreLog).
+-- Returns how many were moved.
+function Awards:TrimLog(keep)
+	keep = tonumber(keep)
+	if not keep or keep < 0 then return 0 end
+	local log = ALC.Settings:GetAwardLog()
+	local extra = #log - math.floor(keep)
+	if extra <= 0 then return 0 end
+	local backup = ALC.Settings:GetAwardBackup()
+	local entries = backup and backup.entries or {}
+	for i = 1, extra do entries[#entries + 1] = log[i] end
+	ALC.Settings:SetAwardBackup({ time = time(), entries = entries })
+	local kept = {}
+	for i = extra + 1, #log do kept[#kept + 1] = log[i] end
+	for i = #log, 1, -1 do log[i] = nil end
+	for i, r in ipairs(kept) do log[i] = r end
+	Debug:Log("Awards", "history trimmed: %d old awards moved to the backup, %d kept", extra, #kept)
+	ALC.Events:Fire("ALC_AWARDS_CLEARED", extra)
+	return extra
+end
+
+-- When the log has grown to the limit the loot master chose (Settings), says so once per session, so it can be exported
+-- and trimmed before it gets long. Returns true when the reminder was shown.
+local reminded = false
+function Awards:CheckLogLimit()
+	local limit = ALC.Settings:GetLogReminder()
+	local count = #ALC.Settings:GetAwardLog()
+	if limit == 0 or count < limit or reminded then return false end
+	reminded = true
+	ALC:Print(L["The award log has %d awards (you asked to be reminded at %d). Export it from Award history, then trim it: /alc log trim <how many to keep>. The older awards go to a backup that can be restored."], count, limit)
+	return true
+end
+function Awards:ResetLogReminder() reminded = false end
+
 -- The backup of cleared awards: how many and when the last clear was, or nil.
 function Awards:GetBackupInfo()
 	local backup = ALC.Settings:GetAwardBackup()
@@ -549,6 +584,20 @@ local function onAwardRevokeReceived(_, item, winner)
 end
 
 function Awards:Init()
+	-- Settings (Loot master): when to be reminded to export the log, and a way to trim it
+	ALC.RegisterSettingsSection({
+		id = "ALC-award-log", name = L["Award log"],
+		rows = {
+			{ tab = "lm", type = "choice", label = L["Remind me to export the award log at"],
+				options = { { label = L["Never"], value = 0 }, { label = "500", value = 500 }, { label = "1000", value = 1000 }, { label = "2000", value = 2000 } },
+				get = function() return ALC.Settings:GetLogReminder() end,
+				set = function(value) ALC.Settings:SetLogReminder(value) Awards:ResetLogReminder() end },
+			{ tab = "lm", type = "action", label = L["Keep the newest 500 awards"], confirm = L["Click again: older awards go to the backup"],
+				onClick = function()
+					ALC:Print(L["%d older awards moved to the backup (Award history can restore them)."], Awards:TrimLog(500))
+				end },
+		},
+	})
 	ALC.Events.Register(self, "ALC_SESSION_ITEM_AWARDED", onAwardReceived)
 	ALC.Events.Register(self, "ALC_SESSION_ITEM_REVOKED", onAwardRevokeReceived)
 	self:RegisterEvent("LOOT_OPENED", function() lootOpen = true end)
@@ -558,6 +607,21 @@ end
 
 -- Test hooks: the loot window state normally comes from the game's events.
 function Awards:SetLootOpen(open) lootOpen = open and true or false end
+
+ALC.Commands:Register("log", function(arg)
+	-- /alc log           how many awards the log holds
+	-- /alc log trim [n]  keep the newest n (500 when not said), the rest goes to the backup
+	local sub, rest = string.match(arg or "", "^(%S*)%s*(.-)$")
+	sub = string.lower(sub)
+	local count = #ALC.Settings:GetAwardLog()
+	if sub == "trim" then
+		local keep = tonumber(rest) or 500
+		ALC:Print(L["%d older awards moved to the backup (Award history can restore them)."], Awards:TrimLog(keep))
+	else
+		local limit = ALC.Settings:GetLogReminder()
+		ALC:Print(L["The award log holds %d awards. Reminder at: %s. /alc log trim <how many to keep> moves the older ones to a backup."], count, limit == 0 and L["never"] or tostring(limit))
+	end
+end, L["the award log (trim: keep the newest awards)"])
 
 ALC.Commands:Register("award", function(arg)
 	-- /alc award <name> [item number]

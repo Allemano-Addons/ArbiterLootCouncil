@@ -377,6 +377,22 @@ function Settings:SetRecentDays(value)
 	return true
 end
 
+-- The award log: after how many awards the loot master is reminded to export it (0 = never) -----
+local LOG_REMINDER = { [0] = true, [500] = true, [1000] = true, [2000] = true }
+
+function Settings:GetLogReminder()
+	local value = db.profile.logReminder
+	if value == nil then return 1000 end
+	return LOG_REMINDER[value] and value or 1000
+end
+
+function Settings:SetLogReminder(value)
+	if not LOG_REMINDER[value] then return false end
+	db.profile.logReminder = value
+	changed("logReminder")
+	return true
+end
+
 -- Loot quality threshold ------------------------------------------------------
 function Settings:GetQualityThreshold()
 	local quality = db.profile.qualityThreshold

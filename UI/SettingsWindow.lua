@@ -44,7 +44,8 @@ local c = UI.color
 SettingsWindow.TABS = {
 	{ key = "everyone", label = L["Everyone"], note = L["How the addon looks on your own screen. Nobody else is affected."] },
 	{ key = "council", label = L["Council"], note = L["For council members: how the voting window behaves for you."] },
-	{ key = "lm", label = L["Loot master"], note = L["Only used when you are the loot master. The raid follows your council list and loot threshold."] },
+	{ key = "lm", label = L["Loot"], note = L["Only used when you are the loot master: the council list, what happens to the loot, the disenchanter."] },
+	{ key = "session", label = L["Session"], note = L["Only used when you are the loot master: how a session runs. A session that is running keeps its settings."] },
 	{ key = "responses", label = L["Buttons"], note = L["Only used when you are the loot master: the answer buttons every player gets. A session that is running keeps the ones it started with."] },
 }
 
@@ -179,9 +180,9 @@ local function build()
 	title:SetText(strupper(L["Settings"]))
 
 	local close = CreateFrame("Button", nil, header)
-	close:SetSize(24, 24)
+	close:SetSize(30, 30)
 	close:SetPoint("RIGHT", header, "RIGHT", -12, 0)
-	close.text = UI.NewText(close, 22, c.muted, "CENTER")
+	close.text = UI.NewText(close, 30, c.muted, "CENTER")
 	close.text:SetPoint("CENTER", 0, 0)
 	close.text:SetText("\195\151")
 	close:SetScript("OnEnter", function(self) self.text:SetTextColor(c.text[1], c.text[2], c.text[3], 1) end)
@@ -190,7 +191,7 @@ local function build()
 
 	-- Every setting belongs to one of three tabs, by who it matters for: everybody in the raid,
 	-- the council members, or the loot master. `into` puts a widget in its tab's group.
-	local groups = { everyone = {}, council = {}, lm = {}, responses = {} }
+	local groups = { everyone = {}, council = {}, lm = {}, session = {}, responses = {} }
 	SettingsWindow.groups = groups
 	local function into(key, widget)
 		local group = groups[key]
@@ -251,11 +252,12 @@ local function build()
 	-- this tab, drawn in the window's own style. Returns the y below them.
 	local extRefresh = {}
 	SettingsWindow.extRefresh = extRefresh
-	local function extensionRows(key, at)
+	local function extensionRows(tabKey, at, groupKey)
+		local key = groupKey or tabKey
 		for _, section in ipairs(ALC.GetSettingsSections()) do
 			local rows = {}
 			for _, row in ipairs(section.rows) do
-				if row.tab == key then rows[#rows + 1] = row end
+				if row.tab == tabKey then rows[#rows + 1] = row end
 			end
 			if #rows > 0 then
 				local heading = into(key, UI.NewText(frame, 11, UI.HexColor(section.color) or c.muted))
@@ -422,21 +424,7 @@ local function build()
 		ALC.Settings:SetAutoTrade(checked)
 	end, L["When you award an item, the trade window opens with the winner and the item is put in it. A winner who is far away is asked by whisper to come."]))
 	frame.autoTrade:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
-	y = y + 29
-
-	-- A random roll per candidate and item, for the council to choose by when it cannot decide.
-	frame.rolls = into("lm", UI.NewCheckbox(frame, L["Random rolls for the council"], function(checked)
-		ALC.Settings:SetRollsEnabled(checked)
-	end))
-	frame.rolls:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
 	y = y + 38
-
-	-- A warning when a session starts about players who did not reply to the version check (no addon)
-	frame.warnMissing = into("lm", UI.NewCheckbox(frame, L["Warn about players without the addon"], function(checked)
-		ALC.Settings:SetWarnMissing(checked)
-	end, L["When a session starts, the chat says which players did not reply to the version check: they probably have no Arbiter Loot Council and cannot answer."]))
-	frame.warnMissing:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
-	y = y + 29
 
 	-- The disenchanter: gets the items nobody wants (the Disenchant button of the voting window).
 	local deLabel = into("lm", UI.NewText(frame, 12, c.text))
@@ -456,15 +444,35 @@ local function build()
 	frame.deCurrent:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
 	y = y + 28
 
+	heights.lm = y + 40
+
+	-- Session: how a session runs -------------------------------------------------
+	y = contentY
+	section("session", y, L["Session"])
+	y = y + 24
+	-- A random roll per candidate and item, for the council to choose by when it cannot decide.
+	frame.rolls = into("session", UI.NewCheckbox(frame, L["Random rolls for the council"], function(checked)
+		ALC.Settings:SetRollsEnabled(checked)
+	end))
+	frame.rolls:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
+	y = y + 34
+
+	-- A warning when a session starts about players who did not reply to the version check (no addon)
+	frame.warnMissing = into("session", UI.NewCheckbox(frame, L["Warn about players without the addon"], function(checked)
+		ALC.Settings:SetWarnMissing(checked)
+	end, L["When a session starts, the chat says which players did not reply to the version check: they probably have no Arbiter Loot Council and cannot answer."]))
+	frame.warnMissing:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
+	y = y + 29
+
 	-- How far back the council sees what a player was awarded (the Recent column).
-	local recentLabel = into("lm", UI.NewText(frame, 12, c.text))
+	local recentLabel = into("session", UI.NewText(frame, 12, c.text))
 	recentLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
 	recentLabel:SetText(L["Recent awards: the council sees the last"])
 	y = y + 22
 	SettingsWindow.recentButtons = {}
 	local recentWidth = math.floor((WIDTH - 2 * PAD - 3 * 6) / 4)
 	for i, recentDays in ipairs({ 7, 14, 30, 90 }) do
-		local button = into("lm", UI.NewButton(frame, recentWidth, 30, string.format(L["%d days"], recentDays), function()
+		local button = into("session", UI.NewButton(frame, recentWidth, 30, string.format(L["%d days"], recentDays), function()
 			ALC.Settings:SetRecentDays(recentDays)
 		end))
 		button:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD + (i - 1) * (recentWidth + 6), -y)
@@ -474,7 +482,7 @@ local function build()
 	y = y + 42
 
 	-- The answer timer: when it runs out the response window closes for the players.
-	frame.timerCheck = into("lm", UI.NewCheckbox(frame, "", function(checked)
+	frame.timerCheck = into("session", UI.NewCheckbox(frame, "", function(checked)
 		ALC.Settings:SetTimerEnabled(checked)
 	end))
 	frame.timerCheck:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
@@ -483,7 +491,7 @@ local function build()
 	local presets = ALC.Settings.TIMER_PRESETS
 	local timerWidth = math.floor((WIDTH - 2 * PAD - (#presets - 1) * 6) / #presets)
 	for i, seconds in ipairs(presets) do
-		local button = into("lm", UI.NewButton(frame, timerWidth, 30, string.format(L["%d sec"], seconds), function()
+		local button = into("session", UI.NewButton(frame, timerWidth, 30, string.format(L["%d sec"], seconds), function()
 			ALC.Settings:SetTimerSeconds(seconds)
 		end))
 		button:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD + (i - 1) * (timerWidth + 6), -y)
@@ -491,10 +499,10 @@ local function build()
 		SettingsWindow.timerButtons[i] = button
 	end
 	y = y + 38
-	paragraph("lm", y, L["When the time is up the response window closes for everybody. The council can still vote and award."])
+	paragraph("session", y, L["When the time is up the response window closes for everybody. The council can still vote and award."])
 	y = y + 40
-	y = extensionRows("lm", y)
-	heights.lm = y + 40
+	y = extensionRows("lm", y, "session")
+	heights.session = y + 40
 
 	-- Council ---------------------------------------------------------------------
 	y = contentY

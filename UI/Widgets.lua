@@ -397,26 +397,27 @@ function UI.ApplyScales()
 end
 
 -- `tooltip` (optional) is a longer explanation shown when the pointer is over the switch.
-function UI.NewCheckbox(parent, label, onToggle, tooltip)
+-- `small` (optional) makes a slimmer switch with smaller text, for toolbars.
+function UI.NewCheckbox(parent, label, onToggle, tooltip, small)
 	local box = CreateFrame("Button", nil, parent)
 	box:SetSize(320, 26)
 	box:RegisterForClicks("LeftButtonUp")
 
 	-- A switch: a pill that is amber when on, with a round knob that slides to the right.
 	box.square = CreateFrame("Frame", nil, box)
-	box.square:SetSize(44, 24)
+	box.square:SetSize(small and 40 or 44, small and 22 or 24)
 	box.square:SetPoint("LEFT", box, "LEFT", 0, 0)
-	box.square.bg = UI.NewFill(box.square, 10)
+	box.square.bg = UI.NewFill(box.square, small and 8 or 10)
 	UI.SetTextureColor(box.square.bg, UI.color.border)
-	box.square.border = UI.AddBorder(box.square, UI.color.border, 1, 10)
+	box.square.border = UI.AddBorder(box.square, UI.color.border, 1, small and 8 or 10)
 	box.knob = CreateFrame("Frame", nil, box.square)
-	box.knob:SetSize(18, 18)
+	box.knob:SetSize(small and 16 or 18, small and 16 or 18)
 	box.knob:SetFrameLevel(box.square:GetFrameLevel() + 2)
-	box.knob.bg = UI.NewFill(box.knob, 8)
+	box.knob.bg = UI.NewFill(box.knob, small and 6 or 8)
 	UI.SetTextureColor(box.knob.bg, UI.color.muted)
 
-	box.label = UI.NewText(box, 13, UI.color.text)
-	box.label:SetPoint("LEFT", box.square, "RIGHT", 12, 0)
+	box.label = UI.NewText(box, small and 12 or 13, UI.color.text)
+	box.label:SetPoint("LEFT", box.square, "RIGHT", small and 8 or 12, 0)
 	box.label:SetText(label)
 
 	box.checked = false

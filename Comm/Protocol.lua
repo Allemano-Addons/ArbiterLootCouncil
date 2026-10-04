@@ -384,6 +384,33 @@ specs.RECENT = {
 	validate = checkRecent,
 }
 
+-- A council member asks the loot master for one player's earlier awards (the Context window), and gets them back.
+specs.HISTORY_REQUEST = {
+	allowed = "council", channel = "WHISPER", sid = "active", seq = false,
+	validate = function(p)
+		if type(p) ~= "table" or not isName(p.name) then return fail("bad history name") end
+		return true
+	end,
+}
+
+specs.HISTORY = {
+	allowed = "lm", channel = "WHISPER", sid = "active", seq = true,
+	validate = function(p)
+		if type(p) ~= "table" or not isName(p.name) then return fail("bad history name") end
+		if not isInt(p.total, 0, 99999) then return fail("bad history total") end
+		if p.nightStart ~= nil and not isInt(p.nightStart, 1, 99999999999) then return fail("bad history night") end
+		if not isArray(p.entries, C.MAX_HISTORY_ENTRIES) then return fail("bad history entries") end
+		for _, e in ipairs(p.entries) do
+			if type(e) ~= "table" or not isInt(e.itemID, 1, 9999999) or not isInt(e.time, 1, 99999999999) or not isText(e.label, 1, C.MAX_RESPONSE_LABEL) then
+				return fail("bad history entry")
+			end
+			if e.color ~= nil and not (type(e.color) == "string" and strmatch(e.color, "^%x%x%x%x%x%x$")) then return fail("bad history colour") end
+			if e.zone ~= nil and not isText(e.zone, 1, C.MAX_HISTORY_ZONE) then return fail("bad history zone") end
+		end
+		return true
+	end,
+}
+
 specs.STATE_REQUEST = {
 	allowed = "group", channel = "WHISPER", sid = "none", seq = false,
 	validate = function() return true end,

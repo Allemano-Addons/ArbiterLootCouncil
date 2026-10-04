@@ -4,6 +4,7 @@
 return function(check, H)
 	H.reload("fresh")
 	local Win = ALC.SettingsWindow
+	local base = #ALC.GetSettingsSections() -- ALC's own section (the award log) is there from the start
 
 	-- What is refused
 	local function refused(def) local ok, why = ALC.RegisterSettingsSection(def) return ok == false and why ~= nil end
@@ -21,7 +22,7 @@ return function(check, H)
 		refused({ id = "X", name = "X", rows = { row({ type = "choice", options = { { label = "a", value = 1 } } }) } })
 		and refused({ id = "X", name = "X", rows = { row({ type = "choice", options = { { label = "a", value = 1 }, { label = "b" } } }) } }))
 	check("an action needs onClick", refused({ id = "X", name = "X", rows = { row({ type = "action", onClick = false }) } }))
-	check("nothing refused was kept", #ALC.GetSettingsSections() == 0)
+	check("nothing refused was kept", #ALC.GetSettingsSections() == base)
 
 	-- A section with all three kinds of row, on both tabs
 	local state = { tooltip = true, keep = 15, announce = "off", cleared = 0, disenchant = false }
@@ -41,14 +42,14 @@ return function(check, H)
 				get = function() return state.announce end, set = function(value) state.announce = value end },
 		},
 	})
-	check("a good section is accepted and listed", registered == true and #ALC.GetSettingsSections() == 1 and ALC.GetSettingsSections()[1].name == "Soft Reserve")
-	check("the same id again replaces it", ALC.RegisterSettingsSection({ id = "ASR", name = "Soft Reserve", color = "9B7BFF", rows = ALC.GetSettingsSections()[1].rows }) == true
-		and #ALC.GetSettingsSections() == 1)
+	check("a good section is accepted and listed", registered == true and #ALC.GetSettingsSections() == base + 1 and ALC.GetSettingsSections()[base + 1].name == "Soft Reserve")
+	check("the same id again replaces it", ALC.RegisterSettingsSection({ id = "ASR", name = "Soft Reserve", color = "9B7BFF", rows = ALC.GetSettingsSections()[base + 1].rows }) == true
+		and #ALC.GetSettingsSections() == base + 1)
 
 	-- The window draws them
 	H.setupFrames()
 	local okShow = pcall(function() Win:Show() end)
-	check("the Settings window builds with the section", okShow and Win:IsShown() and #Win.extRefresh == 4)
+	check("the Settings window builds with the section", okShow and Win:IsShown() and #Win.extRefresh == 5) -- the four of this section and the award log's choice
 	local function find(group, text)
 		for _, widget in ipairs(Win.groups[group]) do
 			if widget.label and widget.label.GetText and widget.label:GetText() == text then return widget end
@@ -57,11 +58,11 @@ return function(check, H)
 	local tooltipBox = find("everyone", "Show who reserved it")
 	local keep10 = find("everyone", "10")
 	local clearButton = find("everyone", "Clear saved results")
-	local deBox = find("lm", "Hand it to the disenchanter")
-	local winners = find("lm", "Winners")
+	local deBox = find("session", "Hand it to the disenchanter")
+	local winners = find("session", "Winners")
 	check("the rows are there on the tabs they named", tooltipBox and keep10 and clearButton and deBox and winners)
 	check("a check shows what the addon says", tooltipBox.checked == true and deBox.checked == false)
-	check("a choice marks the current value", find("everyone", "15").selected == true and keep10.selected == false and find("lm", "Off").selected == true)
+	check("a choice marks the current value", find("everyone", "15").selected == true and keep10.selected == false and find("session", "Off").selected == true)
 
 	-- Using them
 	tooltipBox.scripts.OnClick(tooltipBox)
@@ -69,7 +70,7 @@ return function(check, H)
 	keep10.scripts.OnClick(keep10)
 	check("clicking a choice sets the value and moves the mark", state.keep == 10 and keep10.selected == true and find("everyone", "15").selected == false)
 	winners.scripts.OnClick(winners)
-	check("a choice on the loot master tab works too", state.announce == "winners" and winners.selected == true and find("lm", "Off").selected == false)
+	check("a choice on the loot master tab works too", state.announce == "winners" and winners.selected == true and find("session", "Off").selected == false)
 	H.deferTimers = true -- the "click again" waits four seconds before it gives up
 	H.timers = {}
 	clearButton.scripts.OnClick(clearButton)
@@ -84,7 +85,7 @@ return function(check, H)
 	-- The tabs show only their own rows
 	Win:SetTab("everyone")
 	check("the everyone tab shows its rows and not the loot master's", tooltipBox:IsShown() and not deBox:IsShown())
-	Win:SetTab("lm")
+	Win:SetTab("session")
 	check("the loot master tab shows its rows and not the other's", deBox:IsShown() and not tooltipBox:IsShown())
 
 	-- A row that fails does not break the window
@@ -92,6 +93,6 @@ return function(check, H)
 	check("a get that fails leaves the window working", pcall(function() Win:Refresh() end))
 	ALC.UnregisterSettingsSection("BAD")
 	ALC.UnregisterSettingsSection("ASR")
-	check("a section can be removed", #ALC.GetSettingsSections() == 0)
+	check("a section can be removed", #ALC.GetSettingsSections() == base)
 	Win:Hide()
 end
