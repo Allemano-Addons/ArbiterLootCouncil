@@ -2,7 +2,7 @@
 ## Title: Arbiter Loot Council
 ## Notes: Loot council for WoW Forever. Part of Allemano Addons.
 ## Author: Allemano
-## Version: 0.5.2-beta
+## Version: 0.6.0-beta
 ## SavedVariables: ALC_DB
 ## Category: Loot
 ## X-Curse-Project-ID: 1719135
@@ -17,6 +17,7 @@ Core\HubLog.lua
 Core\Settings.lua
 Core\Constants.lua
 Core\Commands.lua
+Core\Profile.lua
 Comm\Protocol.lua
 Comm\Comm.lua
 Council\Council.lua
@@ -41,6 +42,7 @@ UI\ContextWindow.lua
 UI\CompareWindow.lua
 UI\AwardDialog.lua
 UI\HistoryDialogs.lua
+UI\ProfileWindow.lua
 UI\VersionWindow.lua
 UI\ResultWindow.lua
 UI\SettingsWindow.lua

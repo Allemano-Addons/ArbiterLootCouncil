@@ -72,6 +72,7 @@ end
 
 -- Asks whether to award an item of the running session (the first when none is named)
 -- to a candidate.
+-- `disenchant` is true for the disenchanter, or the text "bank" for the guild bank.
 function AwardDialog:Ask(name, item, disenchant)
 	item = item or 1
 	local session = ALC.Sessions:GetSession()
@@ -95,7 +96,11 @@ function AwardDialog:Ask(name, item, disenchant)
 	local entry
 	if disenchant then
 		local message
-		entry, message = ALC.Awards:GetDisenchantEntry()
+		if ALC.Awards.SpecialKind(disenchant) == "bank" then
+			entry, message = ALC.Awards:GetBankEntry()
+		else
+			entry, message = ALC.Awards:GetDisenchantEntry()
+		end
 		if not entry then
 			ALC:Print(message)
 			return
@@ -111,7 +116,7 @@ function AwardDialog:Ask(name, item, disenchant)
 	if not frame then build() end
 	self.candidate = entry.name
 	self.item = item
-	self.disenchant = disenchant and true or false
+	self.disenchant = disenchant and (ALC.Awards.SpecialKind(disenchant) == "bank" and "bank" or true) or false
 
 	local display = ALC.LootDetection:GetItemDisplay({ itemString = target.itemString, itemID = target.itemID })
 	frame.icon:SetTexture(display.icon or UNKNOWN_ICON)
@@ -125,7 +130,8 @@ function AwardDialog:Ask(name, item, disenchant)
 	frame.winner:SetText(L["to"] .. " " .. entry.name)
 
 	if disenchant then
-		frame.details:SetText(L["Disenchant: the item goes to the disenchanter."])
+		frame.details:SetText(ALC.Awards.SpecialKind(disenchant) == "bank" and L["Guild bank: the item goes to the guild bank character."]
+			or L["Disenchant: the item goes to the disenchanter."])
 	else
 		local votes = ALC.Voting:GetVotes(entry.name, item)
 		frame.details:SetText(string.format("%s: %s  \194\183  %s: %d", L["Response"], ALC.Responses:GetLabel(entry.response), L["Votes"], votes))
@@ -207,7 +213,8 @@ function AwardDialog:AskMany(list)
 	if not manyFrame then buildMany() end
 	manyList = {}
 	for i, entry in ipairs(list) do
-		manyList[i] = { item = entry.item, name = entry.name, disenchant = entry.disenchant and true or false, note = entry.note }
+		manyList[i] = { item = entry.item, name = entry.name, note = entry.note,
+			disenchant = ALC.Awards.SpecialKind(entry.disenchant) == "bank" and "bank" or (entry.disenchant and true or false) }
 	end
 	local session = ALC.Sessions:GetSession()
 	manyFrame.title:SetText(strupper(string.format(L["Award %d items"], #manyList)))
@@ -222,7 +229,7 @@ function AwardDialog:AskMany(list)
 			row.item:SetText(display.name or L["Loading..."])
 			if entry.disenchant then
 				row.winner:SetTextColor(c.muted[1], c.muted[2], c.muted[3], 1)
-				row.winner:SetText(L["Disenchant"])
+				row.winner:SetText(ALC.Awards.SpecialKind(entry.disenchant) == "bank" and L["Guild bank"] or L["Disenchant"])
 			else
 				local candidate = ALC.Candidates:Get(entry.name, entry.item)
 				local cc = UI.ClassColor(candidate.class)
@@ -284,6 +291,11 @@ end
 -- Asks whether to give an item of the running session to the disenchanter.
 function AwardDialog:AskDisenchant(item)
 	self:Ask(nil, item, true)
+end
+
+-- The same for the guild bank character.
+function AwardDialog:AskBank(item)
+	self:Ask(nil, item, "bank")
 end
 
 function AwardDialog:IsShown()

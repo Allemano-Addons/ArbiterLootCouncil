@@ -77,6 +77,14 @@ return function(check, H)
 	Sessions:StartItems({ 200, 201 })
 	run()
 	local sid = Sessions:GetActiveSid()
+	-- A plain loot council session has no rolls, so its Response window has no Results button
+	do
+		local Resp0 = ALC.ResponseWindow
+		Resp0:Show()
+		Resp0:Refresh()
+		check("a loot council session has no Results button", Resp0.rows[1] and Resp0.rows[1].parent.resultsButton:IsShown() == false)
+		Resp0:Hide()
+	end
 
 	local spec = ALC.Protocol.specs.RESULT
 	check("RESULT is a loot master message to the group", spec ~= nil and spec.allowed == "lm" and spec.channel == "GROUP" and spec.sid == "active" and spec.seq == true)
@@ -157,6 +165,7 @@ return function(check, H)
 	-- the Results button of the Response window
 	local resultsButton = Resp.rows[1].parent.resultsButton
 	check("the Response window has a Results button", resultsButton ~= nil)
+	check("and it is there once a result has come in", resultsButton:IsShown() == true)
 	local opened = 0
 	ALC.RegisterResultsViewer(function() opened = opened + 1 end)
 	resultsButton.scripts.OnClick(resultsButton)

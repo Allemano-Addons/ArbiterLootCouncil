@@ -85,6 +85,15 @@ return function(check, H)
 	check("the response window opens", Resp:IsShown())
 	H.clock = 5030
 	check("time passes", math.floor(Sessions:GetTimeLeft() + 0.5) == 90)
+	local rf = Resp.rows[1] and Resp.rows[1].parent
+	if rf then
+		Resp:UpdateBar()
+		check("the time bar is shown and a quarter is gone", rf.timerFill:IsShown() and rf.timerTrack:IsShown())
+		H.clock = 5100
+		Resp:UpdateBar()
+		check("the bar turns red at the end", rf.timerFill:IsShown())
+		H.clock = 5030
+	end
 	check("answering works while it runs", ALC.Responses:Send("BIS", 1) == true)
 
 	-- Snapshot for a client mid-timer

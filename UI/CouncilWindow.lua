@@ -848,13 +848,26 @@ local function build()
 		GameTooltip:Show()
 	end)
 	frame.disenchant:HookScript("OnLeave", function() GameTooltip:Hide() end)
+	-- Guild bank (loot master): gives the item shown to the guild bank character of the settings. Only shown when one is set.
+	frame.bank = UI.NewButton(frame, 104, 24, L["Guild bank"], function()
+		ALC.AwardDialog:AskBank(focus)
+	end)
+	frame.bank:SetPoint("RIGHT", frame.disenchant, "LEFT", -6, 0)
+	frame.bank.label:SetTextColor(0.25, 0.75, 0.70, 1)
+	frame.bank:HookScript("OnEnter", function(self)
+		if not self.reason then return end
+		GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+		GameTooltip:SetText(self.reason)
+		GameTooltip:Show()
+	end)
+	frame.bank:HookScript("OnLeave", function() GameTooltip:Hide() end)
 	frame.pausedTag = UI.NewText(frame, 13, c.danger, "RIGHT")
-	frame.pausedTag:SetPoint("RIGHT", frame.disenchant, "LEFT", -12, 0)
+	frame.pausedTag:SetPoint("RIGHT", frame.bank, "LEFT", -12, 0)
 	frame.pausedTag:SetText(strupper(L["Paused"]))
 
 	councilStatic = { itemBox, frame.name, frame.sub, frame.progress, frame.barBg, frame.barFill, itemDivider, tableDivider,
 		headings[1], headings[2], headings[3], headings[4], headings[5], headings[6], headings[7], headings[8], frame.empty, frame.footerLine, frame.lootMaster,
-		frame.tally, frame.compact, frame.showPassed, frame.sort, frame.stop, frame.pause, frame.pausedTag, frame.disenchant }
+		frame.tally, frame.compact, frame.showPassed, frame.sort, frame.stop, frame.pause, frame.pausedTag, frame.disenchant, frame.bank }
 
 	-- Shown instead of the Council tab while no session runs.
 	frame.idle = centred(HEADER_H + 46, L["No running session. Start one from the loot window."])
@@ -1456,6 +1469,12 @@ local function renderCouncil(self, session)
 	frame.disenchant:SetAvailable(canDisenchant and not session.paused)
 	frame.disenchant.reason = (not canDisenchant) and deReason or nil
 	if canDisenchant and not session.paused then frame.disenchant.label:SetTextColor(0.65, 0.45, 0.90, 1) end
+	local hasBank = ALC.Settings:GetGuildBank() ~= nil
+	local canBank, bankReason = ALC.Awards:CanBank()
+	frame.bank:SetShown(hasBank and session.isLM == true and target.winner == nil and not session.finishing)
+	frame.bank:SetAvailable(canBank and not session.paused)
+	frame.bank.reason = (not canBank) and bankReason or nil
+	if canBank and not session.paused then frame.bank.label:SetTextColor(0.25, 0.75, 0.70, 1) end
 	if session.finishing then
 		frame.stop:SetLabel(L["Close now"])
 	elseif not stopArmed then

@@ -10,6 +10,7 @@ local min, max = math.min, math.max
 
 local WIDTH, PAD = 600, 16
 local HEADER_H, FOOTER_H = 40, 52
+local TIMER_BAR_H = 6 -- the time bar along the bottom of the header
 local NOTE_W = 150 -- the note field at the right end of a row
 local ROW_H, ROW_GAP = 46, 4
 local ICON = 34
@@ -261,6 +262,19 @@ local function build()
 	divider:SetHeight(1)
 	UI.SetTextureColor(divider, c.border)
 
+	-- The time bar: a thin bar along the bottom of the header that runs out from the right, so a glance tells how long
+	-- is left. Only shown when the session has an answer timer.
+	frame.timerTrack = frame:CreateTexture(nil, "ARTWORK")
+	frame.timerTrack:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -(HEADER_H - TIMER_BAR_H))
+	frame.timerTrack:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -1, -(HEADER_H - TIMER_BAR_H))
+	frame.timerTrack:SetHeight(TIMER_BAR_H)
+	UI.SetTextureColor(frame.timerTrack, c.border, 0.55)
+	frame.timerFill = frame:CreateTexture(nil, "OVERLAY")
+	frame.timerFill:SetPoint("TOPLEFT", frame.timerTrack, "TOPLEFT", 0, 0)
+	frame.timerFill:SetHeight(TIMER_BAR_H)
+	frame.timerTrack:Hide()
+	frame.timerFill:Hide()
+
 	-- Rows are made as they are needed and the rest of the pool a few at a time (see CouncilWindow).
 	ResponseWindow.EnsureRows(INITIAL_ROWS)
 	local function fillPool()
@@ -301,6 +315,7 @@ local function build()
 	frame:SetScript("OnShow", function() ResponseWindow:Refresh() end)
 	local sinceTick = 0
 	frame:SetScript("OnUpdate", function(_, elapsed)
+		ResponseWindow:UpdateBar() -- every frame, so the bar runs smoothly
 		sinceTick = sinceTick + elapsed
 		if sinceTick < 0.25 then return end
 		sinceTick = 0
@@ -396,10 +411,31 @@ local function renderRow(row, index, item)
 	row:Show()
 end
 
+-- The time bar: full when the session starts, empty when the time is up. Gold, red for the last 15 seconds and while
+-- the session is paused. Hidden when the session has no answer timer.
+function ResponseWindow:UpdateBar()
+	if not frame or not frame.timerFill then return end
+	local session = ALC.Sessions:GetSession()
+	local left = ALC.Sessions:GetTimeLeft()
+	if not session or not session.timer or not left then
+		frame.timerTrack:Hide()
+		frame.timerFill:Hide()
+		return
+	end
+	local fraction = math.max(0, math.min(1, left / session.timer))
+	local width = (frame:GetWidth() or 0) - 2
+	local color = (ALC.Sessions:IsPaused() or left <= 15) and c.danger or c.gold
+	UI.SetTextureColor(frame.timerFill, color, ALC.Sessions:IsPaused() and 0.55 or 0.95)
+	frame.timerFill:SetWidth(math.max(1, width * fraction))
+	frame.timerTrack:Show()
+	frame.timerFill:SetShown(fraction > 0)
+end
+
 -- The countdown in the header: "Time left 1:23", red for the last 15 seconds.
 function ResponseWindow:UpdateTimer()
 	if not frame then return end
 	local left = ALC.Sessions:GetTimeLeft()
+	self:UpdateBar()
 	if not left then
 		frame.timer:SetText("")
 		return
@@ -429,6 +465,17 @@ function ResponseWindow:Refresh()
 	UI.ApplyBrand(frame.logo, session)
 	frame.title:SetText(strupper(brandName and (brandName .. " " .. L["response"]) or L["Loot response"]))
 	applySet(session.responses)
+	-- Results only mean something in a session of an addon built on ALC (Soft Reserve rolls), or when rolls were
+	-- recorded: a plain loot council session has none, so it has no button.
+	local hasResults = session.mode ~= nil or (ALC.Results ~= nil and ALC.Results:HasAny())
+	frame.resultsButton:SetShown(hasResults)
+	frame.status:ClearAllPoints()
+	frame.status:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", PAD, 14)
+	if hasResults then
+		frame.status:SetPoint("RIGHT", frame.resultsButton, "LEFT", -10, 0)
+	else
+		frame.status:SetPoint("RIGHT", frame, "RIGHT", -PAD, 0)
+	end
 	local count = #session.items
 	local visible = min(count, MAX_VISIBLE)
 	offset = max(0, min(offset, max(0, count - visible)))

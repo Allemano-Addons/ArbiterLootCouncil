@@ -318,7 +318,7 @@ specs.AWARD = {
 		if not ok then return fail(reason) end
 		if not isName(p.winner) then return fail("bad winner") end
 		-- An award to the disenchanter carries an answer that is not one of the buttons.
-		if p.response ~= C.DISENCHANT_ID and not isResponse(p.response) then return fail("bad response") end
+		if p.response ~= C.DISENCHANT_ID and p.response ~= C.BANK_ID and not isResponse(p.response) then return fail("bad response") end
 		return true
 	end,
 }

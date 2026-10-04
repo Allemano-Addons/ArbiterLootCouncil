@@ -288,6 +288,26 @@ function Settings:SetDisenchanter(name)
 	return true
 end
 
+-- The guild bank (loot master): the character that keeps the items the guild stores. A full name, or nil.
+function Settings:GetGuildBank()
+	return db.profile.guildBank
+end
+
+-- Returns true, or false and why ("invalid").
+function Settings:SetGuildBank(name)
+	if name == nil or name == "" then
+		db.profile.guildBank = nil
+		changed("guildBank")
+		return true
+	end
+	name = ALC:NormalizeName(name)
+	-- The name travels in AWARD, where the protocol rejects control characters and `|`.
+	if not name or #name < 2 or #name > 48 or string.find(name, "[%c|]") then return false, "invalid" end
+	db.profile.guildBank = (string.gsub(name, "(%S)(%S*)", function(first, rest) return string.upper(first) .. strlower(rest) end))
+	changed("guildBank")
+	return true
+end
+
 -- The Roll column of the voting window (reads /roll from the chat): off by default.
 function Settings:GetRollsEnabled()
 	return db.profile.rollsEnabled == true

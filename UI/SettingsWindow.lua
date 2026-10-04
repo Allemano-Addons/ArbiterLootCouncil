@@ -114,6 +114,28 @@ local function setDisenchanterTarget()
 	setDisenchanter(ALC:UnitFullName("target") or "")
 end
 
+-- The guild bank character: the name typed, the target, or nothing (clears it).
+local bankFeedback
+local function setGuildBank(text)
+	text = strtrim(text or "")
+	local ok = ALC.Settings:SetGuildBank(text)
+	bankFeedback = (not ok) and L["That is not a valid name."] or nil
+	if ok and frame and frame.bankInput then
+		frame.bankInput:SetText("")
+		frame.bankInput.placeholder:Show()
+	end
+	SettingsWindow:Refresh()
+end
+
+local function setGuildBankTarget()
+	if not UnitIsPlayer("target") then
+		bankFeedback = L["Target a player first."]
+		SettingsWindow:Refresh()
+		return
+	end
+	setGuildBank(ALC:UnitFullName("target") or "")
+end
+
 local function addTarget()
 	if not UnitIsPlayer("target") then
 		setFeedback(L["Target a player first."])
@@ -442,6 +464,24 @@ local function build()
 	y = y + 36
 	frame.deCurrent = into("lm", UI.NewText(frame, 12, c.muted))
 	frame.deCurrent:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
+	y = y + 28
+
+	-- The guild bank: a character that keeps the items the guild stores (the Guild bank button of the voting window).
+	local bankLabel = into("lm", UI.NewText(frame, 12, c.text))
+	bankLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
+	bankLabel:SetText(L["Guild bank: gets the items the guild keeps"])
+	y = y + 22
+	frame.bankInput = into("lm", UI.NewEditBox(frame, 200, 30, L["Player name (First Last)"], setGuildBank))
+	frame.bankInput:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
+	frame.bankSet = into("lm", UI.NewButton(frame, 60, 30, L["Set"], function() setGuildBank(frame.bankInput:GetText()) end))
+	frame.bankSet:SetPoint("LEFT", frame.bankInput, "RIGHT", 8, 0)
+	frame.bankTarget = into("lm", UI.NewButton(frame, 100, 30, L["Use target"], setGuildBankTarget))
+	frame.bankTarget:SetPoint("LEFT", frame.bankSet, "RIGHT", 8, 0)
+	frame.bankClear = into("lm", UI.NewButton(frame, 60, 30, L["Clear"], function() setGuildBank("") end))
+	frame.bankClear:SetPoint("LEFT", frame.bankTarget, "RIGHT", 8, 0)
+	y = y + 36
+	frame.bankCurrent = into("lm", UI.NewText(frame, 12, c.muted))
+	frame.bankCurrent:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
 	y = y + 28
 
 	heights.lm = y + 40
@@ -967,6 +1007,15 @@ function SettingsWindow:Refresh()
 		frame.deCurrent:SetText(disenchanter and (L["Disenchanter"] .. ": " .. disenchanter) or L["No disenchanter set."])
 	end
 	frame.deClear:SetAvailable(disenchanter ~= nil)
+	local bank = settings:GetGuildBank()
+	if bankFeedback then
+		frame.bankCurrent:SetTextColor(c.danger[1], c.danger[2], c.danger[3], 1)
+		frame.bankCurrent:SetText(bankFeedback)
+	else
+		frame.bankCurrent:SetTextColor(c.muted[1], c.muted[2], c.muted[3], 1)
+		frame.bankCurrent:SetText(bank and (L["Guild bank"] .. ": " .. bank) or L["No guild bank set."])
+	end
+	frame.bankClear:SetAvailable(bank ~= nil)
 	frame.debug:SetChecked(settings:IsDebug())
 	for _, refreshRow in ipairs(self.extRefresh or {}) do refreshRow() end
 	frame.fontButton:SetLabel(UI.FontName(settings:GetFont()))

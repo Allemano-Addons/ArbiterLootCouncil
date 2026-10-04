@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.0-beta
+- **Share your loot master settings.** Settings > Session > Share settings: **Copy my settings** shows a line of text (it starts with ALCP1:) with the council list, loot threshold, loot window and award options, auto loot and trade, the disenchanter, the guild bank, random rolls, recent awards, the answer timer, the award log reminder, the answer buttons and Soft Reserve's loot master settings. Send it on Discord. **Import settings** takes a pasted line, checks it, lists what would change (for example "Loot quality threshold: Epic > Rare") and changes nothing until you press Apply. **Undo the last import** puts your old settings back. Also /alc profile, /alc profile import, /alc profile undo. Windows, font, size, the minimap button and the logs are not part of a profile. The text is checked in full: a damaged or cut-off text is refused, and every value is limited to what the setting accepts.
+- **Award to the guild bank**, like Disenchant. Settings > Loot: "Guild bank: gets the items the guild keeps" (Set, Use target, Clear), or /alc bank set <name>. A **Guild bank** button appears next to Disenchant in the Council window (only when a guild bank is set). The item is awarded to that character, announced, logged as "Guild bank", queued for trade, and can be undone. /alc bank award [item] does the same. It does not count as loot the bank character got (Recent awards, Arbiter Context). Council members need this version to see the label Guild bank.
+- **A time bar** along the bottom of the header of the Loot Response window runs out with the answer timer: gold, red for the last 15 seconds, dimmed red when the session is paused.
+- The **Results** button of the Loot Response window is only shown in a Soft Reserve session (or when rolls have been recorded), not in a plain loot council session.
+- Answer buttons cannot use the reserved ids DISENCHANT and BANK.
+
 ## 0.5.2-beta
 - Fix: "Trade complete." could cause a Lua error ("attempt to compare ... a secret string value") when the game hid the message as a secret text, and the trade was then not marked as delivered in the Trade Queue. The message is now only compared when it is readable.
 

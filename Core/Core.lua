@@ -301,6 +301,11 @@ function ALC:FindUnitByName(name)
 end
 
 -- Strips a "-Realm" suffix and returns the character name ("First Last").
+-- Whether an answer id is one only the loot master can give: the disenchanter or the guild bank.
+function ALC:IsSpecialResponse(id)
+	return id == ALC.Constants.DISENCHANT_ID or id == ALC.Constants.BANK_ID
+end
+
 function ALC:NormalizeName(name)
 	if type(name) ~= "string" or name == "" then return nil end
 	return strmatch(name, "^([^-]+)")
@@ -404,6 +409,7 @@ function ALC:OnInitialize()
 	self.Results:Init()
 	self.Voting:Init()
 	self.Awards:Init()
+	self.Profile:Init()
 	self.Recent:Init()
 	self.Context:Init()
 	self.Trades:Init()

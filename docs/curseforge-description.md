@@ -2,7 +2,7 @@
 
 **Run a loot council in WoW Forever without the spreadsheet.** ALC takes an item from the boss's corpse to the raider who deserves it: the loot master starts a session, every raider answers in a small window, the council votes, one click awards the item and the trade is queued and logged.
 
-> **Beta (0.5.2-beta).** ALC is new and being tested in real raids. **Everybody in the raid who should answer or vote needs the same version**, and this version cannot talk to 0.1.x. If someone has another version the addon says so in chat.
+> **Beta (0.6.0-beta).** ALC is new and being tested in real raids. **Everybody in the raid who should answer or vote needs the same version**, and this version cannot talk to 0.1.x. If someone has another version the addon says so in chat.
 
 ## How a loot decision works in ALC
 
@@ -21,6 +21,9 @@
 - **Loot master aware:** the loot master is the master looter if master loot is on, otherwise the raid leader. If the loot master reloads the UI during a session, ALC recovers the session.
 - **Council setup:** add council members by name once (`/alc council add <First Last>`) and they stay in your settings. Candidates' answers and votes are sent to the council only.
 - **Arbiter Context and Compare:** click a candidate and a box shows everything about them in one place: the full note, what they wear in that slot and the item level difference, whether they have already won loot in the same slot (or this very item), and their loot history with TONIGHT / this week tags. Ctrl-click a second candidate and the box becomes **Arbiter Compare**: two columns side by side, the better roll, votes and upgrade in green.
+- **Share your loot master settings:** another player takes over as loot master for a week and wants your setup? Settings > Session > Share settings > **Copy my settings** gives a line of text (council, threshold, answer buttons, timer, disenchanter, guild bank and more) to send on Discord. They paste it under **Import settings**, see what would change, and apply it, with an **Undo** if they change their mind. Windows, font and personal choices are not part of it.
+- **Guild bank:** set a guild bank character like the disenchanter and a **Guild bank** button appears next to Disenchant. The item goes to that character through the trade queue and is logged as Guild bank.
+- **Time bar:** the Loot Response window has a bar along the top that runs out with the answer timer, so raiders see at a glance how long is left.
 - **Right-click menu** on a candidate: vote, award, change response, remove (counts as pass). **Show passed** brings the passes back into the list.
 - **Stop or cancel a session** safely (Stop session asks for a second click).
 - **Version check:** `/alc debug versions` shows who has the addon and which version, so you find the raider who forgot to update before the boss, not after.

@@ -452,7 +452,7 @@ local function onAward(_, _, sid, p)
 	item.winner = p.winner
 	saveSession()
 	Debug:Log("Sessions", "item %d awarded to %s", p.item, p.winner)
-	ALC.Events:Fire("ALC_SESSION_ITEM_AWARDED", p.item, p.winner)
+	ALC.Events:Fire("ALC_SESSION_ITEM_AWARDED", p.item, p.winner, p.response)
 	if session and session.sid == sid and allAwarded() then finishLater(sid) end
 end
 

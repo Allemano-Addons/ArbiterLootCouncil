@@ -108,6 +108,8 @@ dofile("Tests/awardmany_test.lua")(check, H)
 dofile("Tests/settings_sections_test.lua")(check, H)
 dofile("Tests/context_test.lua")(check, H)
 dofile("Tests/hublog_test.lua")(check, H)
+dofile("Tests/profile_test.lua")(check, H)
+dofile("Tests/bank_test.lua")(check, H)
 
 print(string.format("%d passed, %d failed", passed, failed))
 os.exit(failed == 0 and 0 or 1)

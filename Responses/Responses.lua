@@ -67,7 +67,7 @@ function Responses:ValidateSet(set)
 	for i, r in ipairs(set) do
 		if type(r) ~= "table" or type(r.id) ~= "string" or not string.match(r.id, "^%u[%u%d]*$") or #r.id > 10 then return false, "bad id" end
 		if seen[r.id] then return false, "duplicate id" end
-		if r.id == ALC.Constants.DISENCHANT_ID then return false, "reserved id" end
+		if ALC:IsSpecialResponse(r.id) then return false, "reserved id" end
 		seen[r.id] = true
 		if Responses.CleanLabel(r.label) ~= r.label then return false, "bad label" end
 		local col = r.color
@@ -140,6 +140,9 @@ end
 -- The award to the disenchanter: shown in the log and the chat like an answer.
 local DISENCHANT = { id = "DISENCHANT", label = L["Disenchant"], color = { 0.65, 0.45, 0.90 } }
 
+-- The award to the guild bank.
+local BANK = { id = "BANK", label = L["Guild bank"], color = { 0.25, 0.75, 0.70 } }
+
 function Responses:Get(id)
 	for _, r in ipairs(self:GetSet()) do
 		if r.id == id then return r end
@@ -148,6 +151,7 @@ function Responses:Get(id)
 		if r.id == id then return r end
 	end
 	if id == DISENCHANT.id then return DISENCHANT end
+	if id == BANK.id then return BANK end
 end
 
 function Responses:GetLabel(id)

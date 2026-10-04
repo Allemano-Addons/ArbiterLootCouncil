@@ -131,21 +131,43 @@ end
 -- Award
 --------------------------------------------------------------------------------
 
--- The entry for an award to the disenchanter (who need not have answered), or nil and a message.
-local function disenchantEntry()
-	local name = ALC.Settings:GetDisenchanter()
-	if not name then return nil, L["No disenchanter is set. Set one in Settings, Loot master."] end
+-- The two places an item can go without anybody asking for it: to the disenchanter, or to the guild bank character.
+-- "special" is true or "disenchant" for the disenchanter, "bank" for the guild bank.
+local function specialKind(special)
+	if special == "bank" then return "bank" end
+	if special then return "disenchant" end
+end
+Awards.SpecialKind = specialKind
+
+-- The entry for an award to the disenchanter or the guild bank (who need not have answered), or nil and a message.
+local function specialEntry(kind)
+	local name, response, missing
+	if kind == "bank" then
+		name, response = ALC.Settings:GetGuildBank(), ALC.Constants.BANK_ID
+		missing = L["No guild bank is set. Set one in Settings, Loot."]
+	else
+		name, response = ALC.Settings:GetDisenchanter(), ALC.Constants.DISENCHANT_ID
+		missing = L["No disenchanter is set. Set one in Settings, Loot master."]
+	end
+	if not name then return nil, missing end
 	local unit = ALC:FindUnitByName(name)
 	if not unit and not ALC:SameName(name, ALC:PlayerName()) then
 		return nil, format(L["%s is not in your group."], name)
 	end
 	local class = unit and select(2, UnitClass(unit)) or nil
-	return { name = name, class = class or "PRIEST", response = ALC.Constants.DISENCHANT_ID }
+	return { name = name, class = class or "PRIEST", response = response }
 end
+
+local function disenchantEntry() return specialEntry("disenchant") end
 
 -- The entry an award to the disenchanter would have, or nil and why not.
 function Awards:GetDisenchantEntry()
 	return disenchantEntry()
+end
+
+-- The same for the guild bank.
+function Awards:GetBankEntry()
+	return specialEntry("bank")
 end
 
 -- Whether the loot master can award to the disenchanter right now: true, or false and why.
@@ -154,8 +176,14 @@ function Awards:CanDisenchant()
 	return entry ~= nil, message
 end
 
--- Awards an item of the running session (the first when none is named) to a candidate, or,
--- with `disenchant`, to the disenchanter from the settings.
+-- Whether the loot master can award to the guild bank right now: true, or false and why.
+function Awards:CanBank()
+	local entry, message = specialEntry("bank")
+	return entry ~= nil, message
+end
+
+-- Awards an item of the running session (the first when none is named) to a candidate, or, with `disenchant`,
+-- to the disenchanter from the settings (true), or to the guild bank (the text "bank").
 -- Returns true, or false and a message.
 function Awards:Award(name, item, disenchant)
 	item = item or 1
@@ -171,7 +199,7 @@ function Awards:Award(name, item, disenchant)
 	local entry
 	if disenchant then
 		local message
-		entry, message = disenchantEntry()
+		entry, message = specialEntry(specialKind(disenchant))
 		if not entry then return false, message end
 	else
 		entry = ALC.Candidates:Get(name, item)
@@ -252,7 +280,8 @@ function Awards:CheckMany(list)
 		if seen[item] then return false, L["An item is in the list twice."] end
 		seen[item] = true
 		if entry.disenchant then
-			local ok, message = Awards:CanDisenchant()
+			local ok, message
+			if specialKind(entry.disenchant) == "bank" then ok, message = Awards:CanBank() else ok, message = Awards:CanDisenchant() end
 			if not ok then return false, message end
 		else
 			local candidate = ALC.Candidates:Get(entry.name, item)
@@ -309,7 +338,7 @@ function Awards:AwardMany(list)
 	local session = ALC.Sessions:GetSession()
 	batch = { sid = session.sid, queue = {}, awarded = 0, failed = {} }
 	for i, entry in ipairs(list) do
-		batch.queue[i] = { item = entry.item, name = entry.name, disenchant = entry.disenchant and true or false }
+		batch.queue[i] = { item = entry.item, name = entry.name, disenchant = specialKind(entry.disenchant) == "bank" and "bank" or (entry.disenchant and true or false) }
 	end
 	batchStep()
 	return true, #list
@@ -547,7 +576,7 @@ end
 
 -- Council members keep the history too: what the loot master announced is logged on their side,
 -- and an undo marks the line as revoked. (The loot master logs in Awards:Award.)
-local function onAwardReceived(_, item, winner)
+local function onAwardReceived(_, item, winner, response)
 	local session = ALC.Sessions:GetSession()
 	if not session or not session.isCouncil or session.isLM then return end
 	local sid = session.sid
@@ -562,7 +591,8 @@ local function onAwardReceived(_, item, winner)
 	local entry = ALC.Candidates:Get(p.winner, p.item)
 	if not entry then
 		local unit = ALC:FindUnitByName(p.winner)
-		entry = { name = p.winner, class = (unit and select(2, UnitClass(unit))) or "PRIEST", response = ALC.Constants.DISENCHANT_ID }
+		entry = { name = p.winner, class = (unit and select(2, UnitClass(unit))) or "PRIEST",
+			response = response == ALC.Constants.BANK_ID and ALC.Constants.BANK_ID or ALC.Constants.DISENCHANT_ID }
 	end
 	local votes = ALC.Voting:GetVotes(p.winner, p.item)
 	logAward(session, target, entry, votes, p.item)
@@ -655,3 +685,25 @@ ALC.Commands:Register("de", function(arg)
 		ALC:Print(L["Usage: /alc de [set <name> | clear | award [item number]]"])
 	end
 end, L["show or set the disenchanter, or give an item to them: /alc de award [item number]"])
+
+-- /alc bank [set <name> | clear | award [item number]]
+ALC.Commands:Register("bank", function(arg)
+	local sub, rest = string.match(arg or "", "^(%S*)%s*(.-)$")
+	sub = string.lower(sub)
+	local settings = ALC.Settings
+	if sub == "set" then
+		local ok = settings:SetGuildBank(rest)
+		ALC:Print(ok and (settings:GetGuildBank() and format(L["Guild bank: %s"], settings:GetGuildBank()) or L["No guild bank set."])
+			or L["That is not a valid name."])
+	elseif sub == "clear" then
+		settings:SetGuildBank(nil)
+		ALC:Print(L["No guild bank set."])
+	elseif sub == "award" then
+		local ok, message = Awards:Award(nil, tonumber(rest) or 1, "bank")
+		if not ok then ALC:Print(message) end
+	else
+		local name = settings:GetGuildBank()
+		ALC:Print(name and format(L["Guild bank: %s"], name) or L["No guild bank set."])
+		ALC:Print(L["Usage: /alc bank [set <name> | clear | award [item number]]"])
+	end
+end, L["show or set the guild bank character, or give an item to it: /alc bank award [item number]"])

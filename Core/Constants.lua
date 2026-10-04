@@ -9,6 +9,8 @@ ALC.Constants = {
 	-- The answer an item gets when it is awarded to the disenchanter. It is not a button
 	-- players can press: only the loot master gives it, so it is not among the session's answers.
 	DISENCHANT_ID = "DISENCHANT",
+	-- The same for an item that goes to the guild bank character.
+	BANK_ID = "BANK",
 
 	MAX_COUNCIL = 40,
 	MAX_CANDIDATES = 60,
