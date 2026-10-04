@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.5.1-beta
+- Tells Allemano Hub what the session is doing (when the Hub is installed): a session started or ended, an award given or taken back, a pause, the answer timer running out, items added. The lines show up under "Recent activity" in the Hub's problem report, so a bug report says what happened before. Nothing changes when the Hub is not installed.
+
 ## 0.5.0-beta
 - **Arbiter Context.** Click a candidate in the Council window and a box opens beside the window (to the right, or to the left when the screen is too narrow); click the same row again, or the × in the box, to close it. It shows:
   - what is on the row, in full: rank, answer, roll, votes (and who voted), the whole note;
