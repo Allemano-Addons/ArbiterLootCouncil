@@ -580,6 +580,13 @@ local function build()
 		ALC.Settings:SetCompact(checked)
 	end))
 	frame.compact:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
+	y = y + 29
+
+	-- Pass by itself on items the class can never use (plate for a priest). Personal, off by default.
+	frame.autoPass = into("everyone", UI.NewCheckbox(frame, L["Pass automatically on items I can never use"], function(checked)
+		ALC.Settings:SetAutoPass(checked)
+	end, L["When a session starts, items your class can never wear or wield (plate for a priest, leather for a warlock, a two-handed sword for a rogue) get a Pass for you. You can still change the answer. Rings, necklaces, trinkets and cloaks are for everybody and are never passed."]))
+	frame.autoPass:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
 	y = y + 38
 
 	-- How big the windows are: smaller windows take less of the screen.
@@ -992,6 +999,7 @@ function SettingsWindow:Refresh()
 		and string.format(L["Answer timer: On, %d sec"], settings:GetTimerSeconds()) or L["Answer timer: Off"])
 	for _, button in ipairs(self.timerButtons) do button:SetSelected(button.seconds == settings:GetTimerSeconds()) end
 	frame.compact:SetChecked(settings:GetCompact())
+	frame.autoPass:SetChecked(settings:GetAutoPass())
 	for _, button in ipairs(self.recentButtons) do button:SetSelected(button.days == settings:GetRecentDays()) end
 	for _, button in ipairs(self.scaleButtons) do button:SetSelected(button.scale == settings:GetWindowScale()) end
 	frame.minimap:SetChecked(not settings:IsMinimapHidden())

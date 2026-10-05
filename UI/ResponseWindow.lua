@@ -156,6 +156,12 @@ function newRow(index)
 	row.bg = UI.NewFill(row, 8)
 	UI.SetTextureColor(row.bg, c.panel)
 	row.border = UI.AddBorder(row, c.border, 1, 8)
+	-- A bar on the left edge in the colour of the answer, so the rows that are answered stand out from the ones that wait.
+	row.answerBar = row:CreateTexture(nil, "ARTWORK")
+	row.answerBar:SetPoint("TOPLEFT", row, "TOPLEFT", 3, -7)
+	row.answerBar:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 3, 7)
+	row.answerBar:SetWidth(3)
+	row.answerBar:Hide()
 
 	row.itemBox = CreateFrame("Button", nil, row)
 	row.itemBox:SetSize(ICON, ICON)
@@ -383,7 +389,9 @@ local function renderRow(row, index, item)
 	row.name:SetTextColor(qc[1], qc[2], qc[3], 1)
 	local mark = markFor(item)
 	row.name:SetText((mark and ("|cffE6A93C" .. mark .. "|r  ") or "") .. (display.name or L["Loading..."]))
-	row.sub:SetText(display.subtitle)
+	local autoWhy = ALC.Responses:GetAutoPassed(index)
+	-- Auto-passed: "Auto-passed: plate" instead of the item type, which would not fit beside it
+	row.sub:SetText(autoWhy and string.format(L["Auto-passed: %s"], autoWhy) or display.subtitle)
 
 	local mine = ALC.Responses:GetMyResponse(index)
 	local awarded = item.winner ~= nil
@@ -397,6 +405,18 @@ local function renderRow(row, index, item)
 	row.note:SetShown(not awarded and not rollText)
 	if not row.note:HasFocus() then row.note:SetText(ALC.Responses:GetNote(index)) end -- not while it is being written
 	row.result:SetShown(awarded or rollText ~= nil)
+	-- Answered: the row is tinted in the colour of the answer, has the bar on its left and a frame in that colour.
+	-- Waiting rows stay plain. (Not shown once the item is awarded: that row says who got it.)
+	local answer = (not awarded and mine) and ALC.Responses:Get(mine) or nil
+	local tint = answer and answer.color or nil
+	if tint then
+		row.answerBar:SetColorTexture(tint[1], tint[2], tint[3], 1)
+		row.answerBar:Show()
+		row.border:SetColor(tint, 0.65)
+	else
+		row.answerBar:Hide()
+		row.border:SetColor(c.border)
+	end
 	if awarded then
 		row.result:SetTextColor(c.gold[1], c.gold[2], c.gold[3], 1)
 		row.result:SetText(string.format(L["Awarded to %s"], item.winner))
@@ -405,6 +425,10 @@ local function renderRow(row, index, item)
 		row.result:SetTextColor(rollColor[1], rollColor[2], rollColor[3], 1)
 		row.result:SetText(rollText)
 		UI.SetTextureColor(row.bg, c.panel)
+	elseif tint then
+		-- the panel colour with a little of the answer mixed in (a plain tint would let the window show through)
+		local mix = 0.14
+		row.bg:SetColorTexture(c.panel[1] * (1 - mix) + tint[1] * mix, c.panel[2] * (1 - mix) + tint[2] * mix, c.panel[3] * (1 - mix) + tint[3] * mix, 1)
 	else
 		UI.SetTextureColor(row.bg, c.panel)
 	end

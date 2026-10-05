@@ -35,6 +35,7 @@ Responses.PALETTE = {
 
 local myResponses = {} -- item -> our response id
 local myNotes = {}     -- item -> the note that goes with our answer to it
+local autoPassed = {}  -- item -> why the addon passed it for us (auto-pass), until we answer it ourselves
 
 --------------------------------------------------------------------------------
 -- Sets of buttons
@@ -178,6 +179,7 @@ end
 
 local function clearMine()
 	myNotes = {}
+	autoPassed = {}
 	if next(myResponses) == nil then return end
 	myResponses = {}
 	ALC.Events:Fire("ALC_RESPONSES_CHANGED")
@@ -204,7 +206,8 @@ end
 
 -- Sends (or changes) our response to an item, with that item's note. Returns true, or
 -- false and a message.
-function Responses:Send(id, item)
+-- `auto` is true for the answer the addon gives by itself (auto-pass): it is marked in the window until the player answers.
+function Responses:Send(id, item, auto)
 	item = item or 1
 	local session = ALC.Sessions:GetSession()
 	if not session then return false, L["There is no active session."] end
@@ -220,7 +223,37 @@ function Responses:Send(id, item)
 	if not sent then return false, L["Could not send your response. See /alc debug log."] end
 	Debug:Log("Responses", "item %d: sent %s to %s", item, id, session.lm)
 	setMine(item, id)
+	if not auto then autoPassed[item] = nil end
 	return true
+end
+
+-- Why an item was passed by the addon ("plate"), or nil when the answer is the player's own.
+function Responses:GetAutoPassed(item)
+	return autoPassed[item or 1]
+end
+
+-- Answers Pass by itself on the items of the session the player's class can never use, when the setting is on.
+-- Returns how many it passed.
+function Responses:AutoPass()
+	if not ALC.Settings:GetAutoPass() then return 0 end
+	local session = ALC.Sessions:GetSession()
+	if not session or not ALC.Sessions:HasResponse("PASS") then return 0 end
+	local passed, reasons = 0, {}
+	for index, target in ipairs(session.items) do
+		if not target.winner and not myResponses[index] then
+			local cannot, why = ALC.Usable:PlayerCannotUse(target.itemString)
+			if cannot and self:Send("PASS", index, true) == true then
+				autoPassed[index] = why
+				passed = passed + 1
+				reasons[#reasons + 1] = why
+			end
+		end
+	end
+	if passed > 0 then
+		ALC:Print(L["Auto-passed %d of %d items you cannot use (%s). You can still change an answer."], passed, #session.items, table.concat(reasons, ", "))
+		ALC.Events:Fire("ALC_RESPONSES_CHANGED")
+	end
+	return passed
 end
 
 -- Changes the note of an item and, when we have already answered it and the note is new,
@@ -236,8 +269,15 @@ end
 
 function Responses:Init()
 	local register = ALC.Events.Register
-	register(self, "ALC_SESSION_STARTED", function(_, _, restored)
-		if not restored then clearMine() end
+	register(self, "ALC_SESSION_STARTED", function(_, session, restored)
+		if restored then return end
+		clearMine()
+		-- a moment later, so the session has reached everybody first
+		local sid = session and session.sid
+		C_Timer.After(0.5, function()
+			local current = ALC.Sessions:GetSession()
+			if current and current.sid == sid then Responses:AutoPass() end
+		end)
 	end)
 	register(self, "ALC_SESSION_ENDED", clearMine)
 	-- After a reload the loot master tells us what we answered.

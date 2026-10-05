@@ -61,6 +61,16 @@ function Settings:SetDebug(enabled)
 	changed("debug")
 end
 
+-- Auto-pass: answer Pass by itself on items the player's class can never use. Personal, off by default.
+function Settings:GetAutoPass()
+	return db.profile.autoPass == true
+end
+
+function Settings:SetAutoPass(enabled)
+	db.profile.autoPass = enabled and true or false
+	changed("autoPass")
+end
+
 -- Loot window -----------------------------------------------------------------
 function Settings:GetAutoOpenLootWindow()
 	return db.profile.autoOpenLootWindow
