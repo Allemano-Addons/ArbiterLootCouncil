@@ -20,6 +20,7 @@ ALC.Constants = {
 	MAX_RECENT_AWARDS = 6,
 	MAX_HISTORY_ENTRIES = 30, -- the awards of one player a council member gets (see Context)
 	MAX_HISTORY_ZONE = 40,
+	MAX_SYNC_ENTRIES = 60,    -- the awards of one history sync from the loot master to a council member
 	MAX_NOTE_LENGTH = 100,
 	TIMER_MIN = 10,  -- seconds: the answer timer of a session
 	TIMER_MAX = 600,

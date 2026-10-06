@@ -169,6 +169,12 @@ end
 -- undone with everybody's answers and votes still there. Then it ends.
 local function finishLater(sid)
 	session.finishing = true
+	-- A session of an addon built on ALC (Soft Reserve) is closed by the loot master and no countdown runs: the rolls and
+	-- the results stay as long as they are needed, and an award can be undone until then.
+	if session.mode then
+		session.finishEndsAt = nil
+		return
+	end
 	session.finishEndsAt = GetTime() + UNDO_GRACE
 	C_Timer.After(UNDO_GRACE, function()
 		if session and session.sid == sid and allAwarded() then endSession("awarded") end
@@ -285,6 +291,11 @@ end
 function Sessions:GetFinishLeft()
 	if not session or not session.finishing or not session.finishEndsAt then return nil end
 	return math.max(0, session.finishEndsAt - GetTime())
+end
+
+-- True while every item is awarded and the session only waits to be closed (by itself, or by the loot master).
+function Sessions:IsFinishing()
+	return session ~= nil and session.finishing == true
 end
 
 -- True once the answer timer has run out.

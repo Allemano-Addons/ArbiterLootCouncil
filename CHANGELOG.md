@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.7.0-beta
+- **History follows the item.** The History tab says what happened to an award: **Awaiting trade**, **Returned** (the winner gave the item back; it is no longer counted in Recent awards and Arbiter Context) and **Traded to X** (a winner who has this version and trades the item to somebody else tells the loot master; the history keeps the winner of the council as the winner and adds where the item went, and the raid chat says it). The council members get the same marks from the loot master.
+- **Sync the history to the council.** A council member who joins a session asks the loot master for the awards of the last days, so there are no gaps in Recent awards for the awards it was not online for. The loot master also has a button **Sync to council** in the History tab that sends the last 90 days to everybody on the council.
+- **Item tooltips say who won it.** On every item tooltip (bags, chat links, the loot window) an item that was awarded in the last week says "ALC: awarded to X (BiS)" and what became of it (Awaiting trade, Delivered, Returned, Traded to Y).
+- **Start LC and Start SR have colours** in the Loot window: green and purple (the buttons, their frames and the text), also Start all LC and Start all SR.
+- **Compare shows item tooltips** when the mouse is over what a player wears and over the loot history.
+- **A clearer time bar** in the Loot Response window: 10 px, with a visible track.
+- **Names in the settings in their class colour** (the council, the disenchanter and the guild bank), when the class is known.
+- **The X of an item that awaits trade is blocked** in the Loot window, so it cannot be removed by mistake.
+- **A Soft Reserve session does not close by itself.** When everything is awarded it stays open until the loot master presses Close session, and Undo award works as long as it is open. An ordinary loot council session still closes by itself after 90 seconds.
+- **Items that can be stacked** (green reagents) are now split so that one goes into the trade window instead of the whole stack, and the trade logs what it did (`/alc debug log`).
+- **Fix:** a name the game hid (the trade partner in an instance) could cause a Lua error when the trade window opened, and the trade was not put together with its winner. Fixed, also in the council window.
+
 ## 0.6.1-beta
 - **Auto-pass.** Settings > Everyone: "Pass automatically on items I can never use" (off by default, personal). When a session starts, items your class can never wear or wield get a Pass for you: plate for a priest, leather for a warlock, a two-handed sword for a rogue, a wand for a warrior, a shield for a rogue and so on. The row says "Auto-passed: plate" and you can change the answer as usual. Rings, necklaces, trinkets, cloaks, cloth and anything that is not gear are never passed, and neither is armor your class will be able to wear at a higher level. An item or a class the addon does not know is left alone.
 - **Answered rows stand out** in the Loot Response window: a bar on the left edge, a tint and a frame in the colour of the answer (green for BiS, blue for Upgrade, grey for Pass and so on). Rows that still wait for an answer stay plain, so in a session with many items you see at a glance what is left.

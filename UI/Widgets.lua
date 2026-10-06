@@ -286,9 +286,18 @@ function UI.NewButton(parent, width, height, label, onClick)
 	button.available = true
 	button.selected = false
 
-	-- The resting look: selected buttons keep the amber frame.
+	-- A button can carry a colour (SetTint): the frame, the text and a little of the background take it, so buttons that
+	-- do different things can be told apart at a glance (Start LC green, Start SR purple).
+	local function mix(a, b, k) return a[1] * (1 - k) + b[1] * k, a[2] * (1 - k) + b[2] * k, a[3] * (1 - k) + b[3] * k end
+
+	-- The resting look: selected buttons keep the amber frame (or their own colour, stronger).
 	local function restingLook(self)
-		if self.selected then
+		local tint = self.tint
+		if tint then
+			local r, g, b = mix(UI.color.panel, tint, self.selected and 0.30 or 0.14)
+			self.bg:SetColorTexture(r, g, b, 1)
+			self.border:SetColor(tint, self.selected and 1 or 0.7)
+		elseif self.selected then
 			UI.SetTextureColor(self.bg, UI.color.goldTint)
 			self.border:SetColor(UI.color.gold)
 		else
@@ -299,8 +308,15 @@ function UI.NewButton(parent, width, height, label, onClick)
 
 	button:SetScript("OnEnter", function(self)
 		if self.available then
-			UI.SetTextureColor(self.bg, UI.color.panelHover)
-			self.border:SetColor(UI.color.gold)
+			local tint = self.tint
+			if tint then
+				local r, g, b = mix(UI.color.panelHover, tint, 0.26)
+				self.bg:SetColorTexture(r, g, b, 1)
+				self.border:SetColor(tint, 1)
+			else
+				UI.SetTextureColor(self.bg, UI.color.panelHover)
+				self.border:SetColor(UI.color.gold)
+			end
 		end
 	end)
 	button:SetScript("OnLeave", restingLook)
@@ -315,8 +331,15 @@ function UI.NewButton(parent, width, height, label, onClick)
 
 	function button:SetAvailable(available)
 		self.available = available and true or false
-		local c = self.available and UI.color.text or UI.color.muted
+		local c = self.available and (self.tint or UI.color.text) or UI.color.muted
 		self.label:SetTextColor(unpackColor(c, self.available and 1 or 0.6))
+	end
+
+	-- Gives the button a colour (a { r, g, b } table), or takes it away (nil).
+	function button:SetTint(color)
+		self.tint = color
+		restingLook(self)
+		self:SetAvailable(self.available)
 	end
 	function button:SetLabel(text) self.label:SetText(text) end
 

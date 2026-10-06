@@ -935,8 +935,21 @@ local function build()
 		ALC.HistoryDialogs:ShowExport(CouncilWindow:GetHistory())
 	end)
 	frame.historyExport:SetPoint("RIGHT", frame.historyClear, "LEFT", -6, 0)
+	-- The loot master sends the history to the council, so nobody has gaps in it.
+	frame.historySync = UI.NewButton(frame, 130, 26, L["Sync to council"], function()
+		local sent = ALC.Awards:PushLogToCouncil()
+		ALC:Print(sent > 0 and L["The history was sent to %d council member(s)."] or L["There is no council member to send it to."], sent)
+	end)
+	frame.historySync:SetPoint("RIGHT", frame.historyExport, "LEFT", -6, 0)
+	frame.historySync:HookScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_TOP")
+		GameTooltip:SetText(L["Sync to council"])
+		GameTooltip:AddLine(L["Sends the awards of the last 90 days to everybody on your council, so their history and Recent awards have no gaps. It also happens by itself when a council member joins a session."], c.muted[1], c.muted[2], c.muted[3], true)
+		GameTooltip:Show()
+	end)
+	frame.historySync:HookScript("OnLeave", function() GameTooltip:Hide() end)
 	historyStatic = { historyHeadings[1], historyHeadings[2], historyHeadings[3], historyHeadings[4], historyHeadings[5],
-		historyDivider, frame.historyEmpty, frame.historyFooterLine, frame.historyCount, frame.historyNote, frame.historyExport, frame.historyClear }
+		historyDivider, frame.historyEmpty, frame.historyFooterLine, frame.historyCount, frame.historyNote, frame.historyExport, frame.historySync, frame.historyClear }
 	for _, widget in ipairs(buildDatePanel()) do historyStatic[#historyStatic + 1] = widget end
 	for i = 1, HISTORY_ROWS do
 		CouncilWindow.historyRows[i] = newHistoryRow(i)
@@ -1451,6 +1464,9 @@ local function renderCouncil(self, session)
 	local total = counts.responded + counts.silent
 	frame.progress:SetText(string.format("%d/%d %s", counts.responded, total, L["responded"]))
 	local finishLeft = ALC.Sessions:GetFinishLeft()
+	if session.finishing and not finishLeft then
+		frame.progress:SetText(L["All awarded"]) -- a session that is closed by the loot master has no countdown
+	end
 	if finishLeft then
 		finishLeft = math.ceil(finishLeft)
 		frame.progress:SetText(string.format(L["All awarded \194\183 closing in %d:%02d"], math.floor(finishLeft / 60), finishLeft % 60))
@@ -1592,8 +1608,20 @@ local function renderHistoryRow(row, entry)
 
 	local cc = UI.ClassColor(entry.class)
 	row.winner:SetTextColor(cc[1], cc[2], cc[3], 1)
-	row.winner:SetText(entry.winner)
-	row.class:SetText(localizedClass(entry.class))
+	-- What happened to the item after the award: returned, traded on, still to trade. Said beside the class, or beside the
+	-- name in the compact list.
+	local kind, statusText = ALC.Awards.StatusOf(entry)
+	local tag
+	if kind == "returned" then
+		tag = "|cffE6A93C" .. statusText .. "|r"
+	elseif kind == "traded" then
+		tag = "|cff8AB4F8" .. statusText .. "|r"
+	elseif kind == "awaiting" then
+		tag = "|cffB59A5A" .. statusText .. "|r"
+	end
+	local compactRow = row:GetHeight() < 40
+	row.winner:SetText(compactRow and tag and (entry.winner .. "  " .. tag) or entry.winner)
+	row.class:SetText(localizedClass(entry.class) .. ((tag and not compactRow) and ("  \194\183  " .. tag) or ""))
 
 	-- The award log keeps the label and colour the answer had at the time.
 	local response = ALC.Responses:Get(entry.response)
@@ -1640,6 +1668,8 @@ local function renderHistory(self)
 		or ((#ALC.Settings:GetAwardLog() > 0) and L["No awards match."] or L["No awards recorded on this character yet."]))
 	frame.historyClear:SetAvailable(#ALC.Settings:GetAwardLog() > 0)
 	frame.historyExport:SetAvailable(count > 0)
+	frame.historySync:SetShown(ALC.Council:AmLootMaster())
+	frame.historySync:SetAvailable(#ALC.Settings:GetCouncil() > 0 and #ALC.Settings:GetAwardLog() > 0)
 	local picked = 0
 	for _ in pairs(historyDates) do picked = picked + 1 end
 	local summary = string.format("%d %s", count, count == 1 and L["award"] or L["awards"])

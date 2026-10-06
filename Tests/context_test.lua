@@ -166,10 +166,20 @@ return function(check, H)
 		local cf = Cmp:GetFrame()
 		check("the comparison names both players", cf.nameA:GetText() == "Ashvane Moo" and cf.nameB:GetText() == "Veyra Moo")
 		local text = {}
-		for _, row in ipairs(cf.rows) do if row.label:IsShown() then text[#text + 1] = row.label:GetText() .. "=" .. (row.a:GetText() or "") .. "|" .. (row.b:GetText() or "") end end
+		local function cellText(pool)
+			local t = {}
+			for _, line in ipairs(pool) do if line:IsShown() then t[#t + 1] = line.fs:GetText() or "" end end
+			return table.concat(t, " / ")
+		end
+		local itemLines = 0
+		for _, row in ipairs(cf.rows) do
+			if row.label:IsShown() then text[#text + 1] = row.label:GetText() .. "=" .. cellText(row.a) .. "|" .. cellText(row.b) end
+			for _, pool in ipairs({ row.a, row.b }) do for _, line in ipairs(pool) do if line:IsShown() and line.item then itemLines = itemLines + 1 end end end
+		end
 		local joined = table.concat(text, "\n")
 		check("it has the answer, wearing, same-slot and last-7-days lines", joined:find("ANSWER", 1, true) and joined:find("WEARING", 1, true) and joined:find("SAME SLOT", 1, true) and joined:find("LAST 7 DAYS", 1, true))
 		check("Veyra's earlier weapon shows on her side", joined:find("Twinblade of Echoes", 1, true) ~= nil)
+		check("the items in the table have a tooltip", itemLines > 0)
 		ashRow.scripts.OnClick(ashRow, "LeftButton")
 		check("Ctrl-click on the first lets it go: the second stays alone", Win:GetSelected() == "Veyra Moo" and Win:GetCompare() == nil and Ctx:IsShown() and not Cmp:IsShown())
 		ashRow.scripts.OnClick(ashRow, "LeftButton")

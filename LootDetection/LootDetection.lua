@@ -294,7 +294,7 @@ end
 function LootDetection:OfferReturned(itemString, itemID, from)
 	local award = self:FindAwardTo(from, itemID)
 	if not award then return false end
-	award.returnedAt = time()
+	ALC.Awards:NoteReturned(award)
 	nextReturnedId = nextReturnedId + 1
 	returned[#returned + 1] = { id = nextReturnedId, itemString = itemString, itemID = itemID, from = from }
 	ALC.Events:Fire("ALC_LOOT_RETURNED", nextReturnedId)

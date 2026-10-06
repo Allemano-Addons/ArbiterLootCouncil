@@ -233,6 +233,8 @@ function Trades:OnTradeComplete()
 	local delivered = 0
 	local pending = self:GetPending()
 	for _, itemID in ipairs(snapshot.items) do
+		-- an item we won through the council that goes to somebody else: the history says where it went
+		ALC.Awards:ReportPassedOn(itemID, snapshot.partner)
 		local known = false
 		for index, entry in ipairs(pending) do
 			if entry.itemID == itemID and ALC:SameName(entry.winner, snapshot.partner) then
@@ -267,7 +269,7 @@ local function slotInfo(bag, slot)
 	local get = (C_Container and C_Container.GetContainerItemInfo) or GetContainerItemInfo
 	if not get then return nil end
 	local info, count, _, _, _, _, _, _, _, itemID = get(bag, slot)
-	if type(info) == "table" then return info.itemID, info.isLocked, info.stackCount or 1 end
+	if type(info) == "table" then return info.itemID, info.isLocked, info.stackCount or info.itemCount or info.count or 1 end
 	return itemID, nil, count or 1
 end
 
@@ -310,6 +312,9 @@ function Trades:FillTrade()
 				ALC:Print(L["The trade window is full: %s is still waiting."], link)
 			else
 				local bag, slot, stack = findInBags(entry.itemID, used)
+				-- An item that can be stacked is split: one goes in the window, not the whole stack, also when the bag
+				-- does not say how many are stacked there.
+				local stackable = (select(8, ALC:GetItemInfo(entry.itemString or entry.itemID)) or 1) > 1
 				if not bag then
 					ALC:Print(L["%s is not in your bags: it cannot be added to the trade."], link)
 				else
@@ -318,9 +323,11 @@ function Trades:FillTrade()
 					local split = (C_Container and C_Container.SplitContainerItem) or SplitContainerItem
 					local ok = pcall(function()
 						-- An award is one item: from a stack, one is split off instead of the whole stack.
-						if (stack or 1) > 1 and split then split(bag, slot, 1) else pickup(bag, slot) end
+						if ((stack or 1) > 1 or stackable) and split then split(bag, slot, 1) else pickup(bag, slot) end
 						ClickTradeButton(nextSlot)
 					end)
+					Debug:Log("Trades", "item %d: bag %d slot %d, %d in the stack, stackable %s, %s, cursor %s afterwards (ok %s)", entry.itemID, bag, slot,
+						stack or 1, tostring(stackable), (((stack or 1) > 1 or stackable) and split) and "split 1" or "picked up", (CursorHasItem and CursorHasItem()) and "full" or "empty", tostring(ok))
 					if ok and not (CursorHasItem and CursorHasItem()) then
 						placed = placed + 1
 						nextSlot = nextSlot + 1

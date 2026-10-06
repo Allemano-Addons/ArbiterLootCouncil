@@ -67,7 +67,7 @@ local function logEntries(name, limit)
 	local log = ALC.Awards and ALC.Awards:GetLog() or {}
 	for i = 1, #log do
 		local r = log[i]
-		if r.winner and ALC:SameName(r.winner, name) and not r.revoked and not ALC:IsSpecialResponse(r.response) and r.time then
+		if r.winner and ALC:SameName(r.winner, name) and not r.revoked and not r.returnedAt and not ALC:IsSpecialResponse(r.response) and r.time then
 			list[#list + 1] = {
 				itemID = r.itemID, itemString = r.itemString,
 				label = r.responseLabel or (ALC.Responses and ALC.Responses:GetLabel(r.response)) or "",
@@ -91,7 +91,7 @@ function Context.NightStart(now)
 	local times = {}
 	for i = 1, #log do
 		local r = log[i]
-		if r.time and not r.revoked and not ALC:IsSpecialResponse(r.response) then times[#times + 1] = r.time end
+		if r.time and not r.revoked and not r.returnedAt and not ALC:IsSpecialResponse(r.response) then times[#times + 1] = r.time end
 	end
 	table.sort(times, function(a, b) return a > b end)
 	local start, previous = nil, now

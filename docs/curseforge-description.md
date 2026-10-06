@@ -2,7 +2,7 @@
 
 **Run a loot council in WoW Forever without the spreadsheet.** ALC takes an item from the boss's corpse to the raider who deserves it: the loot master starts a session, every raider answers in a small window, the council votes, one click awards the item and the trade is queued and logged.
 
-> **Beta (0.6.1-beta).** ALC is new and being tested in real raids. **Everybody in the raid who should answer or vote needs the same version**, and this version cannot talk to 0.1.x. If someone has another version the addon says so in chat.
+> **Beta (0.7.0-beta).** ALC is new and being tested in real raids. **Everybody in the raid who should answer or vote needs the same version**, and this version cannot talk to 0.1.x. If someone has another version the addon says so in chat.
 
 ## How a loot decision works in ALC
 
@@ -25,6 +25,8 @@
 - **Guild bank:** set a guild bank character like the disenchanter and a **Guild bank** button appears next to Disenchant. The item goes to that character through the trade queue and is logged as Guild bank.
 - **Auto-pass (optional, off by default):** under Settings > Everyone, turn on "Pass automatically on items I can never use". When a session starts, items your class can never wear or wield (plate for a priest, leather for a warlock, a two-handed sword for a rogue) get a Pass for you, marked "Auto-passed" in the window, and you can still change the answer. Rings, necklaces, trinkets and cloaks are for everybody and are never passed.
 - **Answered rows stand out:** in the Loot Response window a row you have answered gets a bar and a tint in the colour of your answer, so with many items you see at a glance what is left.
+- **History that follows the item:** the History tab says what became of an award: *Awaiting trade*, *Returned* (the winner gave it back) or *Traded to X* (the winner traded it on; the winner of the council stays the winner). Item tooltips anywhere (bags, chat links) say who won it and what became of it for a week. The loot master can **sync the history to the council** with one button, and a council member who joins a session fetches it by itself, so there are no gaps in Recent awards.
+- **Start LC and Start SR have their own colours** (green and purple), so the buttons are easy to tell apart.
 - **Time bar:** the Loot Response window has a bar along the top that runs out with the answer timer, so raiders see at a glance how long is left.
 - **Right-click menu** on a candidate: vote, award, change response, remove (counts as pass). **Show passed** brings the passes back into the list.
 - **Stop or cancel a session** safely (Stop session asks for a second click).

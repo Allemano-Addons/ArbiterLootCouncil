@@ -264,8 +264,11 @@ local function surnameSeparator()
 end
 
 -- "First Last" of a unit, nil if the unit does not exist.
+-- A name can be a "secret" string on WoW Forever (the trade partner in an instance, for one): it can be shown but not
+-- compared or joined, so such a unit has no usable name here (nil).
 function ALC:UnitFullName(unit)
 	local first, surname = UnitName(unit)
+	if issecretvalue and (issecretvalue(first) or issecretvalue(surname)) then return nil end
 	if not first or first == "" then return nil end
 	if type(surname) == "string" and surname ~= "" then
 		return first .. surnameSeparator() .. surname
@@ -275,6 +278,40 @@ end
 
 function ALC:PlayerName()
 	return self:UnitFullName("player")
+end
+
+-- The class (as the game names it: "PRIEST") of a character, learned from the group, a session or a target and
+-- remembered, so names can be shown in their class colour also when the player is not around. nil when unknown.
+function ALC:RememberClass(name, class)
+	if type(name) ~= "string" or type(class) ~= "string" or not self.Settings or not self.Settings:GetDB() then return end
+	local store = self.Settings:GetDB().global
+	store.classOf = store.classOf or {}
+	store.classOf[strlower(name)] = class
+end
+
+function ALC:ClassOf(name)
+	if type(name) ~= "string" or not self.Settings or not self.Settings:GetDB() then return nil end
+	local store = self.Settings:GetDB().global
+	store.classOf = store.classOf or {}
+	local known = store.classOf[strlower(name)]
+	local unit = self:FindUnitByName(name)
+	local fresh = unit and select(2, UnitClass(unit))
+	if fresh then
+		store.classOf[strlower(name)] = fresh
+		return fresh
+	end
+	if known then return known end
+	local session = self.Sessions and self.Sessions:GetSession()
+	if session and self.Candidates then
+		for item = 1, #session.items do
+			local entry = self.Candidates:Get(name, item)
+			if entry and entry.class then
+				store.classOf[strlower(name)] = entry.class
+				return entry.class
+			end
+		end
+	end
+	return nil
 end
 
 -- Unit ids of everyone in the group, ourselves included ("player" alone when ungrouped).
@@ -307,7 +344,9 @@ function ALC:IsSpecialResponse(id)
 end
 
 function ALC:NormalizeName(name)
-	if type(name) ~= "string" or name == "" then return nil end
+	if type(name) ~= "string" then return nil end
+	if issecretvalue and issecretvalue(name) then return nil end
+	if name == "" then return nil end
 	return strmatch(name, "^([^-]+)")
 end
 
@@ -411,6 +450,7 @@ function ALC:OnInitialize()
 	self.Awards:Init()
 	self.Profile:Init()
 	self.Probe:Init()
+	self.ItemTooltip:Init()
 	self.Recent:Init()
 	self.Context:Init()
 	self.Trades:Init()

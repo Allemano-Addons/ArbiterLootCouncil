@@ -10,7 +10,7 @@ local min, max = math.min, math.max
 
 local WIDTH, PAD = 600, 16
 local HEADER_H, FOOTER_H = 40, 52
-local TIMER_BAR_H = 6 -- the time bar along the bottom of the header
+local TIMER_BAR_H = 10 -- the time bar along the bottom of the header
 local NOTE_W = 150 -- the note field at the right end of a row
 local ROW_H, ROW_GAP = 46, 4
 local ICON = 34
@@ -274,7 +274,7 @@ local function build()
 	frame.timerTrack:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -(HEADER_H - TIMER_BAR_H))
 	frame.timerTrack:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -1, -(HEADER_H - TIMER_BAR_H))
 	frame.timerTrack:SetHeight(TIMER_BAR_H)
-	UI.SetTextureColor(frame.timerTrack, c.border, 0.55)
+	UI.SetTextureColor(frame.timerTrack, c.panelHover, 0.95) -- a visible track, so it is clear how much is left
 	frame.timerFill = frame:CreateTexture(nil, "OVERLAY")
 	frame.timerFill:SetPoint("TOPLEFT", frame.timerTrack, "TOPLEFT", 0, 0)
 	frame.timerFill:SetHeight(TIMER_BAR_H)
@@ -449,7 +449,7 @@ function ResponseWindow:UpdateBar()
 	local fraction = math.max(0, math.min(1, left / session.timer))
 	local width = (frame:GetWidth() or 0) - 2
 	local color = (ALC.Sessions:IsPaused() or left <= 15) and c.danger or c.gold
-	UI.SetTextureColor(frame.timerFill, color, ALC.Sessions:IsPaused() and 0.55 or 0.95)
+	UI.SetTextureColor(frame.timerFill, color, ALC.Sessions:IsPaused() and 0.6 or 1)
 	frame.timerFill:SetWidth(math.max(1, width * fraction))
 	frame.timerTrack:Show()
 	frame.timerFill:SetShown(fraction > 0)

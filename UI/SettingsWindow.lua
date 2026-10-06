@@ -92,6 +92,18 @@ local function addName(text)
 	end
 end
 
+-- A name in its class colour (white when the class is not known).
+local function coloured(name)
+	local class = name and ALC:ClassOf(name)
+	if not class then return name end
+	local cc = UI.ClassColor(class)
+	return string.format("|cff%02x%02x%02x%s|r", math.floor(cc[1] * 255 + 0.5), math.floor(cc[2] * 255 + 0.5), math.floor(cc[3] * 255 + 0.5), name)
+end
+
+local function learnTarget()
+	if UnitIsPlayer("target") then ALC:RememberClass(ALC:UnitFullName("target"), select(2, UnitClass("target"))) end
+end
+
 -- The disenchanter: the name typed, the target, or nothing (clears it).
 local deFeedback
 local function setDisenchanter(text)
@@ -111,6 +123,7 @@ local function setDisenchanterTarget()
 		SettingsWindow:Refresh()
 		return
 	end
+	learnTarget()
 	setDisenchanter(ALC:UnitFullName("target") or "")
 end
 
@@ -133,6 +146,7 @@ local function setGuildBankTarget()
 		SettingsWindow:Refresh()
 		return
 	end
+	learnTarget()
 	setGuildBank(ALC:UnitFullName("target") or "")
 end
 
@@ -141,6 +155,7 @@ local function addTarget()
 		setFeedback(L["Target a player first."])
 		return
 	end
+	learnTarget()
 	local name = ALC:UnitFullName("target")
 	local ok, reason = ALC.Settings:AddCouncilMember(name or "")
 	setFeedback(not ok and (REASONS[reason] or REASONS.invalid) or nil)
@@ -942,7 +957,7 @@ function SettingsWindow:Refresh()
 		local name = council[offset + i]
 		row.member = name
 		if name then
-			row.name:SetText(name)
+			row.name:SetText(coloured(name))
 			row:Show()
 		else
 			row:Hide()
@@ -1012,7 +1027,7 @@ function SettingsWindow:Refresh()
 		frame.deCurrent:SetText(deFeedback)
 	else
 		frame.deCurrent:SetTextColor(c.muted[1], c.muted[2], c.muted[3], 1)
-		frame.deCurrent:SetText(disenchanter and (L["Disenchanter"] .. ": " .. disenchanter) or L["No disenchanter set."])
+		frame.deCurrent:SetText(disenchanter and (L["Disenchanter"] .. ": " .. coloured(disenchanter)) or L["No disenchanter set."])
 	end
 	frame.deClear:SetAvailable(disenchanter ~= nil)
 	local bank = settings:GetGuildBank()
@@ -1021,7 +1036,7 @@ function SettingsWindow:Refresh()
 		frame.bankCurrent:SetText(bankFeedback)
 	else
 		frame.bankCurrent:SetTextColor(c.muted[1], c.muted[2], c.muted[3], 1)
-		frame.bankCurrent:SetText(bank and (L["Guild bank"] .. ": " .. bank) or L["No guild bank set."])
+		frame.bankCurrent:SetText(bank and (L["Guild bank"] .. ": " .. coloured(bank)) or L["No guild bank set."])
 	end
 	frame.bankClear:SetAvailable(bank ~= nil)
 	frame.debug:SetChecked(settings:IsDebug())

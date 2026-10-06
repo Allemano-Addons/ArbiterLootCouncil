@@ -75,7 +75,8 @@ local function unitByRosterName(rosterName)
 		if full and ALC:SameName(full, rosterName) then return unit end
 	end
 	for _, unit in ipairs(units) do
-		if UnitName(unit) == rosterName then return unit end
+		local first = UnitName(unit)
+		if not (issecretvalue and issecretvalue(first)) and first == rosterName then return unit end
 	end
 end
 

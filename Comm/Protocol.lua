@@ -411,6 +411,63 @@ specs.HISTORY = {
 	end,
 }
 
+-- A winner tells the loot master that they passed an item they won on to somebody else (they traded it away), so the
+-- history can say so. Works outside a session: the history is the thing.
+specs.ITEM_PASSED = {
+	allowed = "group", channel = "WHISPER", sid = "none", seq = false,
+	validate = function(p)
+		if type(p) ~= "table" then return fail("bad payload") end
+		if not isInt(p.itemID, 1, 9999999) then return fail("bad item") end
+		if not isName(p.to) then return fail("bad name") end
+		return true
+	end,
+}
+
+-- The loot master tells the council that an award changed afterwards: the winner gave the item back, or traded it on.
+specs.AWARD_NOTE = {
+	allowed = "lm", channel = "WHISPER", sid = "none", seq = false,
+	validate = function(p)
+		if type(p) ~= "table" then return fail("bad payload") end
+		if not isInt(p.itemID, 1, 9999999) then return fail("bad item") end
+		if not isName(p.winner) then return fail("bad winner") end
+		if p.kind ~= "returned" and p.kind ~= "traded" then return fail("bad kind") end
+		if p.kind == "traded" and not isName(p.to) then return fail("bad name") end
+		if p.time ~= nil and not isInt(p.time, 1, 99999999999) then return fail("bad time") end
+		return true
+	end,
+}
+
+-- A council member asks the loot master for the awards of the last days, to fill the gaps in its own history.
+specs.LOG_SYNC_REQUEST = {
+	allowed = "council", channel = "WHISPER", sid = "none", seq = false,
+	validate = function(p)
+		if type(p) ~= "table" or not isInt(p.days, 1, 90) then return fail("bad days") end
+		return true
+	end,
+}
+
+-- The loot master's awards (newest first) for a council member's history.
+specs.LOG_SYNC = {
+	allowed = "lm", channel = "WHISPER", sid = "none", seq = false,
+	validate = function(p)
+		if type(p) ~= "table" or not isArray(p.entries, C.MAX_SYNC_ENTRIES) then return fail("bad sync entries") end
+		for _, e in ipairs(p.entries) do
+			if type(e) ~= "table" or not isInt(e.itemID, 1, 9999999) or not isInt(e.time, 1, 99999999999) or not isName(e.winner) then
+				return fail("bad sync entry")
+			end
+			if not isText(e.response, 1, 12) or not isText(e.label, 1, C.MAX_RESPONSE_LABEL) then return fail("bad sync answer") end
+			if e.class ~= nil and not isText(e.class, 1, 16) then return fail("bad sync class") end
+			if e.color ~= nil and not (type(e.color) == "string" and strmatch(e.color, "^%x%x%x%x%x%x$")) then return fail("bad sync colour") end
+			if e.zone ~= nil and not isText(e.zone, 1, C.MAX_HISTORY_ZONE) then return fail("bad sync zone") end
+			if e.votes ~= nil and not isInt(e.votes, 0, 99) then return fail("bad sync votes") end
+			if e.returnedAt ~= nil and not isInt(e.returnedAt, 1, 99999999999) then return fail("bad sync returned") end
+			if e.tradedTo ~= nil and not isName(e.tradedTo) then return fail("bad sync traded") end
+			if e.revoked ~= nil and type(e.revoked) ~= "boolean" then return fail("bad sync revoked") end
+		end
+		return true
+	end,
+}
+
 specs.STATE_REQUEST = {
 	allowed = "group", channel = "WHISPER", sid = "none", seq = false,
 	validate = function() return true end,

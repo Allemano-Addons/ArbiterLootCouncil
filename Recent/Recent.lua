@@ -74,7 +74,7 @@ function Recent:Build(windowDays, names)
 	local recent = {}
 	for i, entry in ipairs(log) do
 		if entry.time and entry.time >= cutoff and entry.winner and not entry.revoked
-			and not ALC:IsSpecialResponse(entry.response) and (not wanted or wanted[strlower(entry.winner)]) then
+			and not entry.returnedAt and not ALC:IsSpecialResponse(entry.response) and (not wanted or wanted[strlower(entry.winner)]) then
 			recent[#recent + 1] = { entry = entry, index = i }
 		end
 	end

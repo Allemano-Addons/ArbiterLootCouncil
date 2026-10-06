@@ -541,6 +541,258 @@ function Awards:Revoke(item)
 	return true, winner, handedOut
 end
 
+--------------------------------------------------------------------------------
+-- What happened to an item after it was awarded: returned, traded on, still to trade
+--------------------------------------------------------------------------------
+local PASS_WINDOW = 7 * 86400 -- the newest awards of the last week are the ones that are matched
+
+-- Whether the item of this award still waits in the trade queue.
+local function awaitingTrade(entry)
+	if not (ALC.Trades and ALC.Trades.GetPending) then return false end
+	for _, waiting in ipairs(ALC.Trades:GetPending()) do
+		if waiting.itemID == entry.itemID and ALC:SameName(waiting.winner, entry.winner) then return true end
+	end
+	return false
+end
+
+-- What the history says about an award: "returned" (the winner gave it back), "traded" (the winner traded it on, entry.tradedTo
+-- says to whom), "awaiting" (still to be traded to the winner), "delivered" or nil. And a short text for it.
+function Awards.StatusOf(entry)
+	if entry.revoked then return "revoked", L["Revoked"] end
+	if entry.returnedAt then return "returned", L["Returned"] end
+	if entry.tradedTo then return "traded", string.format(L["Traded to %s"], entry.tradedTo) end
+	if not entry.deliveredAt and awaitingTrade(entry) then return "awaiting", L["Awaiting trade"] end
+	if entry.deliveredAt then return "delivered", L["Delivered"] end
+end
+
+-- The newest award of the last week of this item to this player that has not been returned, traded on or taken back.
+function Awards:FindOpenAward(winner, itemID)
+	local log = ALC.Settings:GetAwardLog()
+	local oldest = time() - PASS_WINDOW
+	for i = #log, math.max(1, #log - 200), -1 do
+		local r = log[i]
+		if (r.time or 0) < oldest then break end
+		if not r.revoked and not r.returnedAt and not r.tradedTo and r.itemID == itemID and ALC:SameName(r.winner, winner) then return r end
+	end
+end
+
+-- Says in the chat where an item went after the award (the same way the awards are announced).
+local function announceTransfer(itemID, from, to)
+	local link = select(2, ALC:GetItemInfo(itemID)) or ("item:" .. itemID)
+	local text = format("[ALC] %s", format(L["%s traded %s on to %s."], from, link, to))
+	local channel = (IsInRaid and IsInRaid() and "RAID") or (IsInGroup and IsInGroup() and "PARTY") or nil
+	if channel and SendChatMessage and ALC.Settings:GetAnnounceAwards() then
+		SendChatMessage(text, channel)
+	else
+		ALC:Print(text)
+	end
+end
+
+-- Tells the council that an award changed afterwards ("returned" or "traded"). The loot master only.
+local function notifyCouncil(record, kind, to)
+	local targets = ALC.Settings:GetCouncil()
+	if #targets == 0 then return end
+	ALC.Comm:SendCouncil(targets, "AWARD_NOTE", nil, { itemID = record.itemID, winner = record.winner, kind = kind, to = to, time = time() })
+end
+
+-- The loot master saw the winner give the item back: the award is marked returned and the council is told.
+function Awards:NoteReturned(record)
+	if not record then return end
+	record.returnedAt = record.returnedAt or time()
+	notifyCouncil(record, "returned")
+	ALC.Events:Fire("ALC_AWARDS_UPDATED", record)
+end
+
+-- A winner says they traded the item on (or the loot master did it themselves): the award keeps its winner, and the
+-- history says where the item went. Returns true when an award was found.
+function Awards:NoteTradedOn(winner, itemID, to)
+	if ALC:SameName(winner, to) then return false end
+	local record = self:FindOpenAward(winner, itemID)
+	if not record then return false end
+	record.tradedTo, record.tradedAt = to, time()
+	announceTransfer(itemID, winner, to)
+	notifyCouncil(record, "traded", to)
+	ALC.Events:Fire("ALC_AWARDS_UPDATED", record)
+	return true
+end
+
+-- The loot master hears from a winner that the item was passed on.
+local function onItemPassed(_, sender, _, p)
+	if not ALC.Council:AmLootMaster() then return end
+	if ALC.Council:IsLootMaster(p.to) then return end -- given back to the loot master: seen by the trade itself
+	Awards:NoteTradedOn(sender, p.itemID, p.to)
+end
+
+-- A council member hears it from the loot master and marks its own copy of the log.
+local function onAwardNote(_, _, _, p)
+	local log = ALC.Settings:GetAwardLog()
+	for i = #log, math.max(1, #log - 200), -1 do
+		local r = log[i]
+		if not r.revoked and not r.returnedAt and not r.tradedTo and r.itemID == p.itemID and ALC:SameName(r.winner, p.winner) then
+			if p.kind == "returned" then r.returnedAt = p.time or time() else r.tradedTo, r.tradedAt = p.to, p.time or time() end
+			ALC.Events:Fire("ALC_AWARDS_UPDATED", r)
+			return
+		end
+	end
+end
+
+-- What this player won, so that a trade of such an item to somebody else can be told to the loot master.
+local WINS_KEEP = 40
+local function myWins()
+	local g = ALC.Settings:GetDB().global
+	g.myWins = g.myWins or {}
+	return g.myWins
+end
+
+local function recordMyWin(_, item, winner)
+	if not winner or not ALC:SameName(winner, ALC:PlayerName()) then return end
+	local session = ALC.Sessions:GetSession()
+	local target = session and session.items[item]
+	if not target then return end
+	local wins = myWins()
+	wins[#wins + 1] = { itemID = target.itemID, time = time() }
+	while #wins > WINS_KEEP do table.remove(wins, 1) end
+end
+
+-- Called when a trade of ours went through: an item we won that left to somebody who is not the loot master is told to the
+-- loot master (or noted right away when we are the loot master).
+function Awards:ReportPassedOn(itemID, partner)
+	if not partner then return false end
+	local wins = myWins()
+	local oldest = time() - PASS_WINDOW
+	for i = #wins, 1, -1 do
+		local w = wins[i]
+		if w.itemID == itemID and w.time >= oldest then
+			table.remove(wins, i)
+			if ALC.Council:AmLootMaster() then
+				return self:NoteTradedOn(ALC:PlayerName(), itemID, partner)
+			end
+			local lm = ALC.Council:GetLootMaster()
+			if not lm or ALC:SameName(lm, partner) then return false end -- given back to the loot master: no news
+			return ALC.Comm:SendWhisper(lm, "ITEM_PASSED", nil, { itemID = itemID, to = partner }) and true or false
+		end
+	end
+	return false
+end
+
+--------------------------------------------------------------------------------
+-- History sync: the loot master's awards to the council, so nobody has gaps
+--------------------------------------------------------------------------------
+local SYNC_REPLY_WAIT = 30 -- seconds: one reply per council member in this time
+local lastSyncReply = {}
+
+local function hexOf(color)
+	if type(color) == "string" and string.match(color, "^%x%x%x%x%x%x$") then return color end
+	if type(color) == "table" then
+		return string.format("%02x%02x%02x", math.floor((color[1] or 0) * 255 + 0.5), math.floor((color[2] or 0) * 255 + 0.5), math.floor((color[3] or 0) * 255 + 0.5))
+	end
+end
+
+-- The payload of LOG_SYNC: the newest awards of the last `days` days (at most MAX_SYNC_ENTRIES), newest first.
+function Awards:BuildSync(days)
+	local log = ALC.Settings:GetAwardLog()
+	local oldest = time() - (days or 30) * 86400
+	local list = {}
+	for i = 1, #log do
+		local r = log[i]
+		if r.time and r.time >= oldest and r.winner and r.itemID and r.response then list[#list + 1] = r end
+	end
+	table.sort(list, function(a, b) return a.time > b.time end)
+	local entries = {}
+	for i = 1, math.min(#list, ALC.Constants.MAX_SYNC_ENTRIES) do
+		local r = list[i]
+		local zone = type(r.zone) == "string" and r.zone ~= "" and string.sub(r.zone, 1, ALC.Constants.MAX_HISTORY_ZONE) or nil
+		entries[#entries + 1] = {
+			itemID = r.itemID, winner = r.winner, class = r.class, response = r.response,
+			label = string.sub(r.responseLabel ~= nil and r.responseLabel ~= "" and r.responseLabel or "?", 1, ALC.Constants.MAX_RESPONSE_LABEL),
+			color = hexOf(r.responseColor), time = r.time, zone = zone, votes = math.min(99, math.max(0, r.votes or 0)),
+			returnedAt = r.returnedAt, tradedTo = r.tradedTo, revoked = r.revoked and true or nil,
+		}
+	end
+	return { entries = entries }
+end
+
+-- The loot master sends the history to council members (all reachable ones, or just `only`). Returns how many.
+function Awards:PushLogToCouncil(only, days)
+	if not ALC.Council:AmLootMaster() then return 0 end
+	local payload = self:BuildSync(days or 90)
+	local sent = 0
+	local targets = only and { only } or ALC.Settings:GetCouncil()
+	for _, name in ipairs(targets) do
+		if not ALC:SameName(name, ALC:PlayerName()) and ALC.Comm:SendWhisper(name, "LOG_SYNC", nil, payload) then sent = sent + 1 end
+	end
+	return sent
+end
+
+local function onSyncRequest(_, sender, _, p)
+	if not ALC.Council:AmLootMaster() then return end
+	local now = GetTime()
+	if lastSyncReply[sender] and now - lastSyncReply[sender] < SYNC_REPLY_WAIT then return end
+	lastSyncReply[sender] = now
+	ALC.Comm:SendWhisper(sender, "LOG_SYNC", nil, Awards:BuildSync(p.days))
+end
+
+-- A council member puts the loot master's awards into its own log: new ones are added, the ones it has already are only
+-- updated (returned, traded on, taken back). The same award is the same winner and item within three minutes.
+local SAME_AWARD_SECONDS = 180
+function Awards:MergeLog(entries)
+	local log = ALC.Settings:GetAwardLog()
+	local added, updated = 0, 0
+	local used = {}
+	for _, e in ipairs(entries) do
+		local match
+		for i = #log, 1, -1 do
+			local r = log[i]
+			if not used[r] and r.itemID == e.itemID and r.time and math.abs(r.time - e.time) <= SAME_AWARD_SECONDS and ALC:SameName(r.winner, e.winner) then
+				match = r
+				break
+			end
+		end
+		if match then
+			used[match] = true
+			local changed
+			if e.returnedAt and not match.returnedAt then match.returnedAt, changed = e.returnedAt, true end
+			if e.tradedTo and not match.tradedTo then match.tradedTo, changed = e.tradedTo, true end
+			if e.revoked and not match.revoked then match.revoked, changed = true, true end
+			if changed then updated = updated + 1 end
+		else
+			local color
+			if e.color then
+				color = { tonumber(string.sub(e.color, 1, 2), 16) / 255, tonumber(string.sub(e.color, 3, 4), 16) / 255, tonumber(string.sub(e.color, 5, 6), 16) / 255 }
+			end
+			local record = {
+				item = 0, itemID = e.itemID, itemString = "item:" .. e.itemID, winner = e.winner, class = e.class or "WARRIOR",
+				response = e.response, responseLabel = e.label, responseColor = color, votes = e.votes or 0, sid = "sync",
+				time = e.time, zone = e.zone or "", returnedAt = e.returnedAt, tradedTo = e.tradedTo, revoked = e.revoked,
+			}
+			log[#log + 1] = record
+			used[record] = true
+			added = added + 1
+		end
+	end
+	if added > 0 then
+		table.sort(log, function(a, b) return (a.time or 0) < (b.time or 0) end)
+	end
+	if added > 0 or updated > 0 then ALC.Events:Fire("ALC_AWARDS_UPDATED") end
+	return added, updated
+end
+
+local function onLogSync(_, _, _, p)
+	local added, updated = Awards:MergeLog(p.entries)
+	if added > 0 or updated > 0 then
+		Debug:Log("Awards", "history from the loot master: %d new, %d updated", added, updated)
+	end
+end
+
+-- A council member asks the loot master for the awards of the last days (when a session starts).
+function Awards:RequestLogSync()
+	if ALC.Council:AmLootMaster() or not ALC.Council:AmCouncil() then return false end
+	local lm = ALC.Council:GetLootMaster()
+	if not lm then return false end
+	local days = math.max(30, ALC.Settings:GetRecentDays())
+	return ALC.Comm:SendWhisper(lm, "LOG_SYNC_REQUEST", nil, { days = days }) and true or false
+end
+
 -- Notes in the log that the winner now has the item (a trade went through, or the game handed it
 -- over). Looks at the newest awards of that item to that player that were not delivered yet.
 -- Returns the log record, or nil when there is none.
@@ -628,7 +880,20 @@ function Awards:Init()
 				end },
 		},
 	})
-	ALC.Events.Register(self, "ALC_SESSION_ITEM_AWARDED", onAwardReceived)
+	-- one handler per event and object: the two things done when an award arrives share it
+	ALC.Events.Register(self, "ALC_SESSION_ITEM_AWARDED", function(event, item, winner, response)
+		onAwardReceived(event, item, winner, response)
+		recordMyWin(event, item, winner)
+	end)
+	ALC.Events.Register(self, "ALC_COMM_ITEM_PASSED", onItemPassed)
+	ALC.Events.Register(self, "ALC_COMM_LOG_SYNC_REQUEST", onSyncRequest)
+	ALC.Events.Register(self, "ALC_COMM_LOG_SYNC", onLogSync)
+	-- a council member fills the gaps of its history from the loot master when a session starts
+	ALC.Events.Register(self, "ALC_SESSION_STARTED", function(_, session, restored)
+		if restored or not session or session.isLM then return end
+		C_Timer.After(3, function() Awards:RequestLogSync() end)
+	end)
+	ALC.Events.Register(self, "ALC_COMM_AWARD_NOTE", onAwardNote)
 	ALC.Events.Register(self, "ALC_SESSION_ITEM_REVOKED", onAwardRevokeReceived)
 	self:RegisterEvent("LOOT_OPENED", function() lootOpen = true end)
 	self:RegisterEvent("LOOT_CLOSED", function() lootOpen = false end)

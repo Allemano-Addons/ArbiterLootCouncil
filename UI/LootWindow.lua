@@ -82,10 +82,16 @@ local function newRow(index)
 	row.remove.text:SetPoint("CENTER", 0, 1)
 	row.remove.text:SetText("\195\151") -- multiplication sign
 	row.remove:SetScript("OnEnter", function(self)
-		self.bg:Show()
-		self.text:SetTextColor(c.danger[1], c.danger[2], c.danger[3], 1)
 		GameTooltip:SetOwner(self, "ANCHOR_TOP")
-		GameTooltip:SetText(L["Remove from the list"])
+		if row.removeBlocked then
+			-- an item that is still to be traded stays in the list until it has been handed over
+			GameTooltip:SetText(L["Still to be traded"])
+			GameTooltip:AddLine(L["It leaves the list by itself when it has been handed over."], c.muted[1], c.muted[2], c.muted[3], true)
+		else
+			self.bg:Show()
+			self.text:SetTextColor(c.danger[1], c.danger[2], c.danger[3], 1)
+			GameTooltip:SetText(L["Remove from the list"])
+		end
 		GameTooltip:Show()
 	end)
 	row.remove:SetScript("OnLeave", function(self)
@@ -94,6 +100,7 @@ local function newRow(index)
 		GameTooltip:Hide()
 	end)
 	row.remove:SetScript("OnClick", function()
+		if row.removeBlocked then return end
 		GameTooltip:Hide()
 		ALC.LootDetection:Remove(row.entryId)
 	end)
@@ -387,10 +394,16 @@ end
 
 -- The buttons of a row, right to left: remove, "Start" (the normal Loot Council session), then one per way an
 -- addon built on ALC added (see ALC.RegisterStartMode). The name and the line under it keep clear of them.
+-- The colours that tell the ways to start apart: Loot Council green (the colour of ALC), the other ways take their addon's
+-- colour (Soft Reserve purple).
+local function lcColor() return UI.HexColor("45C97E") or c.gold end
+local function modeColor(mode) return (mode and mode.color and UI.HexColor(mode.color)) or UI.HexColor("9B7BFF") or c.gold end
+
 local function layoutRowButtons(row, modes)
 	local w, h = layoutCompact and 64 or 76, layoutCompact and 24 or 34
 	row.start:SetSize(w, h)
 	row.start:SetLabel(#modes > 0 and L["Start LC"] or L["Start"])
+	row.start:SetTint(#modes > 0 and lcColor() or nil)
 	row.modeButtons = row.modeButtons or {}
 	local previous = row.start
 	for i, mode in ipairs(modes) do
@@ -405,6 +418,7 @@ local function layoutRowButtons(row, modes)
 		button.modeId = mode.id
 		button:SetSize(w, h)
 		button:SetLabel(L["Start"] .. " " .. mode.label)
+		button:SetTint(modeColor(mode))
 		button:ClearAllPoints()
 		button:SetPoint("RIGHT", previous, "LEFT", -6, 0)
 		previous = button
@@ -488,6 +502,8 @@ local function renderRow(row, entry, sessionActive, isLM, modes, brand)
 	for _, button in ipairs(row.modeButtons or {}) do button:Hide() end
 	row.status:Hide()
 	row.remove:Hide()
+	row.removeBlocked = entry.status == status.TRADE
+	row.remove.text:SetTextColor(c.muted[1], c.muted[2], c.muted[3], row.removeBlocked and 0.35 or 1)
 	if entry.status == status.PENDING then
 		row.start:Show()
 		row.start:SetAvailable(isLM and not sessionActive)
@@ -555,7 +571,7 @@ function LootWindow:Refresh()
 	end
 
 	frame.empty:SetShown(count == 0)
-	frame.hint:SetText(sessionActive and (session.finishing and L["All awarded. The session closes by itself."] or L["In session"]) or "")
+	frame.hint:SetText(sessionActive and (session.finishing and (session.mode and L["All awarded. Close the session when you are done."] or L["All awarded. The session closes by itself."]) or L["In session"]) or "")
 	local finished = 0
 	for _, entry in ipairs(items) do
 		if entry.status == LootDetection.STATUS.AWARDED then finished = finished + 1 end
@@ -569,6 +585,7 @@ function LootWindow:Refresh()
 	frame.startAll:SetAvailable(isLM and not sessionActive and waiting > 1)
 	-- With one way to start it keeps its amber frame; with two, neither is picked for you.
 	frame.startAll:SetSelected(#modes == 0)
+	frame.startAll:SetTint(#modes > 0 and lcColor() or nil)
 	-- One "Start all" for each way an addon built on ALC added (left of the normal one, the nearest to the corner first).
 	frame.modeAll = frame.modeAll or {}
 	local anchor = nil
@@ -585,6 +602,7 @@ function LootWindow:Refresh()
 		button.modeId = mode.id
 		local label = L["Start all"] .. " " .. mode.label
 		button:SetLabel(waiting > 1 and string.format("%s (%d)", label, waiting) or label)
+		button:SetTint(modeColor(mode))
 		button:SetAvailable(isLM and not sessionActive and waiting > 1)
 		button:ClearAllPoints()
 		button:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -PAD - (i - 1) * 112, 17)
