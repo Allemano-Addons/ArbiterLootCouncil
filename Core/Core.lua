@@ -119,7 +119,8 @@ end
 
 -- API 5: an addon can add a section to the Settings window (Soft Reserve: the options of soft reserve sessions).
 -- ALC.RegisterSettingsSection({ id, name, color, rows }): the rows are drawn by ALC in its own style, under a heading in
--- the addon's colour, at the end of the tab each row names. A row:
+-- the addon's colour. A section without `page` gets a page of its own in the sidebar, under Modules (ALC's own sections
+-- name one: page = "session" or "tools"). A row:
 --   { tab = "everyone" | "lm", type = "check",  label, tip, get = function() -> boolean, set = function(boolean) }
 --   { tab, type = "choice", label, options = { { label, value }, ... }, get = function() -> value, set = function(value) }
 --   { tab, type = "action", label, confirm = "text for a second click" (optional), onClick = function() }
@@ -153,7 +154,8 @@ do
 			local ok, why = checkRow(row)
 			if not ok then return false, why end
 		end
-		local section = { id = def.id, name = def.name, color = type(def.color) == "string" and def.color or nil, rows = def.rows }
+		local section = { id = def.id, name = def.name, color = type(def.color) == "string" and def.color or nil, rows = def.rows,
+			page = type(def.page) == "string" and def.page or nil }
 		for i, existing in ipairs(settingsSections) do
 			if existing.id == def.id then
 				settingsSections[i] = section
@@ -440,6 +442,7 @@ function ALC:OnInitialize()
 	self.UI:Init()
 	self.Comm:Init()
 	self.Council:Init()
+	self.RaidUse:Init()
 	self.Sessions:Init()
 	self.LootDetection:Init()
 	self.LootWindow:Init()

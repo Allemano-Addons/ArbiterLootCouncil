@@ -21,6 +21,7 @@ local defaults = {
 		autoOpenLootWindow = true,
 		keepCouncilOpen = false, -- keep the voting window open after an award
 		warnMissing = true,      -- say who has no answer from the addon when a session starts
+		askRaidUse = true,       -- ask the loot master whether to use ALC in a raid (RaidUse)
 		responses = nil,      -- the loot master's answer buttons (Responses); nil = the default five
 		minimap = { hidden = false }, -- the launcher button; its position is saved once it has been moved
 		windows = {},         -- window key -> { point, relPoint, x, y }
@@ -120,6 +121,16 @@ end
 function Settings:SetWarnMissing(enabled)
 	db.profile.warnMissing = enabled and true or false
 	changed("warnMissing")
+end
+
+-- Whether the loot master is asked "Use Arbiter Loot Council in this raid?" (RaidUse). Off: ALC is always used.
+function Settings:GetAskRaidUse()
+	return db.profile.askRaidUse ~= false
+end
+
+function Settings:SetAskRaidUse(enabled)
+	db.profile.askRaidUse = enabled and true or false
+	changed("askRaidUse")
 end
 
 function Settings:GetKeepCouncilOpen()

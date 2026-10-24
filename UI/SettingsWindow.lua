@@ -9,8 +9,14 @@ local L = ALC.L
 local strupper, strtrim = string.upper, function(s) return (string.gsub(s, "^%s*(.-)%s*$", "%1")) end
 local min, max = math.min, math.max
 
+-- The window is a sidebar with the tabs on the left and the settings of the chosen tab on the right.
+-- WIDTH is the width of the right-hand part, where every setting is laid out.
 local WIDTH, PAD = 480, 22
-local HEADER_H = 40
+local SIDEBAR_W = 176
+local HEADER_H = 84          -- the page header on the right: the tab's name and what it is for
+local NAV_H, NAV_GAP = 34, 4
+local MAX_H, PAGE_STEP = 640, 40 -- a page taller than the window allows scrolls, 40 px per notch of the wheel
+
 local LIST_ROWS, LIST_ROW_H = 3, 26 -- the council list shows three names; the mouse wheel scrolls the rest
 
 local SettingsWindow = {}
@@ -37,17 +43,50 @@ end
 
 local frame, offset = nil, 0
 local feedback -- the last message about the council list, shown under the input
-local activeTab -- "everyone", "council" or "lm"; nil until the window is first opened
+local activeTab -- the key of the page that is shown; nil until the window is first opened
+local sidebarMinH = 400 -- the window is never lower than its sidebar; set when the sidebar is built
+local pageOffset = 0    -- how far the page is scrolled, in pixels
+
+-- The tallest the window may be: MAX_H, or less on a small screen (the window follows the Window size setting).
+local function maxHeight()
+	local screen = UIParent and UIParent.GetHeight and UIParent:GetHeight()
+	if type(screen) ~= "number" or screen <= 0 then return MAX_H end
+	return min(MAX_H, screen * 0.9 / ((frame and frame:GetScale()) or 1))
+end
 local c = UI.color
 
--- Settings are grouped by who they matter for.
-SettingsWindow.TABS = {
-	{ key = "everyone", label = L["Everyone"], note = L["How the addon looks on your own screen. Nobody else is affected."] },
-	{ key = "council", label = L["Council"], note = L["For council members: how the voting window behaves for you."] },
-	{ key = "lm", label = L["Loot"], note = L["Only used when you are the loot master: the council list, what happens to the loot, the disenchanter."] },
-	{ key = "session", label = L["Session"], note = L["Only used when you are the loot master: how a session runs. A session that is running keeps its settings."] },
-	{ key = "responses", label = L["Buttons"], note = L["Only used when you are the loot master: the answer buttons every player gets. A session that is running keeps the ones it started with."] },
+-- The pages, by what you want to set (not by who you are). `group` puts a heading over the page in the sidebar:
+-- "lm" for the pages only the loot master uses. Every addon built on ALC that adds settings gets a page of its own
+-- under "Modules", added when the window is built.
+SettingsWindow.BASE_PAGES = {
+	{ key = "general", label = L["General"], note = L["How ALC behaves for you. Nobody else is affected."] },
+	{ key = "appearance", label = L["Appearance"], note = L["How the windows look on your own screen."] },
+	{ key = "lootmaster", label = L["Master Loot"], group = "lm", note = L["Used when you are the loot master: what happens to the loot, and who gets the items nobody wants."] },
+	{ key = "council", label = L["Council"], group = "lm", note = L["Who votes, and what the council sees. Your list is used when you are the loot master."] },
+	{ key = "responses", label = L["Responses"], group = "lm", note = L["Used when you are the loot master: the answers every player gets, and how long they have. A running session keeps the ones it started with."] },
+	{ key = "session", label = L["Session"], group = "lm", note = L["Used when you are the loot master: how a session runs, and the award log."] },
+	{ key = "tools", label = L["Tools"], group = "tools", note = L["Share your settings with another loot master, and find out what went wrong."] },
 }
+SettingsWindow.PAGES = SettingsWindow.BASE_PAGES
+SettingsWindow.TABS = SettingsWindow.PAGES -- the old name
+
+-- The base pages, then a page per module (a settings section that names no page of its own), then Tools last.
+local function collectPages()
+	local pages, tools = {}, nil
+	for _, page in ipairs(SettingsWindow.BASE_PAGES) do
+		if page.key == "tools" then tools = page else pages[#pages + 1] = page end
+	end
+	for _, sec in ipairs(ALC.GetSettingsSections()) do
+		if not sec.page then
+			pages[#pages + 1] = { key = "module:" .. sec.id, label = sec.name, group = "modules", color = sec.color, section = sec,
+				note = string.format(L["Settings that %s adds to ALC."], sec.name) }
+		end
+	end
+	pages[#pages + 1] = tools
+	SettingsWindow.PAGES = pages
+	SettingsWindow.TABS = pages
+	return pages
+end
 
 -- The role the player has right now: "lm", "council" or "everyone" (a plain raider).
 local function currentRole()
@@ -55,6 +94,9 @@ local function currentRole()
 	if ALC.Council:AmCouncil() then return "council" end
 	return "everyone"
 end
+
+-- The page the window first opens on: the one that matters most for the role.
+local FIRST_PAGE = { lm = "lootmaster", council = "council", everyone = "general" }
 
 local ROLE_TEXT = {
 	lm = L["You are the loot master"],
@@ -181,8 +223,9 @@ end
 
 local function build()
 	frame = CreateFrame("Frame", nil, UIParent)
+	SettingsWindow.frame = frame -- for the tests and for addons built on ALC
 	UI.RegisterScaled(frame)
-	frame:SetSize(WIDTH, 700)
+	frame:SetSize(SIDEBAR_W + WIDTH, 700)
 	frame:SetFrameStrata("HIGH")
 	frame:SetFrameLevel(80)   -- each window has its own band of levels, so windows never mix
 	frame:SetToplevel(true) -- and the one you click comes to the front
@@ -196,29 +239,120 @@ local function build()
 	UI.SetTextureColor(bg, c.bg)
 	UI.AddBorder(frame, c.border, 1, 10)
 
-	-- Header, also the drag handle.
-	local header = CreateFrame("Frame", nil, frame)
-	header:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
-	header:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)
+	local function draggable(f)
+		f:EnableMouse(true)
+		f:RegisterForDrag("LeftButton")
+		f:SetScript("OnDragStart", function() frame:StartMoving() end)
+		f:SetScript("OnDragStop", function()
+			frame:StopMovingOrSizing()
+			savePosition()
+		end)
+	end
+
+	-- Sidebar: the addon's name, who you are, the tabs, and the version at the bottom. Also a drag handle.
+	local sidebar = CreateFrame("Frame", nil, frame)
+	sidebar:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+	sidebar:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
+	sidebar:SetWidth(SIDEBAR_W)
+	draggable(sidebar)
+	frame.sidebar = sidebar
+	local sideLine = sidebar:CreateTexture(nil, "BORDER")
+	sideLine:SetPoint("TOPRIGHT", sidebar, "TOPRIGHT", 0, -1)
+	sideLine:SetPoint("BOTTOMRIGHT", sidebar, "BOTTOMRIGHT", 0, 1)
+	sideLine:SetWidth(1)
+	UI.SetTextureColor(sideLine, c.border)
+
+	frame.logo = UI.NewLogo(sidebar, 26)
+	frame.logo:SetPoint("TOPLEFT", sidebar, "TOPLEFT", 18, -22)
+	local name = UI.NewText(sidebar, 18, c.text)
+	name:SetPoint("LEFT", frame.logo, "RIGHT", 10, 0)
+	name:SetText("ALC")
+	local subtitle = UI.NewText(sidebar, 11, c.muted)
+	subtitle:SetPoint("TOPLEFT", frame.logo, "BOTTOMLEFT", 0, -10)
+	subtitle:SetText(L["Settings"])
+	-- Who is looking: the role the player has right now.
+	frame.role = UI.NewText(sidebar, 11, c.gold)
+	frame.role:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", 0, -4)
+	frame.role:SetWidth(SIDEBAR_W - 36)
+	frame.role:SetWordWrap(true)
+
+	-- The pages, one under the other, under a heading where a group starts (Loot master, Modules; Tools stands
+	-- apart). The chosen page has a panel and an amber bar on its left edge; a module's name is in its colour.
+	SettingsWindow.tabButtons = {}
+	local GROUP_HEADING = { lm = L["Loot master"], modules = L["Modules"] }
+	local navY, lastGroup = 112, nil
+	for i, tab in ipairs(collectPages()) do
+		if tab.group ~= lastGroup then
+			navY = navY + 10
+			if GROUP_HEADING[tab.group] then
+				local heading = UI.NewText(sidebar, 10, c.muted)
+				heading:SetPoint("TOPLEFT", sidebar, "TOPLEFT", 24, -navY)
+				heading:SetText(strupper(GROUP_HEADING[tab.group]))
+				navY = navY + 20
+			end
+			lastGroup = tab.group
+		end
+		local item = CreateFrame("Button", nil, sidebar)
+		item:SetSize(SIDEBAR_W - 16, NAV_H)
+		item:SetPoint("TOPLEFT", sidebar, "TOPLEFT", 8, -navY)
+		navY = navY + NAV_H + NAV_GAP
+		item.color = tab.color and UI.HexColor(tab.color)
+		item.bg = UI.NewFill(item, 6)
+		item.bar = item:CreateTexture(nil, "ARTWORK")
+		item.bar:SetPoint("TOPLEFT", item, "TOPLEFT", 0, -7)
+		item.bar:SetPoint("BOTTOMLEFT", item, "BOTTOMLEFT", 0, 7)
+		item.bar:SetWidth(3)
+		UI.SetTextureColor(item.bar, c.gold)
+		item.label = UI.NewText(item, 13, c.muted)
+		item.label:SetPoint("LEFT", item, "LEFT", 16, 0)
+		item.label:SetText(tab.label)
+		item.tab = tab.key
+		function item:SetSelected(on)
+			self.selected = on
+			self.bar:SetShown(on)
+			self.bg:SetShown(on or self.hover)
+			UI.SetTextureColor(self.bg, on and c.panel or c.panelHover)
+			local tc = self.color or (on and c.text) or c.muted
+			self.label:SetTextColor(tc[1], tc[2], tc[3], (self.color and not on) and 0.75 or 1)
+		end
+		item:SetScript("OnEnter", function(self) self.hover = true; self:SetSelected(self.selected) end)
+		item:SetScript("OnLeave", function(self) self.hover = false; self:SetSelected(self.selected) end)
+		item:SetScript("OnClick", function() SettingsWindow:SetTab(tab.key) end)
+		item:SetSelected(false)
+		SettingsWindow.tabButtons[i] = item
+	end
+	sidebarMinH = navY + 70 -- room for the version lines at the bottom
+
+	frame.version = UI.NewText(sidebar, 11, c.muted)
+	frame.version:SetPoint("BOTTOMLEFT", sidebar, "BOTTOMLEFT", 18, 18)
+	frame.version:SetWidth(SIDEBAR_W - 36)
+	frame.version:SetWordWrap(true)
+	frame.version:SetText(string.format("%s\n%s", ALC.version or "?", L["/alc for commands"]))
+
+	-- The right-hand part: every setting is laid out in here, as if it were the whole window.
+	local body = CreateFrame("Frame", nil, frame)
+	body:SetPoint("TOPLEFT", frame, "TOPLEFT", SIDEBAR_W, 0)
+	body:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
+	frame.body = body
+
+	-- Page header: the name of the tab and what it is for. Also a drag handle.
+	local header = CreateFrame("Frame", nil, body)
+	header:SetPoint("TOPLEFT", body, "TOPLEFT", 0, 0)
+	header:SetPoint("TOPRIGHT", body, "TOPRIGHT", 0, 0)
 	header:SetHeight(HEADER_H)
 	frame.header = header
-	header:EnableMouse(true)
-	header:RegisterForDrag("LeftButton")
-	header:SetScript("OnDragStart", function() frame:StartMoving() end)
-	header:SetScript("OnDragStop", function()
-		frame:StopMovingOrSizing()
-		savePosition()
-	end)
+	draggable(header)
 
-	frame.logo = UI.NewLogo(header, 22)
-	frame.logo:SetPoint("LEFT", header, "LEFT", PAD, 0)
-	local title = UI.NewText(header, 15, c.text)
-	title:SetPoint("LEFT", frame.logo, "RIGHT", 10, 0)
-	title:SetText(strupper(L["Settings"]))
+	frame.pageTitle = UI.NewText(header, 20, c.text)
+	frame.pageTitle:SetPoint("TOPLEFT", header, "TOPLEFT", PAD, -22)
+	frame.tabNote = UI.NewText(header, 11, c.muted)
+	frame.tabNote:SetPoint("TOPLEFT", frame.pageTitle, "BOTTOMLEFT", 0, -8)
+	frame.tabNote:SetWidth(WIDTH - 2 * PAD - 30)
+	frame.tabNote:SetWordWrap(true)
 
 	local close = CreateFrame("Button", nil, header)
 	close:SetSize(30, 30)
-	close:SetPoint("RIGHT", header, "RIGHT", -12, 0)
+	close:SetPoint("TOPRIGHT", header, "TOPRIGHT", -12, -10)
 	close.text = UI.NewText(close, 30, c.muted, "CENTER")
 	close.text:SetPoint("CENTER", 0, 0)
 	close.text:SetText("\195\151")
@@ -226,9 +360,10 @@ local function build()
 	close:SetScript("OnLeave", function(self) self.text:SetTextColor(c.muted[1], c.muted[2], c.muted[3], 1) end)
 	close:SetScript("OnClick", function() SettingsWindow:Hide() end)
 
-	-- Every setting belongs to one of three tabs, by who it matters for: everybody in the raid,
-	-- the council members, or the loot master. `into` puts a widget in its tab's group.
-	local groups = { everyone = {}, council = {}, lm = {}, session = {}, responses = {} }
+	-- Every setting belongs to one page (SettingsWindow.PAGES, plus a page per module). `into` puts a widget in its
+	-- page's group, so SetTab can show one page and hide the rest.
+	local groups = {}
+	for _, page in ipairs(SettingsWindow.PAGES) do groups[page.key] = {} end
 	SettingsWindow.groups = groups
 	local function into(key, widget)
 		local group = groups[key]
@@ -238,155 +373,286 @@ local function build()
 	local heights = {}
 
 	local function divider(y, key)
-		local line = frame:CreateTexture(nil, "BORDER")
-		line:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -y)
-		line:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -1, -y)
+		local line = body:CreateTexture(nil, "BORDER")
+		line:SetPoint("TOPLEFT", body, "TOPLEFT", 1, -y)
+		line:SetPoint("TOPRIGHT", body, "TOPRIGHT", -1, -y)
 		line:SetHeight(1)
 		UI.SetTextureColor(line, c.border)
 		if key then into(key, line) end
 		return line
 	end
-	local function section(key, y, text)
-		local fs = UI.NewText(frame, 11, c.muted)
-		fs:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
+	-- A heading over a group of settings, in the accent colour (or a module's own). Returns the y below it.
+	local function section(key, y, text, color)
+		local fs = UI.NewText(body, 11, color or c.accent)
+		fs:SetPoint("TOPLEFT", body, "TOPLEFT", PAD, -y)
 		fs:SetText(strupper(text))
-		return into(key, fs)
-	end
-	local function paragraph(key, y, text, color)
-		local fs = UI.NewText(frame, 11, color or c.muted)
-		fs:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
-		fs:SetWidth(WIDTH - 2 * PAD)
-		fs:SetWordWrap(true)
-		fs:SetText(text)
-		return into(key, fs)
+		into(key, fs)
+		return y + 22
 	end
 	divider(HEADER_H)
 
-	-- Who is looking: the role the player has right now.
-	frame.role = UI.NewText(header, 12, c.muted, "RIGHT")
-	frame.role:SetPoint("RIGHT", close, "LEFT", -12, 0)
+	-- Under the page header the settings scroll: from here on `body` is the scroll child, the page itself, and
+	-- every y is measured from its top. The mouse wheel and the bar on the right move it when it is taller than
+	-- the window can be (MAX_H).
+	local scroll = CreateFrame("ScrollFrame", nil, frame.body)
+	scroll:SetPoint("TOPLEFT", frame.body, "TOPLEFT", 0, -(HEADER_H + 1))
+	scroll:SetPoint("BOTTOMRIGHT", frame.body, "BOTTOMRIGHT", 0, 1)
+	frame.scroll = scroll
+	body = CreateFrame("Frame", nil, scroll)
+	body:SetSize(WIDTH, 100)
+	scroll:SetScrollChild(body)
+	frame.page = body
+	frame.pageBar = UI.NewScrollBar(frame.body, function(newOffset) SettingsWindow:ScrollPage(newOffset) end)
+	frame.pageBar:SetPoint("TOPRIGHT", frame.body, "TOPRIGHT", -7, -(HEADER_H + 8))
+	frame.pageBar:SetPoint("BOTTOMRIGHT", frame.body, "BOTTOMRIGHT", -7, 8)
+	frame.pageBar:Hide()
+	local contentY = 20
 
-	-- The three tabs.
-	local tabY = HEADER_H + 14
-	local gap = 8
-	local tabWidth = math.floor((WIDTH - 2 * PAD - (#SettingsWindow.TABS - 1) * gap) / #SettingsWindow.TABS)
-	SettingsWindow.tabButtons = {}
-	for i, tab in ipairs(SettingsWindow.TABS) do
-		local button = UI.NewButton(frame, tabWidth, 26, tab.label, function() SettingsWindow:SetTab(tab.key) end)
-		button:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD + (i - 1) * (tabWidth + gap), -tabY)
-		button.tab = tab.key
-		SettingsWindow.tabButtons[i] = button
+	-- One setting is one card: a title and a short description on the left, the control on the right (`rightW`
+	-- keeps the text clear of it), or controls under the text (`below`: their height). Returns the card and the y
+	-- of the next card.
+	local CARD_W, CARD_PAD, CARD_GAP = WIDTH - 2 * PAD, 14, 8
+	local function lines(text, width) -- about how many lines an 11 px text wraps to
+		return max(1, math.ceil(#text * 4.8 / width))
 	end
-	frame.tabNote = UI.NewText(frame, 11, c.muted)
-	frame.tabNote:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -(tabY + 34))
-	frame.tabNote:SetWidth(WIDTH - 2 * PAD)
-	frame.tabNote:SetWordWrap(true)
-	local contentY = tabY + 34 + 30
-	divider(contentY)
-	contentY = contentY + 18
+	local function card(key, y, title, desc, rightW, below)
+		local f = into(key, CreateFrame("Frame", nil, body))
+		f:SetPoint("TOPLEFT", body, "TOPLEFT", PAD, -y)
+		f.bg = UI.NewFill(f, 6)
+		UI.SetTextureColor(f.bg, c.panel)
+		UI.AddBorder(f, c.border, 1, 6)
+		f.title = UI.NewText(f, 13, c.text)
+		f.title:SetPoint("TOPLEFT", f, "TOPLEFT", CARD_PAD, -12)
+		f.title:SetText(title)
+		local textH = 15
+		if desc and desc ~= "" then
+			local width = CARD_W - 2 * CARD_PAD - (rightW and rightW + 16 or 0)
+			f.desc = UI.NewText(f, 11, c.muted)
+			f.desc:SetPoint("TOPLEFT", f.title, "BOTTOMLEFT", 0, -4)
+			f.desc:SetWidth(width)
+			f.desc:SetWordWrap(true)
+			f.desc:SetText(desc)
+			-- The real height of the wrapped text when the game can tell (it can once the font is set), else a guess.
+			local measured = f.desc:GetStringHeight()
+			local descH = (type(measured) == "number" and measured > 0 and measured < 120) and math.ceil(measured) or 14 * lines(desc, width)
+			textH = textH + 4 + descH
+		end
+		f.headH = 12 + textH + 12
+		local h = f.headH + (below and below + 12 or 0)
+		f:SetSize(CARD_W, h)
+		return f, y + h + CARD_GAP
+	end
+	-- A control on the right of a card, in the middle of its title and description.
+	local function right(key, f, control)
+		control:SetPoint("RIGHT", f, "TOPRIGHT", -CARD_PAD, -f.headH / 2)
+		return into(key, control)
+	end
+	-- Controls under the text of a card: `x` from its left edge, `dy` down from the text.
+	local function under(key, f, control, x, dy)
+		control:SetPoint("TOPLEFT", f, "TOPLEFT", CARD_PAD + (x or 0), -(f.headH + (dy or 0)))
+		return into(key, control)
+	end
+	-- A switch on its own card. Returns the switch and the y of the next card.
+	local function switch(key, y, title, desc, onToggle)
+		local f
+		f, y = card(key, y, title, desc, 44)
+		local box = UI.NewCheckbox(f, title, onToggle)
+		box:SetSize(44, 26)
+		box.label:Hide() -- the card's title shows it; the label keeps the same text, hidden
+		box.card = f
+		right(key, f, box)
+		return box, y
+	end
+	-- A row of buttons under the text of a card, one per choice. Returns the buttons.
+	local function choices(key, f, options, onPick)
+		local n = #options
+		local width = math.floor((CARD_W - 2 * CARD_PAD - (n - 1) * 6) / n)
+		local buttons = {}
+		for i, option in ipairs(options) do
+			buttons[i] = under(key, f, UI.NewButton(f, width, 28, option.label, function() onPick(option.value) end), (i - 1) * (width + 6))
+			buttons[i].value = option.value
+		end
+		return buttons
+	end
 
-	-- Sections that other addons add (ALC.RegisterSettingsSection): a heading in the addon's colour, then its rows for
-	-- this tab, drawn in the window's own style. Returns the y below them.
+	-- Rows from ALC.RegisterSettingsSection, drawn as cards like ALC's own. Returns the y of the next card.
 	local extRefresh = {}
 	SettingsWindow.extRefresh = extRefresh
-	local function extensionRows(tabKey, at, groupKey)
-		local key = groupKey or tabKey
-		for _, section in ipairs(ALC.GetSettingsSections()) do
-			local rows = {}
-			for _, row in ipairs(section.rows) do
-				if row.tab == tabKey then rows[#rows + 1] = row end
+	local function extensionRow(key, row, y)
+		if row.type == "check" then
+			local box
+			box, y = switch(key, y, row.label, row.tip, function(checked) pcall(row.set, checked) end)
+			extRefresh[#extRefresh + 1] = function()
+				local ok, value = pcall(row.get)
+				box:SetChecked(ok and value and true or false)
 			end
-			if #rows > 0 then
-				local heading = into(key, UI.NewText(frame, 11, UI.HexColor(section.color) or c.muted))
-				heading:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -at)
-				heading:SetText(strupper(section.name))
-				at = at + 22
-				for _, row in ipairs(rows) do
-					if row.type == "check" then
-						local box = into(key, UI.NewCheckbox(frame, row.label, function(checked)
-							pcall(row.set, checked)
-						end, row.tip))
-						box:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -at)
-						extRefresh[#extRefresh + 1] = function()
-							local ok, value = pcall(row.get)
-							box:SetChecked(ok and value and true or false)
-						end
-						at = at + 29
-					elseif row.type == "choice" then
-						local label = into(key, UI.NewText(frame, 12, c.text))
-						label:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -at)
-						label:SetText(row.label)
-						at = at + 22
-						local n = #row.options
-						local width = math.floor((WIDTH - 2 * PAD - (n - 1) * 6) / n)
-						local buttons = {}
-						for i, option in ipairs(row.options) do
-							buttons[i] = into(key, UI.NewButton(frame, width, 30, option.label, function()
-								pcall(row.set, option.value)
-								SettingsWindow:Refresh()
-							end))
-							buttons[i]:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD + (i - 1) * (width + 6), -at)
-						end
-						extRefresh[#extRefresh + 1] = function()
-							local ok, value = pcall(row.get)
-							for i, option in ipairs(row.options) do buttons[i]:SetSelected(ok and value == option.value) end
-						end
-						at = at + 40
-					else -- an action; with `confirm` the first click asks and the second one does it
-						local armed
-						local button = into(key, UI.NewButton(frame, 240, 30, row.label, function(self)
-							if row.confirm and not armed then
-								armed = true
-								self:SetLabel(row.confirm)
-								C_Timer.After(4, function()
-									armed = nil
-									self:SetLabel(row.label)
-								end)
-								return
-							end
-							armed = nil
-							self:SetLabel(row.label)
-							pcall(row.onClick)
-							SettingsWindow:Refresh()
-						end))
-						button:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -at)
-						at = at + 38
-					end
+			return y
+		elseif row.type == "choice" then
+			local f
+			f, y = card(key, y, row.label, row.tip, nil, 28)
+			local buttons = choices(key, f, row.options, function(value)
+				pcall(row.set, value)
+				SettingsWindow:Refresh()
+			end)
+			extRefresh[#extRefresh + 1] = function()
+				local ok, value = pcall(row.get)
+				for _, button in ipairs(buttons) do button:SetSelected(ok and value == button.value) end
+			end
+			return y
+		end
+		return y -- actions are drawn by extensionRows, side by side in one card
+	end
+	-- An action button; with `confirm` the first click asks and the second one does it.
+	local function actionButton(key, f, row, width)
+		local armed
+		return into(key, UI.NewButton(f, width, 28, row.label, function(self)
+			if row.confirm and not armed then
+				armed = true
+				self:SetLabel(row.confirm)
+				C_Timer.After(4, function()
+					armed = nil
+					self:SetLabel(row.label)
+				end)
+				return
+			end
+			armed = nil
+			self:SetLabel(row.label)
+			pcall(row.onClick)
+			SettingsWindow:Refresh()
+		end))
+	end
+	-- Rows of a section: checks and choices one card each; actions that follow each other share one card, titled
+	-- `title`, with their buttons in a row (the button says what it does, so it needs no title of its own).
+	local function extensionRows(key, rows, y, title)
+		local i = 1
+		while i <= #rows do
+			local row = rows[i]
+			if row.type == "action" then
+				local actions = {}
+				while rows[i] and rows[i].type == "action" do
+					actions[#actions + 1] = rows[i]
+					i = i + 1
 				end
-				at = at + 8
+				local f
+				f, y = card(key, y, title, nil, nil, 28)
+				local n = #actions
+				local width = math.floor((CARD_W - 2 * CARD_PAD - (n - 1) * 6) / n)
+				for k, action in ipairs(actions) do
+					local button = actionButton(key, f, action, width)
+					button:SetPoint("TOPLEFT", f, "TOPLEFT", CARD_PAD + (k - 1) * (width + 6), -f.headH)
+				end
+			else
+				y = extensionRow(key, row, y)
+				i = i + 1
 			end
 		end
-		return at
+		return y
+	end
+	-- ALC's own sections that name a page (Share settings on Tools, the award log on Session): a heading, then every row.
+	local function pageSections(key, y)
+		for _, sec in ipairs(ALC.GetSettingsSections()) do
+			if sec.page == key then
+				y = section(key, y, sec.name, UI.HexColor(sec.color))
+				y = extensionRows(key, sec.rows, y, sec.name) + 10
+			end
+		end
+		return y
 	end
 
-	-- Loot master: the council list ---------------------------------------------
-	local y = contentY
-	section("lm", y, L["Council"])
-	frame.count = into("lm", UI.NewText(frame, 11, c.muted, "RIGHT"))
-	frame.count:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PAD, -y)
-	y = y + 20
+	-- A name box with Set, Use target and Clear, and a line under it saying who it is now (disenchanter, guild bank).
+	local function nameCard(key, y, title, desc, onSet, onTarget, fields)
+		local f
+		f, y = card(key, y, title, desc, nil, 30 + 8 + 14)
+		local input = under(key, f, UI.NewEditBox(f, 170, 30, L["Player name (First Last)"], onSet))
+		local set = into(key, UI.NewButton(f, 56, 30, L["Set"], function() onSet(input:GetText()) end))
+		set:SetPoint("LEFT", input, "RIGHT", 8, 0)
+		local target = into(key, UI.NewButton(f, 96, 30, L["Use target"], onTarget))
+		target:SetPoint("LEFT", set, "RIGHT", 8, 0)
+		local clear = into(key, UI.NewButton(f, 56, 30, L["Clear"], function() onSet("") end))
+		clear:SetPoint("LEFT", target, "RIGHT", 8, 0)
+		local current = under(key, f, UI.NewText(f, 12, c.muted), 0, 38)
+		frame[fields .. "Input"], frame[fields .. "Set"], frame[fields .. "Target"] = input, set, target
+		frame[fields .. "Clear"], frame[fields .. "Current"] = clear, current
+		return y
+	end
 
-	paragraph("lm", y, L["Set before the raid. The loot master is always on the council. Changes apply to the next session."])
-	y = y + 34
+	-- General: how ALC behaves for you ---------------------------------------------
+	local y = section("general", contentY, L["You"])
+	frame.autoPass, y = switch("general", y, L["Pass automatically on items I can never use"],
+		L["Items your class can never wear or wield (plate for a priest) get a Pass for you, and you can still change it. Rings, necklaces, trinkets and cloaks are never passed."],
+		function(checked) ALC.Settings:SetAutoPass(checked) end)
+	frame.minimap, y = switch("general", y, L["Show the minimap button"], L["Opens the window menu. The launcher works without it."],
+		function(checked) ALC.Settings:SetMinimapHidden(not checked) end)
+	heights.general = y + 32
 
-	frame.input = into("lm", UI.NewEditBox(frame, 240, 30, L["Player name (First Last)"], addName))
-	frame.input:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
-	frame.add = into("lm", UI.NewButton(frame, 70, 30, L["Add"], function() addName(frame.input:GetText()) end))
+	-- Appearance: how the windows look on your screen ------------------------------
+	y = section("appearance", contentY, L["Windows"])
+	frame.compact, y = switch("appearance", y, L["Compact windows"], L["Smaller rows and buttons in the loot, answer and voting windows."],
+		function(checked) ALC.Settings:SetCompact(checked) end)
+	local sizeCard
+	sizeCard, y = card("appearance", y, L["Window size"], L["Every ALC window, on your screen only."], nil, 28)
+	local scaleOptions = {}
+	for i, scale in ipairs(ALC.Settings.WINDOW_SCALES) do scaleOptions[i] = { label = string.format("%d%%", scale * 100), value = scale } end
+	SettingsWindow.scaleButtons = choices("appearance", sizeCard, scaleOptions, function(scale) ALC.Settings:SetWindowScale(scale) end)
+	for _, button in ipairs(SettingsWindow.scaleButtons) do button.scale = button.value end
+	local fontCard
+	fontCard, y = card("appearance", y, L["Font"], L["The letters of every ALC window. Each font in the list is shown as itself."], 180)
+	frame.fontButton = right("appearance", fontCard, UI.NewButton(fontCard, 180, 28, "", function() SettingsWindow:ToggleFontMenu() end))
+	heights.appearance = y + 32
+
+	-- Master Loot: what happens to the loot ----------------------------------------
+	y = section("lootmaster", contentY, L["Auto loot"])
+	frame.autoLoot, y = switch("lootmaster", y, L["Auto loot"],
+		L["When you open a corpse as master looter, the items over the threshold are given to you, to award later."],
+		function(checked) ALC.Settings:SetAutoLoot(checked) end)
+	frame.autoLootConfirm, y = switch("lootmaster", y, L["Ask first (\"Loot all?\")"], L["A question before the loot is taken for you."],
+		function(checked) ALC.Settings:SetAutoLootConfirm(checked) end)
+	local qualityCard
+	qualityCard, y = card("lootmaster", y, L["Loot quality threshold"], L["Items of this quality and better go on the loot list."], 160)
+	-- A drop-down: the button shows the threshold, a click opens the list of qualities.
+	frame.qualityButton = right("lootmaster", qualityCard, UI.NewButton(qualityCard, 160, 28, "", function()
+		SettingsWindow:OpenQualityMenu()
+	end))
+
+	y = section("lootmaster", y + 10, L["Loot list"])
+	frame.autoOpen, y = switch("lootmaster", y, L["Open the loot window when items arrive"],
+		L["Off: the items are still listed quietly. Open the list with /alc loot."],
+		function(checked) ALC.Settings:SetAutoOpenLootWindow(checked) end)
+
+	y = section("lootmaster", y + 10, L["After the award"])
+	frame.autoTrade, y = switch("lootmaster", y, L["Auto trade"],
+		L["The trade window opens with the winner and the item is put in. A winner far away gets a whisper to come."],
+		function(checked) ALC.Settings:SetAutoTrade(checked) end)
+	frame.announce, y = switch("lootmaster", y, L["Announce awards"],
+		L["Say who got which item in raid chat (party chat in a party), and when a trade went through."],
+		function(checked) ALC.Settings:SetAnnounceAwards(checked) end)
+
+	y = section("lootmaster", y + 10, L["Recipients"])
+	y = nameCard("lootmaster", y, L["Disenchanter"], L["Gets the items nobody wants (the Disenchant button of the voting window)."],
+		setDisenchanter, setDisenchanterTarget, "de")
+	y = nameCard("lootmaster", y, L["Guild bank"], L["Gets the items the guild keeps (the Guild bank button of the voting window)."],
+		setGuildBank, setGuildBankTarget, "bank")
+	heights.lootmaster = y + 32
+
+	-- Council: who votes, and what the council sees -------------------------------
+	y = section("council", contentY, L["Your council"])
+	local listH = LIST_ROWS * LIST_ROW_H + 4
+	local councilCard
+	councilCard, y = card("council", y, L["Council members"],
+		L["Set before the raid. The loot master is always on the council. Changes apply to the next session."], 50, 30 + 6 + 14 + 6 + listH)
+	frame.count = right("council", councilCard, UI.NewText(councilCard, 11, c.muted, "RIGHT"))
+	frame.input = under("council", councilCard, UI.NewEditBox(councilCard, 214, 30, L["Player name (First Last)"], addName))
+	frame.add = into("council", UI.NewButton(councilCard, 70, 30, L["Add"], function() addName(frame.input:GetText()) end))
 	frame.add:SetPoint("LEFT", frame.input, "RIGHT", 8, 0)
-	frame.addTarget = into("lm", UI.NewButton(frame, 110, 30, L["Add target"], addTarget))
+	frame.addTarget = into("council", UI.NewButton(councilCard, 100, 30, L["Add target"], addTarget))
 	frame.addTarget:SetPoint("LEFT", frame.add, "RIGHT", 8, 0)
-	y = y + 38
+	frame.feedback = under("council", councilCard, UI.NewText(councilCard, 11, c.danger), 0, 36)
 
-	frame.feedback = into("lm", UI.NewText(frame, 11, c.danger))
-	frame.feedback:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
-	y = y + 20
-
-	frame.listBox = into("lm", CreateFrame("Frame", nil, frame))
-	frame.listBox:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
-	frame.listBox:SetSize(WIDTH - 2 * PAD, LIST_ROWS * LIST_ROW_H + 4)
-	frame.listBox.bg = UI.NewFill(frame.listBox, 8)
-	UI.SetTextureColor(frame.listBox.bg, c.panel)
-	UI.AddBorder(frame.listBox, c.border, 1, 8)
+	frame.listBox = under("council", councilCard, CreateFrame("Frame", nil, councilCard), 0, 56)
+	frame.listBox:SetSize(CARD_W - 2 * CARD_PAD, listH)
+	frame.listBox.bg = UI.NewFill(frame.listBox, 6)
+	UI.SetTextureColor(frame.listBox.bg, c.bg)
+	UI.AddBorder(frame.listBox, c.border, 1, 6)
 
 	frame.empty = UI.NewText(frame.listBox, 12, c.muted, "CENTER")
 	frame.empty:SetPoint("CENTER", frame.listBox, "CENTER", 0, 0)
@@ -414,256 +680,47 @@ local function build()
 		end)
 		SettingsWindow.rows[i] = row
 	end
-	y = y + LIST_ROWS * LIST_ROW_H + 4 + 16
 
-	-- Loot master: loot -----------------------------------------------------------
-	divider(y, "lm")
-	y = y + 16
-	section("lm", y, L["Loot"])
-	y = y + 22
-	local thresholdLabel = into("lm", UI.NewText(frame, 12, c.text))
-	thresholdLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
-	thresholdLabel:SetText(L["Loot quality threshold"])
-	y = y + 22
-
-	-- A drop-down: the button shows the threshold, a click opens the list of qualities.
-	frame.qualityButton = into("lm", UI.NewButton(frame, WIDTH - 2 * PAD, 30, "", function()
-		SettingsWindow:OpenQualityMenu()
-	end))
-	frame.qualityButton:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
-	y = y + 42
-
-	frame.autoOpen = into("lm", UI.NewCheckbox(frame, L["Open the loot window when items arrive"], function(checked)
-		ALC.Settings:SetAutoOpenLootWindow(checked)
-	end))
-	frame.autoOpen:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
-	y = y + 29
-
-	frame.announce = into("lm", UI.NewCheckbox(frame, L["Announce awards"], function(checked)
-		ALC.Settings:SetAnnounceAwards(checked)
-	end, L["Say who got which item in raid chat (party chat in a party), and when a trade went through."]))
-	frame.announce:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
-	y = y + 29
-
-	frame.autoLoot = into("lm", UI.NewCheckbox(frame, L["Auto loot"], function(checked)
-		ALC.Settings:SetAutoLoot(checked)
-	end, L["When you open a corpse as master looter, the items over the threshold are given to you, so you can award them later without assigning each one."]))
-	frame.autoLoot:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
-	y = y + 29
-
-	frame.autoLootConfirm = into("lm", UI.NewCheckbox(frame, L["Ask first (\"Loot all?\")"], function(checked)
-		ALC.Settings:SetAutoLootConfirm(checked)
-	end, L["Show a question before the loot is taken for you."]))
-	frame.autoLootConfirm:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD + 24, -y)
-	y = y + 29
-
-	frame.autoTrade = into("lm", UI.NewCheckbox(frame, L["Auto trade"], function(checked)
-		ALC.Settings:SetAutoTrade(checked)
-	end, L["When you award an item, the trade window opens with the winner and the item is put in it. A winner who is far away is asked by whisper to come."]))
-	frame.autoTrade:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
-	y = y + 38
-
-	-- The disenchanter: gets the items nobody wants (the Disenchant button of the voting window).
-	local deLabel = into("lm", UI.NewText(frame, 12, c.text))
-	deLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
-	deLabel:SetText(L["Disenchanter: gets the items nobody wants"])
-	y = y + 22
-	frame.deInput = into("lm", UI.NewEditBox(frame, 200, 30, L["Player name (First Last)"], setDisenchanter))
-	frame.deInput:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
-	frame.deSet = into("lm", UI.NewButton(frame, 60, 30, L["Set"], function() setDisenchanter(frame.deInput:GetText()) end))
-	frame.deSet:SetPoint("LEFT", frame.deInput, "RIGHT", 8, 0)
-	frame.deTarget = into("lm", UI.NewButton(frame, 100, 30, L["Use target"], setDisenchanterTarget))
-	frame.deTarget:SetPoint("LEFT", frame.deSet, "RIGHT", 8, 0)
-	frame.deClear = into("lm", UI.NewButton(frame, 60, 30, L["Clear"], function() setDisenchanter("") end))
-	frame.deClear:SetPoint("LEFT", frame.deTarget, "RIGHT", 8, 0)
-	y = y + 36
-	frame.deCurrent = into("lm", UI.NewText(frame, 12, c.muted))
-	frame.deCurrent:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
-	y = y + 28
-
-	-- The guild bank: a character that keeps the items the guild stores (the Guild bank button of the voting window).
-	local bankLabel = into("lm", UI.NewText(frame, 12, c.text))
-	bankLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
-	bankLabel:SetText(L["Guild bank: gets the items the guild keeps"])
-	y = y + 22
-	frame.bankInput = into("lm", UI.NewEditBox(frame, 200, 30, L["Player name (First Last)"], setGuildBank))
-	frame.bankInput:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
-	frame.bankSet = into("lm", UI.NewButton(frame, 60, 30, L["Set"], function() setGuildBank(frame.bankInput:GetText()) end))
-	frame.bankSet:SetPoint("LEFT", frame.bankInput, "RIGHT", 8, 0)
-	frame.bankTarget = into("lm", UI.NewButton(frame, 100, 30, L["Use target"], setGuildBankTarget))
-	frame.bankTarget:SetPoint("LEFT", frame.bankSet, "RIGHT", 8, 0)
-	frame.bankClear = into("lm", UI.NewButton(frame, 60, 30, L["Clear"], function() setGuildBank("") end))
-	frame.bankClear:SetPoint("LEFT", frame.bankTarget, "RIGHT", 8, 0)
-	y = y + 36
-	frame.bankCurrent = into("lm", UI.NewText(frame, 12, c.muted))
-	frame.bankCurrent:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
-	y = y + 28
-
-	heights.lm = y + 40
-
-	-- Session: how a session runs -------------------------------------------------
-	y = contentY
-	section("session", y, L["Session"])
-	y = y + 24
-	-- A random roll per candidate and item, for the council to choose by when it cannot decide.
-	frame.rolls = into("session", UI.NewCheckbox(frame, L["Random rolls for the council"], function(checked)
-		ALC.Settings:SetRollsEnabled(checked)
-	end))
-	frame.rolls:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
-	y = y + 34
-
-	-- A warning when a session starts about players who did not reply to the version check (no addon)
-	frame.warnMissing = into("session", UI.NewCheckbox(frame, L["Warn about players without the addon"], function(checked)
-		ALC.Settings:SetWarnMissing(checked)
-	end, L["When a session starts, the chat says which players did not reply to the version check: they probably have no Arbiter Loot Council and cannot answer."]))
-	frame.warnMissing:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
-	y = y + 29
-
-	-- How far back the council sees what a player was awarded (the Recent column).
-	local recentLabel = into("session", UI.NewText(frame, 12, c.text))
-	recentLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
-	recentLabel:SetText(L["Recent awards: the council sees the last"])
-	y = y + 22
-	SettingsWindow.recentButtons = {}
-	local recentWidth = math.floor((WIDTH - 2 * PAD - 3 * 6) / 4)
-	for i, recentDays in ipairs({ 7, 14, 30, 90 }) do
-		local button = into("session", UI.NewButton(frame, recentWidth, 30, string.format(L["%d days"], recentDays), function()
-			ALC.Settings:SetRecentDays(recentDays)
-		end))
-		button:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD + (i - 1) * (recentWidth + 6), -y)
-		button.days = recentDays
-		SettingsWindow.recentButtons[i] = button
-	end
-	y = y + 42
-
-	-- The answer timer: when it runs out the response window closes for the players.
-	frame.timerCheck = into("session", UI.NewCheckbox(frame, "", function(checked)
-		ALC.Settings:SetTimerEnabled(checked)
-	end))
-	frame.timerCheck:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
-	y = y + 30
-	SettingsWindow.timerButtons = {}
-	local presets = ALC.Settings.TIMER_PRESETS
-	local timerWidth = math.floor((WIDTH - 2 * PAD - (#presets - 1) * 6) / #presets)
-	for i, seconds in ipairs(presets) do
-		local button = into("session", UI.NewButton(frame, timerWidth, 30, string.format(L["%d sec"], seconds), function()
-			ALC.Settings:SetTimerSeconds(seconds)
-		end))
-		button:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD + (i - 1) * (timerWidth + 6), -y)
-		button.seconds = seconds
-		SettingsWindow.timerButtons[i] = button
-	end
-	y = y + 38
-	paragraph("session", y, L["When the time is up the response window closes for everybody. The council can still vote and award."])
-	y = y + 40
-	y = extensionRows("lm", y, "session")
-	heights.session = y + 40
-
-	-- Council ---------------------------------------------------------------------
-	y = contentY
-	section("council", y, L["Voting window"])
-	y = y + 24
-	frame.keepOpen = into("council", UI.NewCheckbox(frame, L["Keep the voting window open after an award"], function(checked)
-		ALC.Settings:SetKeepCouncilOpen(checked)
-	end))
-	frame.keepOpen:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
-	y = y + 29
-	y = y + 8
-	frame.councilHint = paragraph("council", y, L["Sorting, compact rows and the number of rows are set in the voting window itself. Right-click a player there for more."])
-	y = y + 50
-
-	-- Who is on the council: the loot master decides, everybody on it can read the list here.
-	section("council", y, L["Who is on the council"])
-	y = y + 24
-	frame.councilNames = paragraph("council", y, "", c.text)
-	frame.councilNames:SetHeight(96)
+	-- The council of this raid: the list the loot master sent, which every council member can read.
+	local raidCard
+	raidCard, y = card("council", y, L["This raid's council"], L["The list the loot master sent with the last session."], nil, 56)
+	frame.councilNames = under("council", raidCard, UI.NewText(raidCard, 12, c.text))
+	frame.councilNames:SetWidth(CARD_W - 2 * CARD_PAD)
+	frame.councilNames:SetHeight(56)
+	frame.councilNames:SetWordWrap(true)
 	frame.councilNames:SetJustifyV("TOP")
-	y = y + 104
-	heights.council = y + 40
 
-	-- Everyone --------------------------------------------------------------------
-	y = contentY
-	section("everyone", y, L["Interface"])
-	y = y + 22
-	frame.minimap = into("everyone", UI.NewCheckbox(frame, L["Show the minimap button"], function(checked)
-		ALC.Settings:SetMinimapHidden(not checked)
-	end))
-	frame.minimap:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
-	y = y + 29
+	y = section("council", y + 10, L["Voting window"])
+	frame.keepOpen, y = switch("council", y, L["Keep the voting window open after an award"],
+		L["Sorting, compact rows and the number of rows are set in the voting window itself. Right-click a player there for more."],
+		function(checked) ALC.Settings:SetKeepCouncilOpen(checked) end)
+	frame.councilHint = frame.keepOpen.card.desc
 
-	frame.compact = into("everyone", UI.NewCheckbox(frame, L["Compact windows (smaller rows and buttons)"], function(checked)
-		ALC.Settings:SetCompact(checked)
-	end))
-	frame.compact:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
-	y = y + 29
+	y = section("council", y + 10, L["What the council sees"])
+	-- A random roll per candidate and item, for the council to choose by when it cannot decide.
+	frame.rolls, y = switch("council", y, L["Random rolls for the council"],
+		L["A roll for every answer, shown as its own column, for when the council cannot decide."],
+		function(checked) ALC.Settings:SetRollsEnabled(checked) end)
+	-- How far back the council sees what a player was awarded (the Recent column).
+	local recentCard
+	recentCard, y = card("council", y, L["Recent awards"], L["How far back the council sees what each player has won."], nil, 28)
+	local recentOptions = {}
+	for i, recentDays in ipairs({ 7, 14, 30, 90 }) do recentOptions[i] = { label = string.format(L["%d days"], recentDays), value = recentDays } end
+	SettingsWindow.recentButtons = choices("council", recentCard, recentOptions, function(days) ALC.Settings:SetRecentDays(days) end)
+	for _, button in ipairs(SettingsWindow.recentButtons) do button.days = button.value end
+	heights.council = y + 32
 
-	-- Pass by itself on items the class can never use (plate for a priest). Personal, off by default.
-	frame.autoPass = into("everyone", UI.NewCheckbox(frame, L["Pass automatically on items I can never use"], function(checked)
-		ALC.Settings:SetAutoPass(checked)
-	end, L["When a session starts, items your class can never wear or wield (plate for a priest, leather for a warlock, a two-handed sword for a rogue) get a Pass for you. You can still change the answer. Rings, necklaces, trinkets and cloaks are for everybody and are never passed."]))
-	frame.autoPass:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
-	y = y + 38
-
-	-- How big the windows are: smaller windows take less of the screen.
-	local sizeLabel = into("everyone", UI.NewText(frame, 12, c.text))
-	sizeLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
-	sizeLabel:SetText(L["Window size"])
-	y = y + 22
-	SettingsWindow.scaleButtons = {}
-	local scaleWidth = math.floor((WIDTH - 2 * PAD - 3 * 6) / 4)
-	for i, scale in ipairs(ALC.Settings.WINDOW_SCALES) do
-		local button = into("everyone", UI.NewButton(frame, scaleWidth, 30, string.format("%d%%", scale * 100), function()
-			ALC.Settings:SetWindowScale(scale)
-		end))
-		button:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD + (i - 1) * (scaleWidth + 6), -y)
-		button.scale = scale
-		SettingsWindow.scaleButtons[i] = button
-	end
-	y = y + 46
-
-	-- The font of every window; opens a list where each font is shown as itself.
-	local fontLabel = into("everyone", UI.NewText(frame, 12, c.text))
-	fontLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
-	fontLabel:SetText(L["Font"])
-	y = y + 20
-	frame.fontButton = into("everyone", UI.NewButton(frame, WIDTH - 2 * PAD, 30, "", function() SettingsWindow:ToggleFontMenu() end))
-	frame.fontButton:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
-	y = y + 46
-
-	-- Debug -----------------------------------------------------------------------
-	divider(y, "everyone")
-	y = y + 16
-	section("everyone", y, L["Debug"])
-	y = y + 22
-	frame.debug = into("everyone", UI.NewCheckbox(frame, L["Print debug messages in chat"], function(checked)
-		ALC.Settings:SetDebug(checked)
-	end))
-	frame.debug:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
-	y = y + 34
-	frame.showLog = into("everyone", UI.NewButton(frame, 120, 30, L["Show log"], function() ALC.Debug:Dump(30) end))
-	frame.showLog:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
-	frame.clearLog = into("everyone", UI.NewButton(frame, 120, 30, L["Clear log"], function()
-		ALC.Debug:Clear()
-		ALC:Print(L["Debug log cleared."])
-	end))
-	frame.clearLog:SetPoint("LEFT", frame.showLog, "RIGHT", 8, 0)
-	y = y + 46
-	y = extensionRows("everyone", y)
-	heights.everyone = y + 40
-	SettingsWindow.heights = heights
-
-	-- Buttons: the answers of the loot master's sessions ----------------------------
-	y = contentY
-	section("responses", y, L["Answer buttons"])
-	frame.responseCount = into("responses", UI.NewText(frame, 11, c.muted, "RIGHT"))
-	frame.responseCount:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PAD, -y)
-	y = y + 24
-	SettingsWindow.responseRows = {}
+	-- Responses: the answers every player gets, and how long they have --------------
+	y = section("responses", contentY, L["Answer buttons"])
 	local RESPONSE_ROW_H = 36
+	local buttonsCard
+	buttonsCard, y = card("responses", y, L["Answer buttons"], L["2 to 8 answers with your own names and colours. Pass is always last."], 50,
+		ALC.Constants.MAX_RESPONSES * RESPONSE_ROW_H + 30 + 6 + 14)
+	frame.responseCount = right("responses", buttonsCard, UI.NewText(buttonsCard, 11, c.muted, "RIGHT"))
+	SettingsWindow.responseRows = {}
 	for i = 1, ALC.Constants.MAX_RESPONSES do
-		local row = into("responses", CreateFrame("Frame", nil, frame))
-		row:SetSize(WIDTH - 2 * PAD, RESPONSE_ROW_H - 4)
-		row:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -(y + (i - 1) * RESPONSE_ROW_H))
+		local row = under("responses", buttonsCard, CreateFrame("Frame", nil, buttonsCard), 0, (i - 1) * RESPONSE_ROW_H)
+		row:SetSize(CARD_W - 2 * CARD_PAD, RESPONSE_ROW_H - 4)
 		row.index = i
 		row.up = UI.NewButton(row, 24, 30, "^", function() SettingsWindow:MoveResponse(i, -1) end)
 		row.up:SetPoint("LEFT", row, "LEFT", 0, 0)
@@ -689,24 +746,89 @@ local function build()
 		row.remove:SetScript("OnClick", function() SettingsWindow:RemoveResponse(i) end)
 		SettingsWindow.responseRows[i] = row
 	end
-	y = y + ALC.Constants.MAX_RESPONSES * RESPONSE_ROW_H + 4
-	frame.addResponse = into("responses", UI.NewButton(frame, 130, 30, L["Add button"], function() SettingsWindow:AddResponse() end))
-	frame.addResponse:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
-	frame.resetResponses = into("responses", UI.NewButton(frame, 160, 30, L["Back to the default five"], function() SettingsWindow:ResetResponses() end))
+	local listEnd = ALC.Constants.MAX_RESPONSES * RESPONSE_ROW_H
+	frame.addResponse = under("responses", buttonsCard, UI.NewButton(buttonsCard, 130, 30, L["Add button"], function() SettingsWindow:AddResponse() end), 0, listEnd)
+	frame.resetResponses = into("responses", UI.NewButton(buttonsCard, 160, 30, L["Back to the default five"], function() SettingsWindow:ResetResponses() end))
 	frame.resetResponses:SetPoint("LEFT", frame.addResponse, "RIGHT", 8, 0)
-	y = y + 40
-	frame.responseFeedback = into("responses", UI.NewText(frame, 11, c.danger))
-	frame.responseFeedback:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
-	y = y + 24
-	heights.responses = y + 40
+	frame.responseFeedback = under("responses", buttonsCard, UI.NewText(buttonsCard, 11, c.danger), 0, listEnd + 36)
 
-	frame.version = UI.NewText(frame, 11, c.muted)
-	frame.version:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", PAD, 16)
-	frame.version:SetText(string.format("Arbiter Loot Council %s \194\183 Allemano Addons", ALC.version or "?"))
-	frame:SetHeight(heights.everyone)
+	-- The answer timer: when it runs out the response window closes for the players.
+	y = section("responses", y + 10, L["Answer timer"])
+	local timerCard
+	timerCard, y = card("responses", y, L["Answer timer"],
+		L["When the time is up the response window closes for everybody. The council can still vote and award."], 44, 28)
+	frame.timerCheck = right("responses", timerCard, UI.NewCheckbox(timerCard, "", function(checked) ALC.Settings:SetTimerEnabled(checked) end))
+	frame.timerCheck:SetSize(44, 26)
+	frame.timerCheck.label:Hide() -- Refresh still writes "On, 60 sec" to it, for the tests and the tooltip-less card
+	local timerOptions = {}
+	for i, seconds in ipairs(ALC.Settings.TIMER_PRESETS) do timerOptions[i] = { label = string.format(L["%d sec"], seconds), value = seconds } end
+	SettingsWindow.timerButtons = choices("responses", timerCard, timerOptions, function(seconds) ALC.Settings:SetTimerSeconds(seconds) end)
+	for _, button in ipairs(SettingsWindow.timerButtons) do button.seconds = button.value end
+	heights.responses = y + 32
 
+	-- Session: how a session runs, and the award log ------------------------------
+	y = section("session", contentY, L["Session"])
+	-- A warning when a session starts about players who did not reply to the version check (no addon)
+	frame.warnMissing, y = switch("session", y, L["Warn about players without the addon"],
+		L["When a session starts, the chat says which players did not reply to the version check: they probably cannot answer."],
+		function(checked) ALC.Settings:SetWarnMissing(checked) end)
+	frame.askRaidUse, y = switch("session", y, L["Ask whether to use ALC in a raid"],
+		L["When you become the master looter, and each time you enter a raid instance as the loot master. Off: ALC is always used."],
+		function(checked) ALC.Settings:SetAskRaidUse(checked) end)
+	y = pageSections("session", y + 10)
+	heights.session = y + 22
+
+	-- Tools: share your settings, and find out what went wrong ----------------------
+	y = pageSections("tools", contentY)
+	y = section("tools", y, L["Troubleshooting"])
+	frame.debug, y = switch("tools", y, L["Print debug messages in chat"], L["What ALC does, as it happens. Mostly for bug reports."],
+		function(checked) ALC.Settings:SetDebug(checked) end)
+	local logCard
+	logCard, y = card("tools", y, L["Debug log"], L["The last 30 lines in chat, or empty the log."], 248)
+	frame.clearLog = right("tools", logCard, UI.NewButton(logCard, 120, 28, L["Clear log"], function()
+		ALC.Debug:Clear()
+		ALC:Print(L["Debug log cleared."])
+	end))
+	frame.showLog = into("tools", UI.NewButton(logCard, 120, 28, L["Show log"], function() ALC.Debug:Dump(30) end))
+	frame.showLog:SetPoint("RIGHT", frame.clearLog, "LEFT", -8, 0)
+	local versionCard
+	versionCard, y = card("tools", y, L["Who has the addon"], L["Every player in the group and the version of ALC they have."], 120)
+	frame.versions = right("tools", versionCard, UI.NewButton(versionCard, 120, 28, L["Show"], function()
+		if ALC.VersionWindow then ALC.VersionWindow:Toggle() end
+	end))
+	heights.tools = y + 32
+
+	-- Modules: a page per addon built on ALC (Soft Reserve), with the rows it added. The rows for everybody come
+	-- first, then the ones only used by the loot master under a heading of their own, both in the module's colour.
+	for _, page in ipairs(SettingsWindow.PAGES) do
+		if page.section then
+			local key = page.key
+			local color = UI.HexColor(page.section.color)
+			y = contentY
+			for _, tab in ipairs({ "everyone", "lm" }) do
+				local rows = {}
+				for _, row in ipairs(page.section.rows) do
+					if row.tab == tab then rows[#rows + 1] = row end
+				end
+				if #rows > 0 then
+					y = section(key, y, tab == "lm" and L["When you are the loot master"] or L["For you"], color)
+					y = extensionRows(key, rows, y, page.section.name)
+					y = y + 10
+				end
+			end
+			heights[key] = y + 22
+		end
+	end
+
+	SettingsWindow.heights = heights
+	frame:SetHeight(max(HEADER_H + heights.general, sidebarMinH))
+
+	-- The wheel scrolls the page; over the council list it scrolls the list.
 	frame:SetScript("OnMouseWheel", function(_, delta)
-		if activeTab ~= "lm" then return end -- only the council list scrolls
+		SettingsWindow:ScrollPage((pageOffset or 0) - delta * PAGE_STEP)
+	end)
+	frame.listBox:EnableMouseWheel(true)
+	frame.listBox:SetScript("OnMouseWheel", function(_, delta)
 		local count = #ALC.Settings:GetCouncil()
 		offset = max(0, min(offset - delta, max(0, count - LIST_ROWS)))
 		SettingsWindow:Refresh()
@@ -812,7 +934,7 @@ function SettingsWindow:ShowFontMenu()
 	fontChoices = UI.GetFontChoices()
 	fontOffset = 0
 	fontMenu:ClearAllPoints()
-	fontMenu:SetPoint("TOPLEFT", frame.fontButton, "BOTTOMLEFT", 0, -4)
+	fontMenu:SetPoint("TOPRIGHT", frame.fontButton, "BOTTOMRIGHT", 0, -4) -- the button sits on the right of its card
 	fontCatcher:Show()
 	fontMenu:Show()
 	refreshFontMenu()
@@ -931,10 +1053,31 @@ function SettingsWindow:SetTab(key)
 		button:SetSelected(button.tab == key)
 	end
 	for _, tab in ipairs(self.TABS) do
-		if tab.key == key then frame.tabNote:SetText(tab.note) end
+		if tab.key == key then
+			frame.pageTitle:SetText(tab.title or tab.label)
+			frame.tabNote:SetText(tab.note)
+		end
 	end
-	frame:SetHeight(self.heights[key])
-	if switched then self:HideFontMenu() end
+	-- As tall as the page needs, between the sidebar's height and MAX_H; a taller page scrolls.
+	local pageH = self.heights[key]
+	frame.page:SetHeight(pageH)
+	frame:SetHeight(min(max(HEADER_H + pageH, sidebarMinH), maxHeight()))
+	if switched then
+		self:HideFontMenu()
+		self:ScrollPage(0)
+	else
+		self:ScrollPage(pageOffset or 0)
+	end
+end
+
+-- Scrolls the page to `to` pixels from its top (kept inside the page) and moves the bar.
+function SettingsWindow:ScrollPage(to)
+	if not frame then return end
+	local visible = frame:GetHeight() - HEADER_H - 2
+	local total = self.heights and self.heights[activeTab] or visible
+	pageOffset = max(0, min(to or 0, max(0, total - visible)))
+	frame.scroll:SetVerticalScroll(pageOffset)
+	frame.pageBar:Update(total, visible, pageOffset)
 end
 
 function SettingsWindow:GetTab()
@@ -946,7 +1089,7 @@ function SettingsWindow:Refresh()
 	local settings = ALC.Settings
 
 	frame.role:SetText(ROLE_TEXT[currentRole()])
-	if not activeTab then activeTab = currentRole() end
+	if not activeTab then activeTab = FIRST_PAGE[currentRole()] end
 	self:SetTab(activeTab)
 
 	local council = settings:GetCouncil()
@@ -1021,6 +1164,7 @@ function SettingsWindow:Refresh()
 	frame.keepOpen:SetChecked(settings:GetKeepCouncilOpen())
 	frame.rolls:SetChecked(settings:GetRollsEnabled())
 	frame.warnMissing:SetChecked(settings:GetWarnMissing())
+	frame.askRaidUse:SetChecked(settings:GetAskRaidUse())
 	local disenchanter = settings:GetDisenchanter()
 	if deFeedback then
 		frame.deCurrent:SetTextColor(c.danger[1], c.danger[2], c.danger[3], 1)

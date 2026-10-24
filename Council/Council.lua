@@ -64,6 +64,7 @@ local function isMasterLoot(method)
 	local enum = Enum and Enum.LootMethod
 	return type(method) == "number" and enum ~= nil and method == enum.Masterlooter
 end
+Council.IsMasterLootMethod = isMasterLoot -- for RaidUse
 
 -- The party unit for a roster name. On Forever the roster reports the full
 -- "First Last"; a bare first name is accepted as a fallback.

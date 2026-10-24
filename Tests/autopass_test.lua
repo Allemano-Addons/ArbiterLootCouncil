@@ -125,7 +125,7 @@ return function(check, H)
 	run()
 	check("a new session forgets the old marks", Responses:GetAutoPassed(4) == nil)
 
-	-- The settings window has the option on the Everyone tab
+	-- The settings window has the option on the General page
 	check("the settings window builds with it", pcall(function() ALC.SettingsWindow:Show() end))
-	check("the option is a switch that follows the setting", ALC.SettingsWindow.groups.everyone ~= nil)
+	check("the option is a switch on the General page", ALC.SettingsWindow.groups.general ~= nil and ALC.SettingsWindow.frame.autoPass ~= nil)
 end

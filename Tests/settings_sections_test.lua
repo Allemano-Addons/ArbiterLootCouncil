@@ -55,22 +55,39 @@ return function(check, H)
 			if widget.label and widget.label.GetText and widget.label:GetText() == text then return widget end
 		end
 	end
-	local tooltipBox = find("everyone", "Show who reserved it")
-	local keep10 = find("everyone", "10")
-	local clearButton = find("everyone", "Clear saved results")
-	local deBox = find("session", "Hand it to the disenchanter")
-	local winners = find("session", "Winners")
-	check("the rows are there on the tabs they named", tooltipBox and keep10 and clearButton and deBox and winners)
+	local tooltipBox = find("module:ASR", "Show who reserved it")
+	local keep10 = find("module:ASR", "10")
+	local clearButton = find("module:ASR", "Clear saved results")
+	local deBox = find("module:ASR", "Hand it to the disenchanter")
+	local winners = find("module:ASR", "Winners")
+	check("the rows are all on the module's own page", tooltipBox and keep10 and clearButton and deBox and winners)
+	local modulePage, entry, awardLog, profile
+	for _, page in ipairs(Win.PAGES) do
+		if page.key == "module:ASR" then modulePage = page end
+	end
+	for _, button in ipairs(Win.tabButtons) do
+		if button.tab == "module:ASR" then entry = button end
+	end
+	check("the module has a page in the sidebar, under Modules, before Tools",
+		modulePage and modulePage.group == "modules" and entry and entry.label:GetText() == "Soft Reserve"
+		and Win.PAGES[#Win.PAGES].key == "tools")
+	for _, widget in ipairs(Win.groups.session) do
+		if widget.label and widget.label.GetText and widget.label:GetText() == "Never" then awardLog = widget end
+	end
+	for _, widget in ipairs(Win.groups.tools) do
+		if widget.label and widget.label.GetText and widget.label:GetText() == "Copy my settings" then profile = widget end
+	end
+	check("ALC's own sections are on the pages they name: the award log on Session, Share settings on Tools", awardLog and profile)
 	check("a check shows what the addon says", tooltipBox.checked == true and deBox.checked == false)
-	check("a choice marks the current value", find("everyone", "15").selected == true and keep10.selected == false and find("session", "Off").selected == true)
+	check("a choice marks the current value", find("module:ASR", "15").selected == true and keep10.selected == false and find("module:ASR", "Off").selected == true)
 
 	-- Using them
 	tooltipBox.scripts.OnClick(tooltipBox)
 	check("clicking a check tells the addon", state.tooltip == false)
 	keep10.scripts.OnClick(keep10)
-	check("clicking a choice sets the value and moves the mark", state.keep == 10 and keep10.selected == true and find("everyone", "15").selected == false)
+	check("clicking a choice sets the value and moves the mark", state.keep == 10 and keep10.selected == true and find("module:ASR", "15").selected == false)
 	winners.scripts.OnClick(winners)
-	check("a choice on the loot master tab works too", state.announce == "winners" and winners.selected == true and find("session", "Off").selected == false)
+	check("a choice on the loot master tab works too", state.announce == "winners" and winners.selected == true and find("module:ASR", "Off").selected == false)
 	H.deferTimers = true -- the "click again" waits four seconds before it gives up
 	H.timers = {}
 	clearButton.scripts.OnClick(clearButton)
@@ -82,11 +99,11 @@ return function(check, H)
 	H.deferTimers = false
 	check("an unanswered question goes away by itself", clearButton.label:GetText() == "Clear saved results" and state.cleared == 1)
 
-	-- The tabs show only their own rows
-	Win:SetTab("everyone")
-	check("the everyone tab shows its rows and not the loot master's", tooltipBox:IsShown() and not deBox:IsShown())
-	Win:SetTab("session")
-	check("the loot master tab shows its rows and not the other's", deBox:IsShown() and not tooltipBox:IsShown())
+	-- A page shows only its own rows
+	Win:SetTab("module:ASR")
+	check("the module page shows the rows for everybody and for the loot master", tooltipBox:IsShown() and deBox:IsShown())
+	Win:SetTab("general")
+	check("another page hides them", not deBox:IsShown() and not tooltipBox:IsShown())
 
 	-- A row that fails does not break the window
 	ALC.RegisterSettingsSection({ id = "BAD", name = "Bad", rows = { row({ label = "Broken", get = function() error("boom") end }) } })

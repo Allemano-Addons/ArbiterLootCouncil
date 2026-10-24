@@ -116,6 +116,7 @@ dofile("Tests/secret_test.lua")(check, H)
 dofile("Tests/polish_test.lua")(check, H)
 dofile("Tests/transfers_test.lua")(check, H)
 dofile("Tests/srsession_test.lua")(check, H)
+dofile("Tests/raiduse_test.lua")(check, H)
 
 print(string.format("%d passed, %d failed", passed, failed))
 os.exit(failed == 0 and 0 or 1)

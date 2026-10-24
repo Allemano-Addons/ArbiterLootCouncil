@@ -868,7 +868,7 @@ end
 function Awards:Init()
 	-- Settings (Loot master): when to be reminded to export the log, and a way to trim it
 	ALC.RegisterSettingsSection({
-		id = "ALC-award-log", name = L["Award log"],
+		id = "ALC-award-log", name = L["Award log"], page = "session",
 		rows = {
 			{ tab = "lm", type = "choice", label = L["Remind me to export the award log at"],
 				options = { { label = L["Never"], value = 0 }, { label = "500", value = 500 }, { label = "1000", value = 1000 }, { label = "2000", value = 2000 } },

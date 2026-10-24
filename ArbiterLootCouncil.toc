@@ -22,6 +22,7 @@ Core\Probe.lua
 Comm\Protocol.lua
 Comm\Comm.lua
 Council\Council.lua
+Council\RaidUse.lua
 Sessions\Sessions.lua
 Sessions\TestMode.lua
 LootDetection\LootDetection.lua
