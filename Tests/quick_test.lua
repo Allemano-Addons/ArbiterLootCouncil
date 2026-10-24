@@ -210,7 +210,7 @@ return function(check, H)
 	local SW = ALC.SettingsWindow
 	SW:Show()
 	SW:SetTab("everyone")
-	local sframe = SW.rows[1].parent.parent
+	local sframe = SW.frame
 	check("Everyone has a checkbox for compact windows", sframe.compact ~= nil and sframe.compact:IsShown() and sframe.compact.checked == false)
 	sframe.compact.scripts.OnClick(sframe.compact)
 	check("it sets the setting", Settings:GetCompact() == true)

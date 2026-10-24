@@ -320,7 +320,7 @@ return function(check, H)
 	local SW = ALC.SettingsWindow
 	SW:Show()
 	SW:SetTab("responses")
-	local frame = SW.responseRows[1].parent
+	local frame = SW.frame
 	local rows = SW.responseRows
 	check("the tab lists the three buttons", rows[1]:IsShown() and rows[3]:IsShown() and not rows[4]:IsShown() and rows[1].edit:GetText() == "Main spec" and rows[3].edit:GetText() == "No thanks")
 	check("the count is shown", frame.responseCount:GetText() == "3/8")

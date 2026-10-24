@@ -54,7 +54,7 @@ return function(check, H)
 	ALC.Council.AmLootMaster = function() return false end
 	ALC.Council.AmCouncil = function() return false end
 	Win:Show()
-	frame = Win.rows[1].parent.parent
+	frame = Win.frame
 	check("the window opens", Win:IsShown() and #Win.rows == 3)
 	check("the council list shows the member", Win.rows[1].name:GetText() == "Veyra Moo" and Win.rows[1]:IsShown() and not Win.rows[2]:IsShown())
 	check("the count is shown", frame.count:GetText() == "1/39")
@@ -396,7 +396,7 @@ return function(check, H)
 	H.slash("minimap")
 	check("and shows it again", button:IsShown() == true and Settings:IsMinimapHidden() == false)
 	Win:Show()
-	frame = Win.rows[1].parent.parent
+	frame = Win.frame
 	frame.minimap.scripts.OnClick(frame.minimap)
 	check("the checkbox in settings hides it", button:IsShown() == false and frame.minimap:IsChecked() == false)
 	H.slash("minimap")
