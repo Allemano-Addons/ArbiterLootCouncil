@@ -772,6 +772,9 @@ local function build()
 	frame.warnMissing, y = switch("session", y, L["Warn about players without the addon"],
 		L["When a session starts, the chat says which players did not reply to the version check: they probably cannot answer."],
 		function(checked) ALC.Settings:SetWarnMissing(checked) end)
+	frame.askRaidUse, y = switch("session", y, L["Ask whether to use ALC in a raid"],
+		L["When you become the master looter, and each time you enter a raid instance as the loot master. Off: ALC is always used."],
+		function(checked) ALC.Settings:SetAskRaidUse(checked) end)
 	y = pageSections("session", y + 10)
 	heights.session = y + 22
 
@@ -1161,6 +1164,7 @@ function SettingsWindow:Refresh()
 	frame.keepOpen:SetChecked(settings:GetKeepCouncilOpen())
 	frame.rolls:SetChecked(settings:GetRollsEnabled())
 	frame.warnMissing:SetChecked(settings:GetWarnMissing())
+	frame.askRaidUse:SetChecked(settings:GetAskRaidUse())
 	local disenchanter = settings:GetDisenchanter()
 	if deFeedback then
 		frame.deCurrent:SetTextColor(c.danger[1], c.danger[2], c.danger[3], 1)

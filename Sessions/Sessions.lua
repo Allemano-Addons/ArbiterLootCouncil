@@ -342,6 +342,9 @@ function Sessions:StartItems(list, options)
 	if not name or not ALC.Council:IsLootMaster(name) then
 		return false, L["You are not the loot master."]
 	end
+	if not ALC.RaidUse:IsActive() then
+		return false, L["Arbiter Loot Council is off for this raid. /alc on turns it on again."]
+	end
 	if (session and not session.finishing) or starting then
 		return false, L["A session is already active. Cancel it first with /alc cancel."]
 	end

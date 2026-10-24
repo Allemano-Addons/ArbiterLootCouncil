@@ -595,6 +595,7 @@ end
 
 function LootDetection:OnLootOpened()
 	if not IsInGroup() or not ALC.Council:AmLootMaster() then return end
+	if not ALC.RaidUse:IsActive() then return end -- the loot master said No to ALC in this raid
 	local threshold = ALC.Settings:GetQualityThreshold()
 	local fresh, hidden = {}, 0
 	for slot = 1, GetNumLootItems() do
