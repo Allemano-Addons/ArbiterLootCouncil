@@ -49,6 +49,26 @@ return function(check, H)
 	LD:OnLootOpened()
 	check("and corpses are read again", read == true)
 
+	-- In a party (not a raid) the master looter is asked too: ALC works in parties as well.
+	H.inRaid, H.inGroup = false, true
+	masterLooter = "Ashvane Moo"
+	RU:OnLootMethodChanged()
+	masterLooter = "Tester Moo"
+	RU:OnLootMethodChanged()
+	check("in a party, becoming the master looter asks too", #shown == 3)
+	H.inRaid = true
+	shown[#shown] = nil -- the rest counts as before
+
+	-- Outside a group nothing is asked.
+	H.inRaid, H.inGroup = false, false
+	RU:OnLootMethodChanged()
+	check("outside a group nothing is asked", #shown == 2)
+	H.inRaid = true
+	masterLooter = nil
+	RU:OnLootMethodChanged() -- back in a raid with master loot off: no question
+	check("master loot off asks nothing", #shown == 2)
+	masterLooter = "Tester Moo" -- as before, without a new event
+
 	-- Entering a raid instance
 	zone = { true, "raid" }
 	RU:OnZone(false)

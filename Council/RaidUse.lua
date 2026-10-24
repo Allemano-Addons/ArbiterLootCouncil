@@ -1,8 +1,8 @@
 -- RaidUse: whether the loot master uses Arbiter Loot Council in this raid.
 --
--- A box asks "Use Arbiter Loot Council in this raid?" when master loot is set and you become the master looter (again
--- each time the master looter changes to you), and each time you enter a raid instance as the loot master (the raid
--- leader when master loot is off). No pauses ALC for you as loot master: nothing goes on the loot list, no auto loot,
+-- A box asks "Use Arbiter Loot Council in this raid?" when master loot is set and you become the master looter, in a raid
+-- or a party (again each time the master looter changes to you), and each time you enter a raid instance as the loot
+-- master (the leader when master loot is off). No pauses ALC for you as loot master: nothing goes on the loot list, no auto loot,
 -- no sessions. Raiders are not affected: they only answer sessions, and none start. The answer lasts until you leave
 -- the group or are asked again, also over a /reload; /alc on and /alc off change it by hand.
 --
@@ -11,6 +11,7 @@
 
 local ALC = ALC
 local L = ALC.L
+local Debug = ALC.Debug
 local strlower = string.lower
 
 local RaidUse = {}
@@ -89,19 +90,29 @@ local function masterLooter()
 	return ALC.Council:FindMasterLooter(partyMaster, raidMaster)
 end
 
--- The loot method or the master looter changed: ask when it is now us. The first look after login or a /reload
--- only remembers who it is.
+-- The loot method or the master looter changed: ask when it is now us, in a raid or a party (ALC works in both).
+-- The first look after login or a /reload only remembers who it is. Every step is logged (/alc debug log).
 function RaidUse:OnLootMethodChanged()
-	if not IsInRaid() then
+	if not IsInGroup() then
 		lastMasterLooter = nil
+		Debug:Log("RaidUse", "loot method changed outside a group: no question")
 		return
 	end
 	local current = masterLooter()
 	local was = lastMasterLooter
 	lastMasterLooter = current
-	if was == false or not current then return end
-	if was and ALC:SameName(current, was) then return end
-	if ALC:SameName(current, ALC:PlayerName()) then self:Ask() end
+	if was == false then
+		Debug:Log("RaidUse", "first look: master looter is %s", tostring(current))
+	elseif not current then
+		Debug:Log("RaidUse", "master loot is off: no question")
+	elseif was and ALC:SameName(current, was) then
+		Debug:Log("RaidUse", "master looter is still %s: no question", current)
+	elseif not ALC:SameName(current, ALC:PlayerName()) then
+		Debug:Log("RaidUse", "master looter is now %s, not you: no question", current)
+	else
+		Debug:Log("RaidUse", "you are the master looter now (was %s)", tostring(was))
+		self:Ask()
+	end
 end
 
 -- A new zone: ask when we have just entered a raid instance as the loot master. A /reload inside it does not ask.
@@ -112,12 +123,29 @@ function RaidUse:OnZone(isReload)
 	local was = inRaidInstance
 	inRaidInstance = now
 	if isReload or not now or was then return end
-	if IsInRaid() and ALC.Council:AmLootMaster() then self:Ask() end
+	if not IsInGroup() then
+		Debug:Log("RaidUse", "entered a raid instance alone: no question")
+	elseif not ALC.Council:AmLootMaster() then
+		Debug:Log("RaidUse", "entered a raid instance, the loot master is %s: no question", tostring(ALC.Council:GetLootMaster()))
+	else
+		Debug:Log("RaidUse", "entered a raid instance as the loot master")
+		self:Ask()
+	end
+end
+
+-- /alc debug raiduse: what RaidUse sees right now.
+function RaidUse:Report()
+	local method = ALC.Council.GetLootMethodInfo()
+	ALC:Print("ALC in this raid: %s (ask: %s)", self:IsActive() and "on" or "off", tostring(ALC.Settings:GetAskRaidUse()))
+	ALC:Print("group=%s raid=%s, loot method=%s, master loot=%s, master looter=%s", tostring(IsInGroup()), tostring(IsInRaid()),
+		tostring(method), tostring(ALC.Council.IsMasterLootMethod(method)), tostring(masterLooter()))
+	ALC:Print("loot master=%s (you: %s), last master looter seen=%s, in a raid instance=%s",
+		tostring(ALC.Council:GetLootMaster()), tostring(ALC:PlayerName()), tostring(lastMasterLooter), tostring(inRaidInstance))
 end
 
 function RaidUse:Init()
 	self:RegisterEvent("PLAYER_ENTERING_WORLD", function(_, _, isReloadingUi)
-		if lastMasterLooter == false then lastMasterLooter = IsInRaid() and masterLooter() or nil end
+		if lastMasterLooter == false then lastMasterLooter = IsInGroup() and masterLooter() or nil end
 		RaidUse:OnZone(isReloadingUi)
 	end)
 	self:RegisterEvent("ZONE_CHANGED_NEW_AREA", function() RaidUse:OnZone(false) end)
@@ -130,5 +158,6 @@ function RaidUse:Init()
 	end)
 end
 
+ALC.Commands:RegisterDebug("raiduse", function() RaidUse:Report() end)
 ALC.Commands:Register("on", function() RaidUse:Set(true) end, L["use ALC in this raid (after answering No)"])
 ALC.Commands:Register("off", function() RaidUse:Set(false) end, L["do not use ALC in this raid: no loot list and no sessions for you as loot master"])
