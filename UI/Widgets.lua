@@ -16,6 +16,9 @@ UI.color = {
 	gold = { 0.90, 0.66, 0.24, 1 },
 	goldTint = { 0.20, 0.15, 0.07, 1 },
 	danger = { 0.85, 0.32, 0.30, 1 },
+	-- The addon's own colour (ALC green, 45C97E): headings in the settings. One place to change it, so the look
+	-- can be made a choice later.
+	accent = { 0.271, 0.788, 0.494, 1 },
 }
 
 -- Textures shipped with the addon (Media/). Paths take no file extension.
