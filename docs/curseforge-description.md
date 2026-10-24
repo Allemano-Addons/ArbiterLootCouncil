@@ -2,7 +2,7 @@
 
 **Run a loot council in WoW Forever without the spreadsheet.** ALC takes an item from the boss's corpse to the raider who deserves it: the loot master starts a session, every raider answers in a small window, the council votes, one click awards the item, and the trade is queued and logged.
 
-> **Beta (0.7.0-beta).** ALC is being tested in real raids. **Everybody in the raid who should answer or vote should have the same version.** When a session starts, ALC tells the loot master in chat who did not reply to the version check, and `/alc versions` shows who has which version.
+> **Beta (0.8.0-beta).** ALC is being tested in real raids. **Everybody in the raid who should answer or vote should have the same version.** When a session starts, ALC tells the loot master in chat who did not reply to the version check, and `/alc versions` shows who has which version.
 
 ## How a loot decision works in ALC
 
@@ -33,12 +33,13 @@
 - **Items given back:** when a winner trades an item back to you, the Loot window offers to put it in the list again.
 - **Answer timer** (30 to 300 seconds) that closes the answer window by itself.
 - **Announce awards** in raid or party chat (can be turned off).
-- **Share your settings:** another player takes over as loot master for a week? Settings > Session > Share settings > **Copy my settings** gives a line of text (council, threshold, answer buttons, timer, disenchanter, guild bank and more) to send on Discord. They paste it under **Import settings**, see exactly what would change, and apply it, with **Undo** if they change their mind. Windows, font and personal choices are not part of it.
+- **Share your settings:** another player takes over as loot master for a week? Settings > Tools > Share settings > **Copy my settings** gives a line of text (council, threshold, answer buttons, timer, disenchanter, guild bank and more) to send on Discord. They paste it under **Import settings**, see exactly what would change, and apply it, with **Undo** if they change their mind. Windows, font and personal choices are not part of it.
 - **Recovery:** if the loot master or a raider reloads the UI during a session, ALC gets the session back from the loot master.
+- **Use ALC in this raid?** When master loot is set and you become the master looter, and each time you enter a raid instance as the loot master, ALC asks. **No** keeps it quiet for you as loot master (no loot list, no auto loot, no sessions) until you leave the group; raiders are not affected. `/alc on` and `/alc off` change it by hand, and the question can be turned off in Settings > Session.
 
 ## For every raider
 
-- **Auto-pass** (optional, off by default): Settings > Everyone, "Pass automatically on items I can never use". Plate for a priest or a two-handed sword for a rogue gets a Pass for you, marked "Auto-passed", and you can still change it. Rings, necklaces, trinkets and cloaks are never passed.
+- **Auto-pass** (optional, off by default): Settings > General, "Pass automatically on items I can never use". Plate for a priest or a two-handed sword for a rogue gets a Pass for you, marked "Auto-passed", and you can still change it. Rings, necklaces, trinkets and cloaks are never passed.
 - **Answered rows stand out** with a bar and a tint in the colour of your answer, so with many items you see at a glance what is left.
 - **Item tooltips say who won it:** for a week, an awarded item's tooltip (bags, chat links, the loot window) says "ALC: awarded to X (BiS)" and what became of it.
 
@@ -56,7 +57,14 @@ Install **Arbiter Soft Reserve** (it needs ALC) and every item in the Loot windo
 
 ## Settings
 
-`/alc settings`, the minimap button or the launcher. Five tabs: **Everyone** (window size, font, auto-pass), **Council**, **Loot** (council list, loot threshold, auto loot and trade, disenchanter, guild bank), **Session** (rolls, answer timer, recent awards, the award log, share settings) and **Buttons** (your own answers).
+`/alc settings`, the minimap button or the launcher. The pages are in a sidebar, and every setting is a card with a short description:
+
+- **General** (auto-pass, the minimap button) and **Appearance** (compact windows, window size, font), for everybody
+- for the loot master: **Master Loot** (auto loot, loot threshold, auto trade, announcing, disenchanter, guild bank), **Council** (the council list, rolls, recent awards), **Responses** (your own answer buttons and the answer timer) and **Session** (the warning about players without the addon, the raid question, the award log)
+- **Tools**: share your settings, the debug log and who has the addon
+- an addon built on ALC, like Arbiter Soft Reserve, gets a page of its own under **Modules**
+
+The window opens on the page for your role.
 
 ## Commands
 
@@ -69,6 +77,7 @@ Install **Arbiter Soft Reserve** (it needs ALC) and every item in the Loot windo
 - `/alc history` shows the awards, `/alc trades` the items still to be traded, `/alc results` the rolls
 - `/alc profile` copies, imports or undoes shared settings
 - `/alc versions` shows who in the group has the addon and which version
+- `/alc on` and `/alc off` use ALC in this raid or not
 - `/alc debug log` for troubleshooting
 
 ## Installing manually (WoW Forever)

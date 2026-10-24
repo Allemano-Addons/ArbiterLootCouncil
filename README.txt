@@ -1,4 +1,4 @@
-Arbiter Loot Council (ALC) 0.7.0-beta - test build
+Arbiter Loot Council (ALC) 0.8.0-beta - test build
 NOTE: this version cannot talk to 0.1.x. Everybody in the raid needs the same version;
 a player with the old one is named in chat when the addon notices.
 Part of Allemano Addons. For WoW Forever.
@@ -27,6 +27,7 @@ USEFUL
   /alc settings   council list, loot quality, font, and more
   /alc history    awards so far        /alc trades   items still to be traded
   /alc debug versions   see who has the addon and which version
+  /alc on, /alc off     use ALC in this raid or not (the loot master is asked when master loot is set)
 
 SOMETHING WRONG?
   Tell us what you did and send:
