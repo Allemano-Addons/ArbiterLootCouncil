@@ -83,7 +83,19 @@ return function(check, H)
 	tabButtons[7].scripts.OnClick(tabButtons[7])
 	check("Tools has the debug settings", Win:GetTab() == "tools" and shown(frame.debug) and not shown(frame.input))
 	tabButtons[4].scripts.OnClick(tabButtons[4])
-	check("each page is its own height", Win.heights.lootmaster ~= Win.heights.council and frame:GetHeight() >= Win.heights.council)
+	check("each page is its own height, and the window has a ceiling", Win.heights.lootmaster ~= Win.heights.council
+		and frame:GetHeight() > 0 and frame:GetHeight() <= 640)
+	-- A page taller than the window scrolls with the wheel, and goes back to the top on another page.
+	Win:SetTab("lootmaster")
+	local tall = Win.heights.lootmaster + 84 > frame:GetHeight()
+	frame.scripts.OnMouseWheel(frame, -1)
+	check("the wheel scrolls a tall page", tall and frame.pageBar.offset == 40)
+	for _ = 1, 100 do frame.scripts.OnMouseWheel(frame, -1) end
+	check("and stops at its end", frame.pageBar.offset == Win.heights.lootmaster - (frame:GetHeight() - 84 - 2))
+	Win:SetTab("general")
+	Win:SetTab("lootmaster")
+	check("a page opens at its top", frame.pageBar.offset == 0)
+	Win:SetTab("council")
 	Win:SetTab("nonsense")
 	check("an unknown page is ignored", Win:GetTab() == "council")
 	ALC.Council.AmCouncil = function() return true end
@@ -139,11 +151,11 @@ return function(check, H)
 	for i = 1, 8 do Settings:AddCouncilMember("Extra" .. string.rep("z", i) .. " Moo") end
 	check("a long list shows three rows", Win.rows[3]:IsShown() and Win.rows[4] == nil and #Settings:GetCouncil() == 12)
 	local first = Win.rows[1].name:GetText()
-	frame.scripts.OnMouseWheel(frame, -1)
+	frame.listBox.scripts.OnMouseWheel(frame.listBox, -1) -- the wheel over the list scrolls the list
 	check("scrolling moves the list", Win.rows[1].name:GetText() ~= first)
-	for _ = 1, 20 do frame.scripts.OnMouseWheel(frame, -1) end
+	for _ = 1, 20 do frame.listBox.scripts.OnMouseWheel(frame.listBox, -1) end
 	check("scrolling stops at the end", Win.rows[3].name:GetText() == Settings:GetCouncil()[12])
-	for _ = 1, 20 do frame.scripts.OnMouseWheel(frame, 1) end
+	for _ = 1, 20 do frame.listBox.scripts.OnMouseWheel(frame.listBox, 1) end
 	check("and at the top", Win.rows[1].name:GetText() == first)
 
 	-- The council list changes from outside (a slash command): the window follows.

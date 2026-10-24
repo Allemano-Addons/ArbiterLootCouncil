@@ -15,6 +15,7 @@ local WIDTH, PAD = 480, 22
 local SIDEBAR_W = 176
 local HEADER_H = 84          -- the page header on the right: the tab's name and what it is for
 local NAV_H, NAV_GAP = 34, 4
+local MAX_H, PAGE_STEP = 640, 40 -- a page taller than the window allows scrolls, 40 px per notch of the wheel
 
 local LIST_ROWS, LIST_ROW_H = 3, 26 -- the council list shows three names; the mouse wheel scrolls the rest
 
@@ -44,6 +45,14 @@ local frame, offset = nil, 0
 local feedback -- the last message about the council list, shown under the input
 local activeTab -- the key of the page that is shown; nil until the window is first opened
 local sidebarMinH = 400 -- the window is never lower than its sidebar; set when the sidebar is built
+local pageOffset = 0    -- how far the page is scrolled, in pixels
+
+-- The tallest the window may be: MAX_H, or less on a small screen (the window follows the Window size setting).
+local function maxHeight()
+	local screen = UIParent and UIParent.GetHeight and UIParent:GetHeight()
+	if type(screen) ~= "number" or screen <= 0 then return MAX_H end
+	return min(MAX_H, screen * 0.9 / ((frame and frame:GetScale()) or 1))
+end
 local c = UI.color
 
 -- The pages, by what you want to set (not by who you are). `group` puts a heading over the page in the sidebar:
@@ -381,14 +390,30 @@ local function build()
 		return y + 22
 	end
 	divider(HEADER_H)
-	local contentY = HEADER_H + 20
+
+	-- Under the page header the settings scroll: from here on `body` is the scroll child, the page itself, and
+	-- every y is measured from its top. The mouse wheel and the bar on the right move it when it is taller than
+	-- the window can be (MAX_H).
+	local scroll = CreateFrame("ScrollFrame", nil, frame.body)
+	scroll:SetPoint("TOPLEFT", frame.body, "TOPLEFT", 0, -(HEADER_H + 1))
+	scroll:SetPoint("BOTTOMRIGHT", frame.body, "BOTTOMRIGHT", 0, 1)
+	frame.scroll = scroll
+	body = CreateFrame("Frame", nil, scroll)
+	body:SetSize(WIDTH, 100)
+	scroll:SetScrollChild(body)
+	frame.page = body
+	frame.pageBar = UI.NewScrollBar(frame.body, function(newOffset) SettingsWindow:ScrollPage(newOffset) end)
+	frame.pageBar:SetPoint("TOPRIGHT", frame.body, "TOPRIGHT", -7, -(HEADER_H + 8))
+	frame.pageBar:SetPoint("BOTTOMRIGHT", frame.body, "BOTTOMRIGHT", -7, 8)
+	frame.pageBar:Hide()
+	local contentY = 20
 
 	-- One setting is one card: a title and a short description on the left, the control on the right (`rightW`
 	-- keeps the text clear of it), or controls under the text (`below`: their height). Returns the card and the y
 	-- of the next card.
 	local CARD_W, CARD_PAD, CARD_GAP = WIDTH - 2 * PAD, 14, 8
 	local function lines(text, width) -- about how many lines an 11 px text wraps to
-		return max(1, math.ceil(#text * 5.4 / width))
+		return max(1, math.ceil(#text * 4.8 / width))
 	end
 	local function card(key, y, title, desc, rightW, below)
 		local f = into(key, CreateFrame("Frame", nil, body))
@@ -407,7 +432,10 @@ local function build()
 			f.desc:SetWidth(width)
 			f.desc:SetWordWrap(true)
 			f.desc:SetText(desc)
-			textH = textH + 4 + 14 * lines(desc, width)
+			-- The real height of the wrapped text when the game can tell (it can once the font is set), else a guess.
+			local measured = f.desc:GetStringHeight()
+			local descH = (type(measured) == "number" and measured > 0 and measured < 120) and math.ceil(measured) or 14 * lines(desc, width)
+			textH = textH + 4 + descH
 		end
 		f.headH = 12 + textH + 12
 		local h = f.headH + (below and below + 12 or 0)
@@ -535,12 +563,12 @@ local function build()
 	local function nameCard(key, y, title, desc, onSet, onTarget, fields)
 		local f
 		f, y = card(key, y, title, desc, nil, 30 + 8 + 14)
-		local input = under(key, f, UI.NewEditBox(f, 190, 30, L["Player name (First Last)"], onSet))
-		local set = into(key, UI.NewButton(f, 60, 30, L["Set"], function() onSet(input:GetText()) end))
+		local input = under(key, f, UI.NewEditBox(f, 170, 30, L["Player name (First Last)"], onSet))
+		local set = into(key, UI.NewButton(f, 56, 30, L["Set"], function() onSet(input:GetText()) end))
 		set:SetPoint("LEFT", input, "RIGHT", 8, 0)
-		local target = into(key, UI.NewButton(f, 100, 30, L["Use target"], onTarget))
+		local target = into(key, UI.NewButton(f, 96, 30, L["Use target"], onTarget))
 		target:SetPoint("LEFT", set, "RIGHT", 8, 0)
-		local clear = into(key, UI.NewButton(f, 60, 30, L["Clear"], function() onSet("") end))
+		local clear = into(key, UI.NewButton(f, 56, 30, L["Clear"], function() onSet("") end))
 		clear:SetPoint("LEFT", target, "RIGHT", 8, 0)
 		local current = under(key, f, UI.NewText(f, 12, c.muted), 0, 38)
 		frame[fields .. "Input"], frame[fields .. "Set"], frame[fields .. "Target"] = input, set, target
@@ -613,7 +641,7 @@ local function build()
 	councilCard, y = card("council", y, L["Council members"],
 		L["Set before the raid. The loot master is always on the council. Changes apply to the next session."], 50, 30 + 6 + 14 + 6 + listH)
 	frame.count = right("council", councilCard, UI.NewText(councilCard, 11, c.muted, "RIGHT"))
-	frame.input = under("council", councilCard, UI.NewEditBox(councilCard, 230, 30, L["Player name (First Last)"], addName))
+	frame.input = under("council", councilCard, UI.NewEditBox(councilCard, 214, 30, L["Player name (First Last)"], addName))
 	frame.add = into("council", UI.NewButton(councilCard, 70, 30, L["Add"], function() addName(frame.input:GetText()) end))
 	frame.add:SetPoint("LEFT", frame.input, "RIGHT", 8, 0)
 	frame.addTarget = into("council", UI.NewButton(councilCard, 100, 30, L["Add target"], addTarget))
@@ -790,10 +818,14 @@ local function build()
 	end
 
 	SettingsWindow.heights = heights
-	frame:SetHeight(max(heights.general, sidebarMinH))
+	frame:SetHeight(max(HEADER_H + heights.general, sidebarMinH))
 
+	-- The wheel scrolls the page; over the council list it scrolls the list.
 	frame:SetScript("OnMouseWheel", function(_, delta)
-		if activeTab ~= "council" then return end -- only the council list scrolls
+		SettingsWindow:ScrollPage((pageOffset or 0) - delta * PAGE_STEP)
+	end)
+	frame.listBox:EnableMouseWheel(true)
+	frame.listBox:SetScript("OnMouseWheel", function(_, delta)
 		local count = #ALC.Settings:GetCouncil()
 		offset = max(0, min(offset - delta, max(0, count - LIST_ROWS)))
 		SettingsWindow:Refresh()
@@ -1023,8 +1055,26 @@ function SettingsWindow:SetTab(key)
 			frame.tabNote:SetText(tab.note)
 		end
 	end
-	frame:SetHeight(max(self.heights[key], sidebarMinH))
-	if switched then self:HideFontMenu() end
+	-- As tall as the page needs, between the sidebar's height and MAX_H; a taller page scrolls.
+	local pageH = self.heights[key]
+	frame.page:SetHeight(pageH)
+	frame:SetHeight(min(max(HEADER_H + pageH, sidebarMinH), maxHeight()))
+	if switched then
+		self:HideFontMenu()
+		self:ScrollPage(0)
+	else
+		self:ScrollPage(pageOffset or 0)
+	end
+end
+
+-- Scrolls the page to `to` pixels from its top (kept inside the page) and moves the bar.
+function SettingsWindow:ScrollPage(to)
+	if not frame then return end
+	local visible = frame:GetHeight() - HEADER_H - 2
+	local total = self.heights and self.heights[activeTab] or visible
+	pageOffset = max(0, min(to or 0, max(0, total - visible)))
+	frame.scroll:SetVerticalScroll(pageOffset)
+	frame.pageBar:Update(total, visible, pageOffset)
 end
 
 function SettingsWindow:GetTab()
