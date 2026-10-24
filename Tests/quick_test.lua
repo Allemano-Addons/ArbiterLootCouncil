@@ -209,12 +209,12 @@ return function(check, H)
 
 	local SW = ALC.SettingsWindow
 	SW:Show()
-	SW:SetTab("everyone")
+	SW:SetTab("appearance")
 	local sframe = SW.frame
-	check("Everyone has a checkbox for compact windows", sframe.compact ~= nil and sframe.compact:IsShown() and sframe.compact.checked == false)
+	check("Appearance has a checkbox for compact windows", sframe.compact ~= nil and sframe.compact:IsShown() and sframe.compact.checked == false)
 	sframe.compact.scripts.OnClick(sframe.compact)
 	check("it sets the setting", Settings:GetCompact() == true)
-	SW:SetTab("lm")
+	SW:SetTab("lootmaster")
 	check("the loot master has one for announcing, on", sframe.announce:IsShown() and sframe.announce.checked == true and not sframe.compact:IsShown())
 	sframe.announce.scripts.OnClick(sframe.announce)
 	check("it switches announcing off", Settings:GetAnnounceAwards() == false)

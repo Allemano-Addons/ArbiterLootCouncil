@@ -395,7 +395,7 @@ end
 --------------------------------------------------------------------------------
 function Profile:Init()
 	ALC.RegisterSettingsSection({
-		id = "ALC-profile", name = L["Share settings"],
+		id = "ALC-profile", name = L["Share settings"], page = "tools",
 		rows = {
 			{ tab = "lm", type = "action", label = L["Copy my settings"], onClick = function() ALC.ProfileWindow:ShowExport() end },
 			{ tab = "lm", type = "action", label = L["Import settings"], onClick = function() ALC.ProfileWindow:ShowImport() end },
